@@ -19,10 +19,24 @@ export function VoicePanel() {
   const { story, voice, setVoice, setAudioBuffers, audioBuffers } = useStudio();
   const [voices, setVoices] = useState(FALLBACK_VOICES);
   const [gen, setGen] = useState<{ done: number; total: number } | null>(null);
+  const [previewing, setPreviewing] = useState(false);
 
   useEffect(() => {
     api.voices().then((r) => r?.voices?.length && setVoices(r.voices)).catch(() => {});
   }, []);
+
+  async function preview() {
+    setPreviewing(true);
+    try {
+      const r = await api.tts('Oi! Essa é a minha voz pra narrar a sua história — com emoção de verdade.', voice, 'alegria');
+      const audio = new Audio(`data:${r.mime};base64,${r.audioContent}`);
+      await audio.play().catch(() => {});
+    } catch (e: any) {
+      alert('Falha ao testar voz: ' + e.message);
+    } finally {
+      setPreviewing(false);
+    }
+  }
 
   async function narrate() {
     if (!story) return;
@@ -51,6 +65,10 @@ export function VoicePanel() {
           </button>
         ))}
       </div>
+
+      <button className="btn-ghost w-full" onClick={preview} disabled={previewing}>
+        {previewing ? '🎧 Tocando amostra…' : '▶️ Ouvir amostra desta voz'}
+      </button>
 
       <button className="btn-primary w-full" onClick={narrate} disabled={!!gen}>
         {gen ? `🎧 Gerando narração ${gen.done}/${gen.total}…` : hasAudio ? '🔁 Regenerar narração' : '🎙️ Gerar narração IA'}
