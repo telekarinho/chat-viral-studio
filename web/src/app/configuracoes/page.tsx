@@ -98,8 +98,8 @@ export default function ConfigPage() {
           {geminiMsg && <p className="mt-1 text-sm text-white/80">{geminiMsg}</p>}
         </Field>
 
-        <Field label="Modelo Gemini (opcional)" hint="Padrão: gemini-1.5-flash">
-          <input type="text" value={cfg.geminiModel} placeholder="gemini-1.5-flash"
+        <Field label="Modelo Gemini (opcional)" hint="Padrão: gemini-2.0-flash (deixe vazio para usar o padrão)">
+          <input type="text" value={cfg.geminiModel} placeholder="gemini-2.0-flash"
             onChange={(e) => setCfg({ ...cfg, geminiModel: e.target.value })}
             className="input w-full" autoComplete="off" />
         </Field>

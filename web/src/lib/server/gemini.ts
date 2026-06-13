@@ -1,12 +1,21 @@
 // Server-side Gemini client (Next.js API routes). Falls back gracefully when no key.
 // The key/model may come from the request (user's own key, via header) or server env.
-const DEFAULT_MODEL = 'gemini-1.5-flash';
+const DEFAULT_MODEL = 'gemini-2.0-flash';
 
 export interface GeminiOpts { temperature?: number; key?: string; model?: string }
 
 // Resolve the effective key: request-provided wins, else server env.
 export function resolveGeminiKey(key?: string) {
   return (key || process.env.GEMINI_API_KEY || '').trim();
+}
+
+// Resolve the model. The gemini-1.5-* family was retired on v1beta (404 on
+// generateContent), so anything 1.5 is auto-upgraded to the current default —
+// this also rescues users who saved "gemini-1.5-flash" in their config.
+export function resolveGeminiModel(model?: string) {
+  const m = (model || process.env.GEMINI_MODEL || DEFAULT_MODEL).trim();
+  if (!m || /gemini-1\.5/i.test(m)) return DEFAULT_MODEL;
+  return m;
 }
 
 export function geminiEnabled(key?: string) {
@@ -17,7 +26,7 @@ export async function geminiComplete(prompt: string, opts: GeminiOpts = {}): Pro
   const { temperature = 0.95 } = opts;
   const key = resolveGeminiKey(opts.key);
   if (!key) throw new Error('GEMINI_API_KEY missing');
-  const model = (opts.model || process.env.GEMINI_MODEL || DEFAULT_MODEL).trim();
+  const model = resolveGeminiModel(opts.model);
   const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${key}`;
   const res = await fetch(url, {
     method: 'POST',
