@@ -2,19 +2,22 @@ import { NextResponse } from 'next/server';
 
 export const runtime = 'nodejs';
 
+// Neural2 = vozes muito mais naturais/humanas que as Wavenet (e aceitam pitch/rate
+// p/ dar emoção). pt-BR Neural2: A (fem), B (masc), C (fem). Caráter por pitch/rate.
 const VOICES: Record<string, { name: string; pitch: number; rate: number; label: string }> = {
-  narrador_masc: { name: 'pt-BR-Wavenet-B', pitch: -2, rate: 1.0, label: 'Narrador masculino' },
-  narradora_fem: { name: 'pt-BR-Wavenet-A', pitch: 0, rate: 1.0, label: 'Narradora feminina' },
-  voz_engracada: { name: 'pt-BR-Wavenet-C', pitch: 6, rate: 1.15, label: 'Voz engraçada' },
-  voz_suspense: { name: 'pt-BR-Wavenet-B', pitch: -4, rate: 0.9, label: 'Voz suspense' },
-  voz_drama: { name: 'pt-BR-Wavenet-A', pitch: -1, rate: 0.92, label: 'Voz dramática leve' },
-  voz_tiktok: { name: 'pt-BR-Wavenet-C', pitch: 2, rate: 1.3, label: 'Voz acelerada TikTok' },
-  voz_calma: { name: 'pt-BR-Wavenet-A', pitch: -1, rate: 0.95, label: 'Voz calma' },
-  voz_jovem: { name: 'pt-BR-Wavenet-C', pitch: 3, rate: 1.05, label: 'Voz jovem' },
+  narrador_masc: { name: 'pt-BR-Neural2-B', pitch: -1.5, rate: 1.0, label: 'Narrador masculino' },
+  narradora_fem: { name: 'pt-BR-Neural2-A', pitch: 0, rate: 1.0, label: 'Narradora feminina' },
+  voz_engracada: { name: 'pt-BR-Neural2-C', pitch: 4, rate: 1.12, label: 'Voz engraçada' },
+  voz_suspense: { name: 'pt-BR-Neural2-B', pitch: -3, rate: 0.88, label: 'Voz suspense' },
+  voz_drama: { name: 'pt-BR-Neural2-A', pitch: -1, rate: 0.9, label: 'Voz dramática leve' },
+  voz_tiktok: { name: 'pt-BR-Neural2-C', pitch: 1.5, rate: 1.28, label: 'Voz acelerada TikTok' },
+  voz_calma: { name: 'pt-BR-Neural2-A', pitch: -1, rate: 0.93, label: 'Voz calma' },
+  voz_jovem: { name: 'pt-BR-Neural2-C', pitch: 2.5, rate: 1.05, label: 'Voz jovem' },
 };
+// Emoção mais marcada (pitch em semitons, rate como delta) p/ soar humano, não robótico.
 const EMOTION: Record<string, { pitch: number; rate: number }> = {
-  raiva: { pitch: 2, rate: 0.08 }, alegria: { pitch: 3, rate: 0.05 }, medo: { pitch: -2, rate: -0.05 },
-  surpresa: { pitch: 4, rate: 0.1 }, tristeza: { pitch: -3, rate: -0.1 }, ironia: { pitch: 1, rate: -0.03 },
+  raiva: { pitch: 3, rate: 0.12 }, alegria: { pitch: 4, rate: 0.1 }, medo: { pitch: -3, rate: -0.06 },
+  surpresa: { pitch: 5, rate: 0.14 }, tristeza: { pitch: -4, rate: -0.14 }, ironia: { pitch: 1.5, rate: -0.04 },
   neutro: { pitch: 0, rate: 0 },
 };
 const clamp = (n: number, lo: number, hi: number) => Math.max(lo, Math.min(hi, n));
