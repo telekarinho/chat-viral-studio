@@ -107,8 +107,8 @@ export default function ConfigPage() {
           {geminiMsg && <p className="mt-1 text-sm text-white/80">{geminiMsg}</p>}
         </Field>
 
-        <Field label="Modelo Gemini (opcional)" hint="Padrão: gemini-2.0-flash (deixe vazio para usar o padrão)">
-          <input type="text" value={cfg.geminiModel} placeholder="gemini-2.0-flash"
+        <Field label="Modelo Gemini (opcional)" hint="Padrão: gemini-2.5-flash (deixe vazio — o app escolhe o melhor disponível pra sua chave)">
+          <input type="text" value={cfg.geminiModel} placeholder="gemini-2.5-flash"
             onChange={(e) => setCfg({ ...cfg, geminiModel: e.target.value })}
             className="input w-full" autoComplete="off" />
         </Field>
@@ -121,7 +121,11 @@ export default function ConfigPage() {
           <div className="mt-2 flex flex-wrap gap-2">
             <a className="btn-ghost !py-1 text-sm" href="https://console.cloud.google.com/apis/library/texttospeech.googleapis.com" target="_blank" rel="noreferrer">① Ativar Text-to-Speech</a>
             <a className="btn-ghost !py-1 text-sm" href="https://console.cloud.google.com/apis/credentials" target="_blank" rel="noreferrer">② Criar chave</a>
+            <button className="btn-ghost !py-1 text-sm" onClick={testVoice} disabled={testing}>
+              {testing ? '🎧 Testando…' : '▶️ Testar chave de voz'}
+            </button>
           </div>
+          {testMsg && <p className="mt-1 text-sm text-white/80">{testMsg}</p>}
         </Field>
 
         <label className="flex items-center gap-2 text-sm text-white/60">

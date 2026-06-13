@@ -1,6 +1,9 @@
 // Server-side Gemini client (Next.js API routes). Falls back gracefully when no key.
 // The key/model may come from the request (user's own key, via header) or server env.
-const DEFAULT_MODEL = 'gemini-2.0-flash';
+const DEFAULT_MODEL = 'gemini-2.5-flash';
+// Tried in order when a model 404s (varia por projeto/região). Mantém o app
+// funcionando independentemente de quais modelos a chave do usuário libera.
+const MODEL_FALLBACKS = ['gemini-2.5-flash', 'gemini-2.0-flash', 'gemini-flash-latest', 'gemini-2.5-flash-lite'];
 
 export interface GeminiOpts { temperature?: number; key?: string; model?: string }
 
@@ -26,19 +29,27 @@ export async function geminiComplete(prompt: string, opts: GeminiOpts = {}): Pro
   const { temperature = 0.95 } = opts;
   const key = resolveGeminiKey(opts.key);
   if (!key) throw new Error('GEMINI_API_KEY missing');
-  const model = resolveGeminiModel(opts.model);
-  const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${key}`;
-  const res = await fetch(url, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      contents: [{ role: 'user', parts: [{ text: prompt }] }],
-      generationConfig: { temperature, responseMimeType: 'application/json' },
-    }),
+
+  const primary = resolveGeminiModel(opts.model);
+  const candidates = [primary, ...MODEL_FALLBACKS.filter((m) => m !== primary)];
+  const body = JSON.stringify({
+    contents: [{ role: 'user', parts: [{ text: prompt }] }],
+    generationConfig: { temperature, responseMimeType: 'application/json' },
   });
-  if (!res.ok) throw new Error(`Gemini ${res.status}: ${(await res.text().catch(() => '')).slice(0, 200)}`);
-  const data = await res.json();
-  return data?.candidates?.[0]?.content?.parts?.[0]?.text ?? '';
+
+  let lastErr = 'Gemini: nenhuma resposta';
+  for (const model of candidates) {
+    const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${key}`;
+    const res = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body });
+    if (res.ok) {
+      const data = await res.json();
+      return data?.candidates?.[0]?.content?.parts?.[0]?.text ?? '';
+    }
+    lastErr = `Gemini ${res.status}: ${(await res.text().catch(() => '')).slice(0, 200)}`;
+    // só tenta o próximo modelo quando o atual não existe/não é suportado (404)
+    if (res.status !== 404) throw new Error(lastErr);
+  }
+  throw new Error(lastErr);
 }
 
 export async function geminiJSON(prompt: string, opts?: GeminiOpts): Promise<any> {
