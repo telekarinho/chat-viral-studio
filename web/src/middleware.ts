@@ -1,17 +1,15 @@
 import { NextRequest, NextResponse } from 'next/server';
 
-const USUARIO = 'admin';
-const SENHA = 'TROQUE_AQUI_SUA_SENHA';   // <<< coloque sua senha
-
 export function middleware(req: NextRequest) {
+  const password = process.env.SITE_PASSWORD;
+  if (!password) return NextResponse.next();
+  const user = process.env.SITE_USER || 'admin';
   const auth = req.headers.get('authorization');
   if (auth?.startsWith('Basic ')) {
     try {
       const d = atob(auth.slice(6));
       const i = d.indexOf(':');
-      if (d.slice(0, i) === USUARIO && d.slice(i + 1) === SENHA) {
-        return NextResponse.next();
-      }
+      if (d.slice(0, i) === user && d.slice(i + 1) === password) return NextResponse.next();
     } catch {}
   }
   return new NextResponse('Acesso restrito.', {

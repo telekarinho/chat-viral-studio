@@ -84,7 +84,7 @@ export function drawFrame(ctx: CanvasRenderingContext2D, t: number, d: DrawCtx) 
   const visible = timeline.items.filter((it) => t >= it.typingAt);
   type Block = { it: TimelineItem; lines: string[]; bw: number; bh: number; incoming: boolean; typing: boolean };
   const blocks: Block[] = [];
-  ctx.font = `${34 * s}px var(--font-sans), system-ui, sans-serif`;
+  ctx.font = `${34 * s}px system-ui, sans-serif`;
   const maxBubble = W * 0.74;
 
   for (const it of visible) {
@@ -173,8 +173,7 @@ function drawBlock(
 
   // text
   ctx.fillStyle = incoming ? theme.bubbleInText : theme.bubbleOutText;
-  ctx.font = `${b.typing ? 40 : 34}px var(--font-sans), system-ui, sans-serif`.replace('px', `${s}px`);
-  ctx.font = `${(b.typing ? 40 : 34) * s}px system-ui`;
+  ctx.font = `${(b.typing ? 40 : 34) * s}px system-ui, sans-serif`;
   ctx.textAlign = 'left';
   let ty = y + 40 * s;
   for (const line of b.lines) {
