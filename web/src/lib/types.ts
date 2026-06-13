@@ -75,4 +75,5 @@ export interface GenerateParams {
   emotion: string;
   ending: string;
   messageCount: number;
+  platform?: 'curto' | 'longo';   // curto: TikTok/Reels/Shorts/Kwai · longo: YouTube/Facebook
 }
