@@ -79,6 +79,8 @@ export async function exportVideo(
   if (settings.withMusic) addAmbientPad(audioCtx, dest, settings.musicVolume ?? 0.15, videoDuration);
 
   // ── combine streams ──
+  // desenha 1 frame antes de capturar (garante que a faixa de vídeo inicialize)
+  try { drawFrame(ctx, 0, drawData); } catch { /* noop */ }
   const videoStream = canvas.captureStream(fps);
   const mixed = new MediaStream([
     ...videoStream.getVideoTracks(),
@@ -91,7 +93,7 @@ export async function exportVideo(
   recorder.ondataavailable = (e) => e.data.size && chunks.push(e.data);
 
   const stopped = new Promise<void>((res) => (recorder.onstop = () => res()));
-  recorder.start();
+  recorder.start(1000); // timeslice: descarrega dados a cada 1s (não perde tudo se algo falhar)
 
   // ── drive the animation in real time ──
   const start = performance.now();
@@ -100,7 +102,7 @@ export async function exportVideo(
       const t = (now - start) / 1000;
       drawData.cameraVideo = settings.withCamera ? getCameraEl() : null;
       ctx.clearRect(0, 0, W, H);
-      drawFrame(ctx, t, drawData);
+      try { drawFrame(ctx, t, drawData); } catch (err) { console.warn('frame error', err); }
       opts.onProgress?.(Math.min(1, t / videoDuration));
       if (t >= videoDuration) return resolve();
       requestAnimationFrame(frame);
@@ -112,6 +114,9 @@ export async function exportVideo(
   await stopped;
   await audioCtx.close().catch(() => {});
   const webm = new Blob(chunks, { type: mime });
+  if (webm.size < 2000) {
+    throw new Error('A renderização saiu vazia. Mantenha esta aba ABERTA e visível durante a exportação (não troque de aba/minimize) e tente de novo.');
+  }
 
   let mp4Url: string | undefined;
   if (opts.transcode !== false) {
