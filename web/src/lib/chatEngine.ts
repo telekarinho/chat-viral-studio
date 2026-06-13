@@ -318,7 +318,8 @@ function displayText(m: Message): string {
 }
 
 function wrap(ctx: CanvasRenderingContext2D, text: string, maxW: number): string[] {
-  const words = text.split(/\s+/);
+  // split on spaces, but also hard-break any single word too long to fit (no spaces)
+  const words = text.split(/\s+/).flatMap((w) => breakLongWord(ctx, w, maxW));
   const lines: string[] = [];
   let line = '';
   for (const w of words) {
@@ -330,6 +331,21 @@ function wrap(ctx: CanvasRenderingContext2D, text: string, maxW: number): string
   }
   if (line) lines.push(line);
   return lines.length ? lines : [''];
+}
+
+// break a single space-less word (long URL, "kkkk…") into chunks that fit maxW
+function breakLongWord(ctx: CanvasRenderingContext2D, word: string, maxW: number): string[] {
+  if (!word || ctx.measureText(word).width <= maxW) return [word];
+  const chunks: string[] = [];
+  let cur = '';
+  for (const ch of word) {
+    if (cur && ctx.measureText(cur + ch).width > maxW) {
+      chunks.push(cur);
+      cur = ch;
+    } else cur += ch;
+  }
+  if (cur) chunks.push(cur);
+  return chunks;
 }
 
 function roundRect(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, r: number, tail?: 'in' | 'out') {
