@@ -1,5 +1,7 @@
 'use client';
+import { useState } from 'react';
 import { useStudio } from '@/store/useStudioStore';
+import { api } from '@/lib/api';
 import type { MsgType, MsgStatus } from '@/lib/types';
 
 const TYPES: { v: MsgType; label: string }[] = [
@@ -16,7 +18,20 @@ const REACTIONS = ['❤️', '😂', '😮', '😢', '😡', '👍', '🔥', '�
 
 export function MessagesEditor() {
   const { story, updateMessage, addMessage, removeMessage, moveMessage } = useStudio();
+  const [genId, setGenId] = useState<string | null>(null);
   if (!story) return null;
+
+  async function genPhoto(id: string, caption: string) {
+    setGenId(id);
+    try {
+      const r = await api.genImage(caption || 'foto chocante de conversa');
+      if (r.dataUrl) updateMessage(id, { imageUrl: r.dataUrl });
+    } catch (e: any) {
+      alert('Falha ao gerar foto: ' + e.message);
+    } finally {
+      setGenId(null);
+    }
+  }
 
   return (
     <div className="space-y-3">
@@ -54,8 +69,12 @@ export function MessagesEditor() {
                 {m.imageUrl
                   ? <img src={m.imageUrl} alt="" className="h-16 w-16 rounded-lg object-cover" />
                   : <span className="text-xs text-white/40">Sem foto (mostra um card cinza no vídeo)</span>}
+                <button className="btn-ghost !py-1 text-sm" disabled={genId === m.id}
+                  onClick={() => genPhoto(m.id, m.text)}>
+                  {genId === m.id ? '✨ Gerando…' : '✨ Gerar foto grátis (IA)'}
+                </button>
                 <label className="btn-ghost !py-1 cursor-pointer text-sm">
-                  {m.imageUrl ? '🔁 Trocar foto' : '📷 Enviar foto'}
+                  {m.imageUrl ? '🔁 Trocar' : '📷 Enviar foto'}
                   <input type="file" accept="image/*" className="hidden"
                     onChange={(e) => {
                       const f = e.target.files?.[0]; if (!f) return;

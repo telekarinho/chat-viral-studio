@@ -65,6 +65,10 @@ export const api = {
   viralScore: (story: Story) =>
     jpost<{ viralScore: ViralScore }>('/api/viral-score', { story }),
 
+  // gera uma foto grátis (IA Pollinations, fallback banco de imagens) → data URL
+  genImage: (prompt: string) =>
+    jpost<{ dataUrl: string; source: string }>('/api/image', { prompt }),
+
   voices: () => fetch(`${API}/api/voices`).then((r) => r.json()),
 
   tts: (text: string, voice: string, emotion: string, speed = 1, pitch = 0) =>
