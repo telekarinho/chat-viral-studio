@@ -62,6 +62,7 @@ export interface ExportSettings {
   narrationVolume: number;   // 0..1
   messageSpeed: number;      // multiplier
   watermarkText?: string;    // custom watermark label (defaults to "Chat Viral Studio")
+  withNarrator?: boolean;    // locutor único narra a história toda (vozes por msg off)
   effect?: 'none' | 'hearts' | 'fire' | 'confetti' | 'sparkles';  // floating emoji overlay
   dramaticZoom?: boolean;    // slow ken-burns zoom over the video
   withCamera?: boolean;      // overlay the user's webcam (reaction)
