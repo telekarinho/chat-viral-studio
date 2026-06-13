@@ -4,7 +4,7 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import { api } from '@/lib/api';
 import { useStudio } from '@/store/useStudioStore';
 import { TEMPLATES } from '@/lib/templates';
-import { CATEGORIES, DURATIONS, INTENSITIES, EMOTIONS, ENDINGS } from '@/lib/options';
+import { CATEGORIES, DURATIONS, INTENSITIES, EMOTIONS, ENDINGS, PLATFORMS } from '@/lib/options';
 import type { GenerateParams } from '@/lib/types';
 
 export default function CreatePage() {
@@ -23,7 +23,7 @@ function CreateInner() {
   const [tab, setTab] = useState<'ia' | 'text'>(sp.get('tab') === 'text' ? 'text' : 'ia');
   const [params, setParams] = useState<GenerateParams>({
     category: 'namoro', duration: 45, intensity: 'médio',
-    emotion: 'engraçado', ending: 'plot twist', messageCount: 14,
+    emotion: 'engraçado', ending: 'plot twist', messageCount: 14, platform: 'curto',
   });
   const [text, setText] = useState('');
   const [loading, setLoading] = useState(false);
@@ -90,6 +90,18 @@ function CreateInner() {
 
       {tab === 'ia' ? (
         <div className="card space-y-5">
+          <Field label="Destino (a IA adapta tamanho, ritmo e CTA)">
+            <div className="grid gap-2 sm:grid-cols-2">
+              {PLATFORMS.map((pl) => (
+                <button key={pl.v} onClick={() => set({ platform: pl.v })}
+                  className={`rounded-xl border p-2 text-left text-sm transition ${(params.platform || 'curto') === pl.v ? 'border-brand bg-brand/20' : 'border-white/10'}`}>
+                  <div className="font-medium">{pl.label}</div>
+                  <div className="text-xs text-white/45">{pl.hint}</div>
+                </button>
+              ))}
+            </div>
+          </Field>
+
           <Field label="Categoria">
             <div className="flex flex-wrap gap-2">
               {CATEGORIES.map((c) => (

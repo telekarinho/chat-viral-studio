@@ -12,10 +12,22 @@ const SCHEMA_HINT = `Responda APENAS com JSON válido (sem markdown), no formato
 "narration":"","hashtags":["#viral"],"caption":"","part2_hook":""}`;
 
 export function buildStoryPrompt(p: any = {}) {
-  const { category = 'comédia', duration = 40, intensity = 'médio', emotion = 'engraçado', ending = 'plot twist', messageCount = 14 } = p;
-  return `Aja como roteirista ESPECIALISTA em vídeos curtos virais (TikTok/Shorts/Reels) de histórias narradas de WhatsApp. Crie um roteiro 100% FICTÍCIO de até 1 minuto que prenda do início ao fim usando INDIGNAÇÃO, FOFOCA ou CHOQUE.
+  const { category = 'comédia', duration = 40, intensity = 'médio', emotion = 'engraçado', ending = 'plot twist', messageCount = 14, platform = 'curto' } = p;
+  const longo = platform === 'longo';
+  const platformRules = longo
+    ? `DESTINO: YouTube/Facebook (vídeo LONGO/narrativo). Ritmo de construção, com suspense e pausas dramáticas.
+- "narration": 500–1500 palavras, começa com o "salve" clássico de canal ("Salve meus queridos! Antes de começar, já deixa o like e se inscreve no canal…") e SÓ DEPOIS apresenta o absurdo.
+- Diálogo mais longo e detalhado (use ${Math.max(messageCount, 18)}+ mensagens).
+- CTA final: inscrição, compartilhamento e "fica até o fim" ("Se inscreve no canal pra não perder a parte 2 e compartilha com aquele amigo que precisa ver isso!").`
+    : `DESTINO: TikTok/Reels/Shorts/Kwai (vídeo CURTO). Ritmo EXTREMAMENTE acelerado, sem enrolação.
+- "narration": no MÁXIMO 130–150 palavras (cabe em ~60s). Corta apresentação longa.
+- Os 3 primeiros segundos têm que CHOCAR.
+- CTA final rápido de rede ("Clica no + e deixa sua opinião", "Segue pra parte 2", "Curte e comenta 👇").`;
+  return `Aja como roteirista ESPECIALISTA em RETENÇÃO de público para histórias/fofocas narradas de WhatsApp. Crie um roteiro 100% FICTÍCIO que prenda do início ao fim usando INDIGNAÇÃO, FOFOCA ou CHOQUE.
 
 PARÂMETROS: categoria base=${category}; duração≈${duration}s; intensidade=${intensity}; ~${messageCount} mensagens; final=${ending}.
+
+${platformRules}
 
 ESCOLHA UM TEMA (o que mais viraliza):
 1) Traição com reviravolta extrema (a vítima se vinga de forma absurda).
