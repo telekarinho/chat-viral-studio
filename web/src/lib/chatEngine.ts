@@ -97,7 +97,7 @@ export function drawFrame(ctx: CanvasRenderingContext2D, t: number, d: DrawCtx) 
     const label = typing ? '•••' : displayText(it.msg);
     const lines = wrap(ctx, label, maxBubble - 48 * s);
     const bw = Math.min(maxBubble, Math.max(...lines.map((l) => ctx.measureText(l).width)) + 48 * s);
-    const bh = lines.length * 44 * s + 46 * s;
+    const bh = lines.length * 44 * s + 46 * s + (it.msg.reaction ? 22 * s : 0);
     blocks.push({ it, lines, bw, bh, incoming, typing });
   }
 
@@ -181,19 +181,41 @@ function drawBlock(
     ty += 44 * s;
   }
 
-  // time + checks
+  // time + checks (anchored to the bubble body, above any reaction badge)
+  const reaction = it.msg.reaction;
+  const bodyBottom = y + b.bh - (reaction ? 22 * s : 0);
   if (!b.typing) {
     ctx.font = `${20 * s}px system-ui`;
     ctx.fillStyle = theme.meta;
     ctx.textAlign = 'right';
     const checks = !incoming ? (it.msg.status === 'read' ? ' ✓✓' : it.msg.status === 'delivered' ? ' ✓✓' : ' ✓') : '';
-    ctx.fillText(it.msg.time + checks, x + b.bw - 18 * s, y + b.bh - 16 * s);
+    ctx.fillText(it.msg.time + checks, x + b.bw - 18 * s, bodyBottom - 16 * s);
     if (!incoming && it.msg.status === 'read') {
       // recolor last checks blue-ish
       ctx.fillStyle = theme.accent;
-      ctx.fillText('✓✓', x + b.bw - 18 * s, y + b.bh - 16 * s);
+      ctx.fillText('✓✓', x + b.bw - 18 * s, bodyBottom - 16 * s);
     }
     ctx.textAlign = 'left';
+  }
+
+  // emoji reaction stuck on the bubble (WhatsApp style), at the inner bottom corner
+  if (reaction) {
+    const rx = incoming ? x + b.bw - 14 * s : x + 14 * s;
+    const ry = bodyBottom + 2 * s;
+    ctx.beginPath();
+    ctx.arc(rx, ry, 19 * s, 0, Math.PI * 2);
+    ctx.fillStyle = 'rgba(255,255,255,0.96)';
+    ctx.fill();
+    ctx.strokeStyle = 'rgba(0,0,0,0.08)';
+    ctx.lineWidth = Math.max(1, 1 * s);
+    ctx.stroke();
+    ctx.font = `${22 * s}px system-ui`;
+    ctx.fillStyle = '#000';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(reaction, rx, ry + s);
+    ctx.textAlign = 'left';
+    ctx.textBaseline = 'alphabetic';
   }
 }
 

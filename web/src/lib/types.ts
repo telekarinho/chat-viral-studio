@@ -27,6 +27,7 @@ export interface Message {
   audioUrl?: string | null;   // data URL after TTS
   audioDuration?: number;     // seconds, measured after decode
   showTyping?: boolean;       // render "digitando..." before this msg
+  reaction?: string;          // emoji reaction stuck on the bubble (❤️ 😂 😮 …)
 }
 
 export interface ViralScore {
