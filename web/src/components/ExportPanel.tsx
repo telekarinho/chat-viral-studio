@@ -70,10 +70,50 @@ export function ExportPanel() {
         <div className="grid gap-2 sm:grid-cols-2">
           <Check label="Com legendas" v={settings.withCaptions} on={(v) => setSettings({ withCaptions: v })} />
           <Check label="Com marca d'água" v={settings.withWatermark} on={(v) => setSettings({ withWatermark: v })} />
-          <Check label="Selo de ficção" v={settings.withFictionSeal} on={(v) => setSettings({ withFictionSeal: v })} />
+          <Check label="Selo de ficção (no final)" v={settings.withFictionSeal} on={(v) => setSettings({ withFictionSeal: v })} />
           <Check label="Música de fundo" v={settings.withMusic} on={(v) => setSettings({ withMusic: v })} />
         </div>
+      </div>
 
+      {/* efeitos & reação */}
+      <div className="card space-y-4">
+        <span className="label">✨ Efeitos & Reação</span>
+
+        <div>
+          <span className="text-xs text-white/50">Efeito animado na tela</span>
+          <div className="mt-1 flex flex-wrap gap-2">
+            {([
+              ['none', 'Nenhum'], ['hearts', '❤️ Corações'], ['fire', '🔥 Fogo'],
+              ['confetti', '🎉 Confete'], ['sparkles', '✨ Brilhos'],
+            ] as const).map(([v, label]) => (
+              <button key={v} onClick={() => setSettings({ effect: v })}
+                className={`chip ${(settings.effect || 'none') === v ? 'chip-on' : ''}`}>{label}</button>
+            ))}
+          </div>
+        </div>
+
+        <Check label="🔍 Zoom dramático (zoom lento durante o vídeo)" v={!!settings.dramaticZoom} on={(v) => setSettings({ dramaticZoom: v })} />
+
+        <Check label="📷 Mostrar meu rosto (câmera no cantinho)" v={!!settings.withCamera} on={(v) => setSettings({ withCamera: v })} />
+        {settings.withCamera && (
+          <div>
+            <span className="text-xs text-white/50">Posição da câmera</span>
+            <div className="mt-1 flex flex-wrap gap-2">
+              {([
+                ['tl', '↖ Sup. esq.'], ['tr', '↗ Sup. dir.'], ['bl', '↙ Inf. esq.'], ['br', '↘ Inf. dir.'],
+              ] as const).map(([v, label]) => (
+                <button key={v} onClick={() => setSettings({ cameraCorner: v })}
+                  className={`chip ${(settings.cameraCorner || 'br') === v ? 'chip-on' : ''}`}>{label}</button>
+              ))}
+            </div>
+            <p className="mt-1 text-xs text-white/40">O navegador vai pedir permissão da câmera no preview. Tudo é processado no seu aparelho.</p>
+          </div>
+        )}
+      </div>
+
+      {/* áudio & exportar */}
+      <div className="card space-y-4">
+        <span className="label">🔊 Áudio & Exportar</span>
         <label className="block text-sm text-white/70">Volume narração: {Math.round(settings.narrationVolume * 100)}%
           <input type="range" min={0} max={1} step={0.05} value={settings.narrationVolume}
             onChange={(e) => setSettings({ narrationVolume: +e.target.value })} className="w-full accent-[#7C3AED]" />

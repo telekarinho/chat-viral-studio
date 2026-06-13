@@ -61,6 +61,7 @@ export interface DrawCtx {
   settings: ExportSettings;
   W: number;
   H: number;
+  cameraVideo?: CanvasImageSource | null;  // live webcam frame for the reaction overlay
 }
 
 export function drawFrame(ctx: CanvasRenderingContext2D, t: number, d: DrawCtx) {
@@ -72,6 +73,15 @@ export function drawFrame(ctx: CanvasRenderingContext2D, t: number, d: DrawCtx) 
   ctx.fillStyle = theme.bg;
   ctx.fillRect(0, 0, W, H);
   drawPattern(ctx, W, H, theme.bgPattern, s);
+
+  // dramatic (ken-burns) zoom on the scene — bg stays full-bleed, content scales
+  const zoom = settings.dramaticZoom ? 1 + 0.06 * clamp(t / Math.max(timeline.duration, 1), 0, 1) : 1;
+  ctx.save();
+  if (zoom !== 1) {
+    ctx.translate(W / 2, H / 2);
+    ctx.scale(zoom, zoom);
+    ctx.translate(-W / 2, -H / 2);
+  }
 
   const headerH = 150 * s;
   const inputH = 110 * s;
@@ -129,6 +139,14 @@ export function drawFrame(ctx: CanvasRenderingContext2D, t: number, d: DrawCtx) 
   drawInputBar(ctx, theme, W, H, inputH, s);
   // progress bar
   drawProgress(ctx, t, timeline.duration, W, headerH, theme, s);
+
+  ctx.restore(); // end dramatic-zoom scope — overlays below stay fixed
+
+  // animated emoji effect overlay (hearts / fire / confetti / sparkles)
+  drawEffect(ctx, t, W, H, s, settings.effect);
+
+  // webcam reaction overlay (drawn over everything, fixed corner)
+  if (d.cameraVideo) drawCameraOverlay(ctx, d.cameraVideo, W, H, s, settings.cameraCorner || 'br');
 
   // captions (TikTok style) — current spoken line
   if (settings.withCaptions) {
@@ -338,6 +356,77 @@ function drawWatermark(ctx: CanvasRenderingContext2D, W: number, H: number, s: n
   ctx.textAlign = 'right';
   ctx.fillText((text || 'Chat Viral Studio').slice(0, 40), W - 26 * s, H - 200 * s);
   ctx.textAlign = 'left';
+}
+
+const EFFECT_EMOJIS: Record<string, string[]> = {
+  hearts: ['❤️', '💕', '💖', '😍'],
+  fire: ['🔥', '💥', '🤯'],
+  confetti: ['🎉', '🎊', '✨', '⭐'],
+  sparkles: ['✨', '⭐', '💫', '🌟'],
+};
+
+// Floating emoji particles rising over the whole frame (deterministic by t, so
+// preview and export match). Cheap and lively.
+function drawEffect(ctx: CanvasRenderingContext2D, t: number, W: number, H: number, s: number, kind?: string) {
+  if (!kind || kind === 'none') return;
+  const emojis = EFFECT_EMOJIS[kind];
+  if (!emojis) return;
+  const N = 16;
+  const span = H + 160 * s;
+  ctx.save();
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  for (let i = 0; i < N; i++) {
+    const seed = i * 97.13;
+    const x = (Math.sin(seed) * 0.5 + 0.5) * W;
+    const speed = 70 + (i % 5) * 28;            // px/s upward
+    const yRaw = (H + 80 * s) - (((t * speed + (seed * 37)) % span));
+    const sway = Math.sin(t * 1.4 + seed) * 28 * s;
+    const size = (34 + (i % 4) * 12) * s;
+    ctx.globalAlpha = 0.9;
+    ctx.font = `${size}px system-ui`;
+    ctx.fillText(emojis[i % emojis.length], x + sway, yRaw);
+  }
+  ctx.restore();
+}
+
+// Circular webcam (selfie, mirrored) pinned to a corner — the "reaction" overlay.
+function drawCameraOverlay(
+  ctx: CanvasRenderingContext2D, video: CanvasImageSource,
+  W: number, H: number, s: number, corner: 'tl' | 'tr' | 'bl' | 'br',
+) {
+  const d = 320 * s;            // diameter
+  const m = 34 * s;             // margin
+  const topSafe = 170 * s;      // below header
+  const botSafe = 250 * s;      // above input bar
+  let cx: number, cy: number;
+  switch (corner) {
+    case 'tl': cx = m + d / 2; cy = topSafe + d / 2; break;
+    case 'tr': cx = W - m - d / 2; cy = topSafe + d / 2; break;
+    case 'bl': cx = m + d / 2; cy = H - botSafe - d / 2; break;
+    default:   cx = W - m - d / 2; cy = H - botSafe - d / 2; // br
+  }
+  const vw = (video as any).videoWidth || 640;
+  const vh = (video as any).videoHeight || 480;
+  if (!vw || !vh) return;
+  const sc = Math.max(d / vw, d / vh); // cover-fit
+  const dw = vw * sc, dh = vh * sc;
+  ctx.save();
+  ctx.beginPath();
+  ctx.arc(cx, cy, d / 2, 0, Math.PI * 2);
+  ctx.closePath();
+  ctx.clip();
+  ctx.translate(cx, cy); ctx.scale(-1, 1); ctx.translate(-cx, -cy); // mirror (selfie)
+  try { ctx.drawImage(video, cx - dw / 2, cy - dh / 2, dw, dh); } catch { /* frame not ready */ }
+  ctx.restore();
+  // ring
+  ctx.save();
+  ctx.beginPath();
+  ctx.arc(cx, cy, d / 2, 0, Math.PI * 2);
+  ctx.lineWidth = 6 * s;
+  ctx.strokeStyle = 'rgba(255,255,255,0.95)';
+  ctx.stroke();
+  ctx.restore();
 }
 
 // ── canvas helpers ──

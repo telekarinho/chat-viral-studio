@@ -5,6 +5,7 @@
 import type { Story, ExportSettings } from './types';
 import { buildTimeline, drawFrame, type DrawCtx } from './chatEngine';
 import { api } from './api';
+import { startCamera, getCameraEl } from './camera';
 
 export interface ExportResult {
   webm: Blob;
@@ -34,6 +35,11 @@ export async function exportVideo(
   canvas.height = H;
   const ctx = canvas.getContext('2d')!;
   const drawData: DrawCtx = { story, timeline, settings, W, H };
+
+  // ensure the webcam is live before recording, if the reaction overlay is on
+  if (settings.withCamera) {
+    try { await startCamera(); } catch { /* segue sem câmera se negar permissão */ }
+  }
 
   // ── audio graph ──
   const audioCtx = new (window.AudioContext || (window as any).webkitAudioContext)();
@@ -72,6 +78,7 @@ export async function exportVideo(
   await new Promise<void>((resolve) => {
     function frame(now: number) {
       const t = (now - start) / 1000;
+      drawData.cameraVideo = settings.withCamera ? getCameraEl() : null;
       ctx.clearRect(0, 0, W, H);
       drawFrame(ctx, t, drawData);
       opts.onProgress?.(Math.min(1, t / timeline.duration));
