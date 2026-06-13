@@ -1,6 +1,6 @@
 // Chat Viral Studio — PWA service worker (app shell cache, network-first for navigation).
-const CACHE = 'cvs-v2';
-const PRECACHE = ['/', '/create', '/editor', '/library', '/record', '/manifest.webmanifest', '/icon.svg'];
+const CACHE = 'cvs-v3';
+const PRECACHE = ['/', '/create', '/editor', '/library', '/record', '/configuracoes', '/manifest.webmanifest', '/icon.svg'];
 
 self.addEventListener('install', (e) => {
   e.waitUntil(caches.open(CACHE).then((c) => c.addAll(PRECACHE)).then(() => self.skipWaiting()));

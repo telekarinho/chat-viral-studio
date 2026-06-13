@@ -60,6 +60,7 @@ export interface ExportSettings {
   musicVolume: number;       // 0..1
   narrationVolume: number;   // 0..1
   messageSpeed: number;      // multiplier
+  watermarkText?: string;    // custom watermark label (defaults to "Chat Viral Studio")
 }
 
 export interface GenerateParams {
