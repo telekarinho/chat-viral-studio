@@ -115,6 +115,23 @@ export function textToChatLocal(text: string, params: any = {}): any {
   }, params);
 }
 
+// Locução do narrador montada localmente (fallback sem IA), a partir das mensagens.
+export function buildNarrationLocal(story: any = {}): string {
+  const chars = (story.characters || []).reduce((m: any, c: any) => { m[c.id] = c.name; return m; }, {});
+  const msgs = (story.messages || []).filter((m: any) => m.type !== 'system');
+  const open = story.hook?.trim()
+    ? story.hook.trim()
+    : 'Rapaz, pensa numa situação dessas. Veja só essa história!';
+  const body = msgs.map((m: any, i: number) => {
+    const who = chars[m.sender] || 'a pessoa';
+    const what = m.type === 'image' ? `mandou uma foto: ${m.text}` : `mandou: ${m.text}`;
+    const mid = i === Math.floor(msgs.length / 2) ? 'Mano, olha a audácia… tu já pensou um negócio desse? ' : '';
+    return `${mid}Aí ${who} ${what}`;
+  }).join('. ');
+  const cta = 'E aí pessoal, deixa a tua opinião nos comentários. Quem tá certo? O que tu faria numa situação dessa? Deixa aí que eu quero saber!';
+  return `${open}. ${body}. ${cta}`;
+}
+
 export function heuristicScore(story: any = {}): any {
   const msgs = story.messages || [];
   const hookText = String(story.hook || '');

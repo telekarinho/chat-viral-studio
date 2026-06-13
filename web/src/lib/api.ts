@@ -69,6 +69,10 @@ export const api = {
   genImage: (prompt: string) =>
     jpost<{ dataUrl: string; source: string }>('/api/image', { prompt }),
 
+  // gera o roteiro da locução do narrador a partir das mensagens da história
+  narration: (story: Story) =>
+    jpost<{ narration: string; source: string }>('/api/narration', { story }),
+
   voices: () => fetch(`${API}/api/voices`).then((r) => r.json()),
 
   tts: (text: string, voice: string, emotion: string, speed = 1, pitch = 0) =>

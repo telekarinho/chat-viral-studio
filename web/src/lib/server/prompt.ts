@@ -50,7 +50,12 @@ EXEMPLOS DA LÓGICA E DO TOM (siga este padrão, NÃO copie):
 MAPEAMENTO PRO JSON:
 - "hook": o gancho narrado do passo 1 (1 linha, tom de narrador, com emoji).
 - "messages": só o DIÁLOGO do chat (passos 2 e 3), alternando vilão (c1, side left) e vítima (c2, side right). EMOÇÃO certa por mensagem (NUNCA tudo "neutro"): raiva nas brigas, surpresa/medo no choque, ironia no deboche. Termine com a vítima invertendo/bloqueando.
-- "narration": o roteiro COMPLETO do narrador (gancho + reação final + CTA), em tom de fofoca de bar.
+- "narration": é a LOCUÇÃO falada do narrador — ele CONTA ESTA MESMA história (a mesma de "messages"), reagindo. NÃO pode ser genérica: tem que citar o que os personagens disseram. Estrutura OBRIGATÓRIA, texto corrido (sem tags), em 1ª pessoa de fofoqueiro:
+  (1) ABRE com: "Rapaz, pensa num(a) [adjetivo + pessoa]. Veja só essa história!" (ou "Mano,...").
+  (2) NARRA a conversa em ordem, relatando o que cada um mandou COM as próprias palavras do narrador e reagindo ("aí a patroa mandou que queria ela às 5 da manhã, óh…").
+  (3) NO MEIO, INTERROMPE pelo menos 1x indignado/sarcástico: "Mano, olha a audácia…", "Rapaz, eu não tô acreditando nisso…", "Tu já pensou um negócio desse?".
+  (4) FECHA SEMPRE com: "E aí pessoal, deixa a tua opinião nos comentários. Quem tá certo? O que tu faria numa situação dessa? Deixa aí que eu quero saber!".
+  Importante: a narração e as "messages" contam a MESMA história — se a conversa fala de patroa folgada, a narração é sobre a patroa folgada.
 - "caption": SEMPRE com CTA pra comentar ("E aí, o que VOCÊ faria? Comenta 👇").
 - "title" chamativo; "part2_hook" que faz querer a parte 2; 4–6 hashtags fortes (#fofoca #treta #viral #fy).
 - "delay" 0.6–2.5s somando ≈${duration}s; "time" HH:MM crescente.
@@ -66,6 +71,25 @@ TIPOS de mensagem disponíveis em "type": "text" | "image" (foto) | "sticker" (f
 
 REGRAS DE SEGURANÇA: ficção/dramatização; sem pessoas/empresas reais; sem dados pessoais, golpes aplicáveis, instruções ilegais, conteúdo sexual explícito, ódio ou humilhação real (mantenha o tom de fofoca/comédia, sem apelar).
 ${SCHEMA_HINT}`;
+}
+
+// Gera SÓ a locução do narrador a partir das mensagens já existentes (garante que
+// a narração combine com a conversa, mesmo depois de editar).
+export function buildNarrationPrompt(story: any = {}) {
+  const chars = (story.characters || []).reduce((m: any, c: any) => { m[c.id] = c.name; return m; }, {});
+  const convo = (story.messages || [])
+    .filter((m: any) => m.type !== 'system')
+    .map((m: any) => `${chars[m.sender] || m.sender}: ${m.type === 'image' ? '[foto] ' : ''}${m.text}`)
+    .join('\n');
+  return `Você é um NARRADOR de fofocas de WhatsApp (TikTok/Reels), tipo um amigo contando uma treta no bar. Escreva a LOCUÇÃO FALADA (texto corrido, SEM tags, sem aspas) que conta ESTA conversa abaixo, reagindo a ela.
+ESTRUTURA OBRIGATÓRIA:
+1) ABRE com "Rapaz, pensa num(a) [adjetivo+pessoa]. Veja só essa história!" (ou "Mano,...").
+2) CONTA a conversa na ordem, relatando com as próprias palavras o que cada um mandou + reagindo.
+3) NO MEIO, interrompe pelo menos 1x indignado/sarcástico: "Mano, olha a audácia…", "Rapaz, eu não tô acreditando…", "Tu já pensou um negócio desse?".
+4) FECHA SEMPRE com: "E aí pessoal, deixa a tua opinião nos comentários. Quem tá certo? O que tu faria numa situação dessa? Deixa aí que eu quero saber!".
+Gírias: mano, rapaz, tu já pensou, cara. Responda APENAS JSON: {"narration":"...texto da locução..."}.
+CONVERSA:
+${convo.slice(0, 4000)}`;
 }
 
 export function buildTextToChatPrompt(text: string, p: any = {}) {
