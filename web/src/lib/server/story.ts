@@ -117,18 +117,35 @@ export function textToChatLocal(text: string, params: any = {}): any {
 
 export function heuristicScore(story: any = {}): any {
   const msgs = story.messages || [];
-  const hook = Math.min(100, (story.hook?.length ? 70 : 40) + (/[😳👀😱]/.test(story.hook || '') ? 15 : 0));
-  const retention = Math.max(40, 100 - Math.abs(msgs.length - 14) * 3);
-  const emotion = msgs.some((m: any) => m.emotion && m.emotion !== 'neutro') ? 80 : 60;
-  const ending = story.part2_hook ? 88 : 65;
-  const part2 = story.part2_hook ? 82 : 50;
-  const curiosity = 75;
-  const total = Math.round((hook + curiosity + retention + emotion + ending + part2) / 6);
-  return {
-    hook, curiosity, retention, emotion, ending, part2, total,
-    suggestions: [
-      total < 70 ? 'Reforce o gancho da 1ª mensagem com tensão imediata.' : 'Bom gancho — mantenha as falas curtas.',
-      story.part2_hook ? 'Ótimo: já tem ponte para parte 2.' : 'Adicione um gancho de parte 2 no final.',
-    ],
-  };
+  const hookText = String(story.hook || '');
+  const allText = (msgs.map((m: any) => m.text).join(' ') + ' ' + hookText + ' ' + (story.caption || '') + ' ' + (story.part2_hook || '')).toLowerCase();
+
+  // sinais de viralização (conflito, treta, reviravolta) — o que o público comenta
+  const shock = /(trai|flagra|descobri|pega no|bloquei|absurd|sem no[çc]|folgad|t[óo]xic|chocant|surtei|cara de pau|exigiu|exige|demit|me deu um perd|acabou tudo|nem acredit|coragem de)/.test(allText);
+  const cliff = /(você não vai acreditar|vc n[ãa]o vai acreditar|adivinha|senta que|presta aten|espera o final|olha isso|veja s[óo]|pera|\?\?\?)/.test(allText);
+  const cta = /(comenta|coment[áa]rios|o que (você|vc|tu) faria|deixa (sua|tua) opini|e a[íi] (pessoal|galera)|concorda)/.test(allText);
+
+  const distinctEmo = new Set(msgs.map((m: any) => m.emotion).filter((e: string) => e && e !== 'neutro')).size;
+  const nonNeutro = msgs.length ? msgs.filter((m: any) => m.emotion && m.emotion !== 'neutro').length / msgs.length : 0;
+  const avgLen = msgs.length ? msgs.reduce((a: number, m: any) => a + (m.text?.length || 0), 0) / msgs.length : 0;
+
+  const hook = clamp((hookText.length >= 12 ? 70 : 45) + (/[😳👀😱🤯😡🚨]/.test(hookText) ? 14 : 0) + (shock ? 16 : 0), 0, 100);
+  const curiosity = clamp(58 + (shock ? 22 : 0) + (cliff ? 18 : 0), 0, 100);
+  const retention = clamp(100 - Math.abs(msgs.length - 14) * 4 - (avgLen > 80 ? 15 : 0), 40, 100);
+  const emotion = clamp(45 + distinctEmo * 11 + nonNeutro * 35, 0, 100);
+  const ending = clamp((story.part2_hook ? 35 : 0) + (/(bloquei|cancel|acabou|terminei|fim|reviravolta|plot twist|adivinha quem)/.test(allText) ? 50 : 22), 0, 100);
+  const part2 = story.part2_hook ? clamp(72 + (String(story.part2_hook).length > 15 ? 22 : 0), 0, 100) : 45;
+
+  const total = Math.round(hook * 0.26 + curiosity * 0.19 + retention * 0.13 + emotion * 0.17 + ending * 0.15 + part2 * 0.10);
+
+  const suggestions: string[] = [];
+  if (hook < 85) suggestions.push('Gancho mais chocante na 1ª mensagem (acusação/segredo/flagra com emoji).');
+  if (!shock) suggestions.push('Aposte num conflito forte (folgado x sensato, traição, patrão abusivo) — gera revolta e comentário.');
+  if (emotion < 80) suggestions.push('Varie a emoção de cada mensagem (raiva, surpresa, ironia) — nada de tudo neutro.');
+  if (!cliff) suggestions.push('Adicione um mini-cliffhanger ("você não vai acreditar…", "senta que lá vem").');
+  if (!cta) suggestions.push('Termine com chamada pra comentar ("o que você faria?").');
+  if (!story.part2_hook) suggestions.push('Crie um gancho de parte 2 no final.');
+  if (!suggestions.length) suggestions.push('Roteiro afiado — pronto pra postar! 🔥');
+
+  return { hook, curiosity, retention, emotion, ending, part2, total, suggestions };
 }
