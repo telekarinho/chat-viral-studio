@@ -5,11 +5,14 @@ import { exportVideo, downloadBlob } from '@/lib/exporter';
 import { buildScript, buildSRT, buildThumbnail, downloadText, downloadDataUrl } from '@/lib/outputs';
 
 export function ExportPanel() {
-  const { story, settings, setSettings, audioBuffers, save } = useStudio();
+  const { story, settings, setSettings, audioBuffers, narratorBuffers, save } = useStudio();
   const [busy, setBusy] = useState<string | null>(null);
   const [progress, setProgress] = useState(0);
   const [result, setResult] = useState<{ webm: Blob; mp4Url?: string } | null>(null);
   if (!story) return null;
+
+  const narratorOn = settings.withNarrator !== false;
+  const narratorMissing = narratorOn && narratorBuffers.length === 0;
 
   async function doExport() {
     setBusy('video'); setProgress(0); setResult(null);
@@ -17,6 +20,7 @@ export function ExportPanel() {
       const res = await exportVideo(story!, settings, audioBuffers, {
         onProgress: setProgress,
         transcode: true,
+        narratorBuffers,
       });
       setResult(res);
       // mark project as rendered + thumbnail
@@ -125,6 +129,11 @@ export function ExportPanel() {
           </label>
         )}
 
+        {narratorMissing && (
+          <p className="rounded-lg bg-amber-500/15 px-3 py-2 text-center text-xs text-amber-200">
+            🎙️ Modo locutor ligado: vá na aba <b>Voz</b> e clique em <b>Gerar locução do narrador</b> antes de exportar (senão o vídeo sai sem narração).
+          </p>
+        )}
         <button className="btn-primary w-full text-lg" onClick={doExport} disabled={!!busy}>
           {busy === 'video' ? `🎬 Renderizando ${Math.round(progress * 100)}%…` : '⬇️ Exportar MP4'}
         </button>

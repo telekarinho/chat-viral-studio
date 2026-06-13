@@ -23,12 +23,16 @@ export async function exportVideo(
   story: Story,
   settings: ExportSettings,
   audioBuffers: Map<string, AudioBuffer>,
-  opts: { transcode?: boolean; onProgress?: (p: number) => void } = {},
+  opts: { transcode?: boolean; onProgress?: (p: number) => void; narratorBuffers?: AudioBuffer[] } = {},
 ): Promise<ExportResult> {
   const { W, H } = FORMAT_DIMS[settings.format] || FORMAT_DIMS['1080x1920'];
   const fps = 30;
   const timeline = buildTimeline(story, settings);
-  const durationMs = Math.ceil(timeline.duration * 1000);
+  // modo narrador: o vídeo precisa durar o tempo da locução (pode ser maior que o chat)
+  const narratorOn = !!(settings.withNarrator && opts.narratorBuffers?.length);
+  const narratorTotal = narratorOn ? opts.narratorBuffers!.reduce((a, b) => a + b.duration, 0) : 0;
+  const videoDuration = Math.max(timeline.duration, narratorOn ? narratorTotal + 0.8 : 0);
+  const durationMs = Math.ceil(videoDuration * 1000);
 
   const canvas = document.createElement('canvas');
   canvas.width = W;
@@ -44,19 +48,33 @@ export async function exportVideo(
   // ── audio graph ──
   const audioCtx = new (window.AudioContext || (window as any).webkitAudioContext)();
   const dest = audioCtx.createMediaStreamDestination();
-  // schedule each message's narration at its speakStart
-  for (const it of timeline.items) {
-    const buf = audioBuffers.get(it.msg.id);
-    if (!buf) continue;
-    const src = audioCtx.createBufferSource();
-    src.buffer = buf;
-    const gain = audioCtx.createGain();
-    gain.gain.value = settings.narrationVolume ?? 1;
-    src.connect(gain).connect(dest);
-    src.start(audioCtx.currentTime + it.speakStart);
+  if (narratorOn) {
+    // locutor narra tudo: toca os blocos da narração em sequência, do início
+    let at = audioCtx.currentTime + 0.25;
+    for (const buf of opts.narratorBuffers!) {
+      const src = audioCtx.createBufferSource();
+      src.buffer = buf;
+      const gain = audioCtx.createGain();
+      gain.gain.value = settings.narrationVolume ?? 1;
+      src.connect(gain).connect(dest);
+      src.start(at);
+      at += buf.duration;
+    }
+  } else {
+    // vozes por mensagem, agendadas no speakStart de cada bolha
+    for (const it of timeline.items) {
+      const buf = audioBuffers.get(it.msg.id);
+      if (!buf) continue;
+      const src = audioCtx.createBufferSource();
+      src.buffer = buf;
+      const gain = audioCtx.createGain();
+      gain.gain.value = settings.narrationVolume ?? 1;
+      src.connect(gain).connect(dest);
+      src.start(audioCtx.currentTime + it.speakStart);
+    }
   }
   // optional background music (looped, low volume) — uses a soft synth pad if no file
-  if (settings.withMusic) addAmbientPad(audioCtx, dest, settings.musicVolume ?? 0.15, timeline.duration);
+  if (settings.withMusic) addAmbientPad(audioCtx, dest, settings.musicVolume ?? 0.15, videoDuration);
 
   // ── combine streams ──
   const videoStream = canvas.captureStream(fps);
@@ -81,8 +99,8 @@ export async function exportVideo(
       drawData.cameraVideo = settings.withCamera ? getCameraEl() : null;
       ctx.clearRect(0, 0, W, H);
       drawFrame(ctx, t, drawData);
-      opts.onProgress?.(Math.min(1, t / timeline.duration));
-      if (t >= timeline.duration) return resolve();
+      opts.onProgress?.(Math.min(1, t / videoDuration));
+      if (t >= videoDuration) return resolve();
       requestAnimationFrame(frame);
     }
     requestAnimationFrame(frame);

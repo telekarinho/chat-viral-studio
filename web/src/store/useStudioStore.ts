@@ -12,6 +12,7 @@ const DEFAULT_SETTINGS: ExportSettings = {
   musicVolume: 0.15,
   narrationVolume: 1,
   messageSpeed: 1,
+  withNarrator: true,
   effect: 'none',
   dramaticZoom: false,
   withCamera: false,
@@ -24,6 +25,7 @@ interface StudioState {
   settings: ExportSettings;
   voice: string;
   audioBuffers: Map<string, AudioBuffer>;
+  narratorBuffers: AudioBuffer[];
   dirty: boolean;
 
   setStory: (s: Story) => void;
@@ -38,6 +40,7 @@ interface StudioState {
   setSettings: (p: Partial<ExportSettings>) => void;
   setVoice: (v: string) => void;
   setAudioBuffers: (m: Map<string, AudioBuffer>, messages: Message[]) => void;
+  setNarratorBuffers: (b: AudioBuffer[]) => void;
 
   save: () => Promise<void>;
   load: (id: string) => Promise<void>;
@@ -52,6 +55,7 @@ export const useStudio = create<StudioState>()(
       settings: DEFAULT_SETTINGS,
       voice: 'narradora_fem',
       audioBuffers: new Map(),
+      narratorBuffers: [],
       dirty: false,
 
       setStory: (s) => set({ story: s, projectId: s.id, dirty: true }),
@@ -105,6 +109,7 @@ export const useStudio = create<StudioState>()(
       setVoice: (v) => set({ voice: v }),
       setAudioBuffers: (m, messages) =>
         set((st) => ({ audioBuffers: m, story: st.story ? { ...st.story, messages } : st.story })),
+      setNarratorBuffers: (b) => set({ narratorBuffers: b }),
 
       save: async () => {
         const { story, settings } = get();
@@ -123,7 +128,7 @@ export const useStudio = create<StudioState>()(
         if (project?.story) set({ story: project.story, projectId: project.id, dirty: false });
       },
 
-      reset: () => set({ story: null, projectId: null, audioBuffers: new Map(), dirty: false }),
+      reset: () => set({ story: null, projectId: null, audioBuffers: new Map(), narratorBuffers: [], dirty: false }),
     }),
     {
       name: 'cvs-studio',
