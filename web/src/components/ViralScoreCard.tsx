@@ -32,13 +32,13 @@ export function ViralScoreCard() {
 
   return (
     <div className="card space-y-4">
-      <div className="flex items-center justify-between">
-        <span className="label !mb-0">Módulo de viralização</span>
-        <button className="btn-ghost" onClick={analyze} disabled={loading}>{loading ? '…' : '🔍 Analisar'}</button>
-      </div>
+      <span className="label !mb-0">Módulo de viralização</span>
+      <button className="btn-primary w-full" onClick={analyze} disabled={loading}>
+        {loading ? '⏳ Analisando…' : vs ? '🔁 Analisar de novo' : '🔍 Analisar viralização'}
+      </button>
 
       {!vs ? (
-        <p className="text-sm text-white/50">Clique em <b>Analisar</b> para receber nota 0–100 e sugestões.</p>
+        <p className="text-sm text-white/50">Clique em <b>Analisar viralização</b> para receber nota 0–100 e sugestões de melhoria.</p>
       ) : (
         <>
           <div className="flex items-center gap-4">
