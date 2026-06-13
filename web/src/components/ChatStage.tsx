@@ -2,6 +2,7 @@
 import { useEffect, useRef, useState } from 'react';
 import type { Story, ExportSettings } from '@/lib/types';
 import { buildTimeline, drawFrame, type DrawCtx } from '@/lib/chatEngine';
+import { startCamera, stopCamera, getCameraEl } from '@/lib/camera';
 
 interface Props {
   story: Story;
@@ -31,6 +32,7 @@ export function ChatStage({ story, settings, className, autoPlay = true }: Props
     function loop(now: number) {
       if (!startRef.current) startRef.current = now - pausedAt.current * 1000;
       const time = (now - startRef.current) / 1000;
+      drawData.cameraVideo = settings.withCamera ? getCameraEl() : null;
       ctx.clearRect(0, 0, W, H);
       drawFrame(ctx, time, drawData);
       setT(time);
@@ -47,12 +49,27 @@ export function ChatStage({ story, settings, className, autoPlay = true }: Props
       rafRef.current = requestAnimationFrame(loop);
     } else {
       // draw a static frame at current time
+      drawData.cameraVideo = settings.withCamera ? getCameraEl() : null;
       ctx.clearRect(0, 0, W, H);
       drawFrame(ctx, pausedAt.current, drawData);
     }
     return () => { if (rafRef.current) cancelAnimationFrame(rafRef.current); };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [playing, story, settings]);
+
+  // start/stop the shared webcam when "mostrar meu rosto" toggles
+  useEffect(() => {
+    let cancelled = false;
+    if (settings.withCamera) {
+      startCamera().catch((e) => { if (!cancelled) alert('Não consegui acessar a câmera: ' + e.message); });
+    } else {
+      stopCamera();
+    }
+    return () => { cancelled = true; };
+  }, [settings.withCamera]);
+
+  // stop the camera when leaving the preview entirely
+  useEffect(() => () => stopCamera(), []);
 
   const toggle = () => {
     if (playing) {

@@ -12,6 +12,10 @@ const DEFAULT_SETTINGS: ExportSettings = {
   musicVolume: 0.15,
   narrationVolume: 1,
   messageSpeed: 1,
+  effect: 'none',
+  dramaticZoom: false,
+  withCamera: false,
+  cameraCorner: 'br',
 };
 
 interface StudioState {
