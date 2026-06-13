@@ -142,8 +142,11 @@ export function ExportPanel() {
             <div className="h-full bg-brand transition-all" style={{ width: `${progress * 100}%` }} />
           </div>
         )}
+        <p className="text-center text-xs text-amber-300/80">
+          ⚠️ Durante a renderização, <b>não troque de aba nem minimize</b> a janela — o navegador congela o vídeo e ele sai vazio.
+        </p>
         <p className="text-center text-xs text-white/40">
-          O vídeo é gravado no navegador (Canvas + áudio) e convertido para MP4 H.264/AAC no backend (FFmpeg).
+          O vídeo é gravado no navegador (Canvas + áudio). Sai em WebM (funciona em TikTok/Reels/CapCut).
         </p>
       </div>
 
