@@ -29,7 +29,8 @@ export async function POST(req: Request) {
   const { text = '', voice = 'narradora_fem', emotion = 'neutro', speed = 1, pitch = 0 } = await req.json().catch(() => ({}));
   if (!text.trim()) return NextResponse.json({ error: 'texto vazio' }, { status: 400 });
 
-  const key = process.env.GOOGLE_TTS_API_KEY;
+  // user's own key (sent from the Settings page) wins, else server env
+  const key = req.headers.get('x-google-tts-key')?.trim() || process.env.GOOGLE_TTS_API_KEY;
   const preset = VOICES[voice] || VOICES.narradora_fem;
   const emo = EMOTION[emotion] || EMOTION.neutro;
   const finalPitch = clamp(preset.pitch + emo.pitch + Number(pitch || 0), -20, 20);

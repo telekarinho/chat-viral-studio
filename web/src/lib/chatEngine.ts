@@ -138,7 +138,7 @@ export function drawFrame(ctx: CanvasRenderingContext2D, t: number, d: DrawCtx) 
 
   // fiction seal + watermark
   if (settings.withFictionSeal) drawSeal(ctx, W, headerH + 14 * s, s);
-  if (settings.withWatermark) drawWatermark(ctx, W, H, s);
+  if (settings.withWatermark) drawWatermark(ctx, W, H, s, settings.watermarkText);
 }
 
 // ── pieces ──
@@ -297,11 +297,11 @@ function drawSeal(ctx: CanvasRenderingContext2D, W: number, y: number, s: number
   ctx.textAlign = 'left';
 }
 
-function drawWatermark(ctx: CanvasRenderingContext2D, W: number, H: number, s: number) {
+function drawWatermark(ctx: CanvasRenderingContext2D, W: number, H: number, s: number, text?: string) {
   ctx.font = `bold ${26 * s}px system-ui`;
   ctx.fillStyle = 'rgba(255,255,255,0.7)';
   ctx.textAlign = 'right';
-  ctx.fillText('Chat Viral Studio', W - 26 * s, H - 200 * s);
+  ctx.fillText((text || 'Chat Viral Studio').slice(0, 40), W - 26 * s, H - 200 * s);
   ctx.textAlign = 'left';
 }
 

@@ -30,6 +30,26 @@ export function ExportPanel() {
     }
   }
 
+  // 1-tap share — opens the native share sheet (TikTok / Reels / WhatsApp) on mobile,
+  // falls back to download where the Web Share API isn't available (most desktops).
+  async function shareVideo() {
+    if (!result) return;
+    const name = `${slug(story!.title)}.${result.mp4Url ? 'mp4' : 'webm'}`;
+    const blob = result.mp4Url ? await fetch(result.mp4Url).then((r) => r.blob()) : result.webm;
+    const file = new File([blob], name, { type: result.mp4Url ? 'video/mp4' : 'video/webm' });
+    const nav = navigator as any;
+    try {
+      if (nav.canShare?.({ files: [file] })) {
+        await nav.share({ files: [file], title: story!.title, text: `${story!.caption}\n\n${story!.hashtags.join(' ')}` });
+        return;
+      }
+    } catch (e: any) {
+      if (e?.name === 'AbortError') return; // user cancelled
+    }
+    downloadBlob(blob, name);
+    alert('Seu navegador não abre o menu de compartilhar — baixei o vídeo. No celular, use este botão para enviar direto pro TikTok/Reels/WhatsApp.');
+  }
+
   return (
     <div className="space-y-5">
       <div className="card space-y-4">
@@ -92,6 +112,7 @@ export function ExportPanel() {
               <button className="btn-primary w-full" onClick={() => downloadBlob(result.webm, `${slug(story.title)}.webm`)}>⬇️ Baixar WebM</button>
             </>
           )}
+          <button className="btn-ghost w-full text-lg" onClick={shareVideo}>📤 Compartilhar (TikTok / Reels / WhatsApp)</button>
         </div>
       )}
 

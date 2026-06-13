@@ -8,6 +8,7 @@ const ITEMS = [
   { href: '/editor', label: 'Editor', icon: '✏️' },
   { href: '/record', label: 'Narrar', icon: '🎙️' },
   { href: '/library', label: 'Biblioteca', icon: '📚' },
+  { href: '/configuracoes', label: 'Config', icon: '⚙️' },
 ];
 
 export function Nav() {
