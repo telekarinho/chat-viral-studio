@@ -128,12 +128,16 @@ export function heuristicScore(story: any = {}): any {
   const distinctEmo = new Set(msgs.map((m: any) => m.emotion).filter((e: string) => e && e !== 'neutro')).size;
   const nonNeutro = msgs.length ? msgs.filter((m: any) => m.emotion && m.emotion !== 'neutro').length / msgs.length : 0;
   const avgLen = msgs.length ? msgs.reduce((a: number, m: any) => a + (m.text?.length || 0), 0) / msgs.length : 0;
+  const types = new Set(msgs.map((m: any) => m.type));
+  const hasMedia = types.has('image') || types.has('sticker');   // prova visual / figurinha
+  const hasBlock = types.has('system') || /bloque|saiu da conversa/.test(allText);
+  const polarized = /(quem (que )?(você|vc|tu) acha|quem (tá|esta) cert|ele ou ela|de que lado)/.test(allText);
 
   const hook = clamp((hookText.length >= 12 ? 70 : 45) + (/[😳👀😱🤯😡🚨]/.test(hookText) ? 14 : 0) + (shock ? 16 : 0), 0, 100);
-  const curiosity = clamp(58 + (shock ? 22 : 0) + (cliff ? 18 : 0), 0, 100);
-  const retention = clamp(100 - Math.abs(msgs.length - 14) * 4 - (avgLen > 80 ? 15 : 0), 40, 100);
+  const curiosity = clamp(56 + (shock ? 20 : 0) + (cliff ? 16 : 0) + (polarized ? 12 : 0), 0, 100);
+  const retention = clamp(100 - Math.abs(msgs.length - 14) * 4 - (avgLen > 80 ? 15 : 0) + (hasMedia ? 10 : 0), 40, 100);
   const emotion = clamp(45 + distinctEmo * 11 + nonNeutro * 35, 0, 100);
-  const ending = clamp((story.part2_hook ? 35 : 0) + (/(bloquei|cancel|acabou|terminei|fim|reviravolta|plot twist|adivinha quem)/.test(allText) ? 50 : 22), 0, 100);
+  const ending = clamp((story.part2_hook ? 32 : 0) + (/(bloquei|cancel|acabou|terminei|fim|reviravolta|plot twist|adivinha quem)/.test(allText) ? 46 : 20) + (hasBlock ? 12 : 0), 0, 100);
   const part2 = story.part2_hook ? clamp(72 + (String(story.part2_hook).length > 15 ? 22 : 0), 0, 100) : 45;
 
   const total = Math.round(hook * 0.26 + curiosity * 0.19 + retention * 0.13 + emotion * 0.17 + ending * 0.15 + part2 * 0.10);

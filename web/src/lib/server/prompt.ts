@@ -55,6 +55,15 @@ MAPEAMENTO PRO JSON:
 - "title" chamativo; "part2_hook" que faz querer a parte 2; 4–6 hashtags fortes (#fofoca #treta #viral #fy).
 - "delay" 0.6–2.5s somando ≈${duration}s; "time" HH:MM crescente.
 
+REGRAS DE OURO PARA VIRALIZAR (use TODAS quando couber):
+1. PROVA VISUAL: inclua 1 mensagem com "type":"image" no meio da conversa (a foto comprometedora/chocante) — no "text" descreva a foto (ex: "foto do vestido", "print da conversa com o outro", "foto da chave PIX"). Isso faz o público pausar pra olhar.
+2. INTERRUPÇÃO DO NARRADOR: na "narration", o narrador PARA a leitura pelo menos 1x no meio pra soltar um comentário sarcástico/indignado ("Rapaz, olha a hora que essa mulher tá acordando…") antes de revelar o final.
+3. POLARIZAÇÃO (quando for discussão/casal): deixe os DOIS com um pouco de razão (ambos teimosos) e termine o CTA perguntando "Quem que TU acha que tá certo? Ele ou ela? Comenta!" — isso faz homens e mulheres brigarem nos comentários.
+4. CLÍMAX COM AÇÃO: termine com atitude drástica no app — uma "type":"sticker" debochada (ex: 🤡 👋 💅) E/OU uma "type":"system" tipo "Você bloqueou [Nome]" ou "[Nome] saiu da conversa". Bloqueio/resposta seca no fim.
+5. CONTRASTE FOFO (opcional, p/ compartilhamento): se o tema pedir, faça uma história de atitude ELOGIÁVEL (ex: padrasto que acolhe a enteada) — o narrador elogia muito no fim e pede "marca aquele parceiro(a) gente boa".
+
+TIPOS de mensagem disponíveis em "type": "text" | "image" (foto) | "sticker" (figurinha, use emoji no text) | "audio" | "system" (aviso central, ex: bloqueio) | "deleted" | "call_missed".
+
 REGRAS DE SEGURANÇA: ficção/dramatização; sem pessoas/empresas reais; sem dados pessoais, golpes aplicáveis, instruções ilegais, conteúdo sexual explícito, ódio ou humilhação real (mantenha o tom de fofoca/comédia, sem apelar).
 ${SCHEMA_HINT}`;
 }
