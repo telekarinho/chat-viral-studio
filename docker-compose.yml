@@ -1,0 +1,27 @@
+services:
+  api:
+    build: ./backend
+    ports:
+      - "4000:4000"
+    environment:
+      - PORT=4000
+      - CORS_ORIGIN=http://localhost:3000
+      - GEMINI_API_KEY=${GEMINI_API_KEY:-}
+      - GOOGLE_TTS_API_KEY=${GOOGLE_TTS_API_KEY:-}
+      - FFMPEG_PATH=ffmpeg
+      - DB_PATH=/data/projects.db
+      - MEDIA_DIR=/data/media
+    volumes:
+      - cvs-data:/data
+
+  web:
+    build: ./web
+    ports:
+      - "3000:3000"
+    environment:
+      - NEXT_PUBLIC_API_URL=http://localhost:4000
+    depends_on:
+      - api
+
+volumes:
+  cvs-data:

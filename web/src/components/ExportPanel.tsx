@@ -1,0 +1,117 @@
+'use client';
+import { useState } from 'react';
+import { useStudio } from '@/store/useStudioStore';
+import { exportVideo, downloadBlob } from '@/lib/exporter';
+import { buildScript, buildSRT, buildThumbnail, downloadText, downloadDataUrl } from '@/lib/outputs';
+
+export function ExportPanel() {
+  const { story, settings, setSettings, audioBuffers, save } = useStudio();
+  const [busy, setBusy] = useState<string | null>(null);
+  const [progress, setProgress] = useState(0);
+  const [result, setResult] = useState<{ webm: Blob; mp4Url?: string } | null>(null);
+  if (!story) return null;
+
+  async function doExport() {
+    setBusy('video'); setProgress(0); setResult(null);
+    try {
+      const res = await exportVideo(story!, settings, audioBuffers, {
+        onProgress: setProgress,
+        transcode: true,
+      });
+      setResult(res);
+      // mark project as rendered + thumbnail
+      const thumb = buildThumbnail(story!, settings);
+      await useStudio.getState().save();
+      void thumb;
+    } catch (e: any) {
+      alert('Falha na exportação: ' + e.message);
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  return (
+    <div className="space-y-5">
+      <div className="card space-y-4">
+        <span className="label">Painel de exportação</span>
+
+        <div>
+          <span className="text-xs text-white/50">Formato / qualidade</span>
+          <div className="mt-1 flex flex-wrap gap-2">
+            {(['1080x1920', '720x1280', '2160x3840'] as const).map((f) => (
+              <button key={f} onClick={() => setSettings({ format: f })}
+                className={`chip ${settings.format === f ? 'chip-on' : ''}`}>
+                {f === '1080x1920' ? '1080×1920 HD' : f === '720x1280' ? '720×1280 leve' : '4K (lento)'}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        <div className="grid gap-2 sm:grid-cols-2">
+          <Check label="Com legendas" v={settings.withCaptions} on={(v) => setSettings({ withCaptions: v })} />
+          <Check label="Com marca d'água" v={settings.withWatermark} on={(v) => setSettings({ withWatermark: v })} />
+          <Check label="Selo de ficção" v={settings.withFictionSeal} on={(v) => setSettings({ withFictionSeal: v })} />
+          <Check label="Música de fundo" v={settings.withMusic} on={(v) => setSettings({ withMusic: v })} />
+        </div>
+
+        <label className="block text-sm text-white/70">Volume narração: {Math.round(settings.narrationVolume * 100)}%
+          <input type="range" min={0} max={1} step={0.05} value={settings.narrationVolume}
+            onChange={(e) => setSettings({ narrationVolume: +e.target.value })} className="w-full accent-[#7C3AED]" />
+        </label>
+        {settings.withMusic && (
+          <label className="block text-sm text-white/70">Volume música: {Math.round(settings.musicVolume * 100)}%
+            <input type="range" min={0} max={1} step={0.05} value={settings.musicVolume}
+              onChange={(e) => setSettings({ musicVolume: +e.target.value })} className="w-full accent-[#7C3AED]" />
+          </label>
+        )}
+
+        <button className="btn-primary w-full text-lg" onClick={doExport} disabled={!!busy}>
+          {busy === 'video' ? `🎬 Renderizando ${Math.round(progress * 100)}%…` : '⬇️ Exportar MP4'}
+        </button>
+        {busy === 'video' && (
+          <div className="h-2 overflow-hidden rounded-full bg-white/10">
+            <div className="h-full bg-brand transition-all" style={{ width: `${progress * 100}%` }} />
+          </div>
+        )}
+        <p className="text-center text-xs text-white/40">
+          O vídeo é gravado no navegador (Canvas + áudio) e convertido para MP4 H.264/AAC no backend (FFmpeg).
+        </p>
+      </div>
+
+      {result && (
+        <div className="card space-y-3">
+          <p className="font-semibold text-emerald-400">✓ Vídeo pronto!</p>
+          {result.mp4Url ? (
+            <>
+              <video src={result.mp4Url} controls className="mx-auto max-h-[50vh] rounded-xl" />
+              <a className="btn-primary w-full" href={result.mp4Url} download>⬇️ Baixar MP4</a>
+            </>
+          ) : (
+            <>
+              <p className="text-sm text-amber-300">Backend FFmpeg indisponível — baixe o WebM (funciona em TikTok/Reels):</p>
+              <button className="btn-primary w-full" onClick={() => downloadBlob(result.webm, `${slug(story.title)}.webm`)}>⬇️ Baixar WebM</button>
+            </>
+          )}
+        </div>
+      )}
+
+      <div className="card grid grid-cols-2 gap-2 sm:grid-cols-3">
+        <button className="btn-ghost" onClick={() => downloadText(buildScript(story), `${slug(story.title)}-roteiro.txt`)}>📄 Roteiro</button>
+        <button className="btn-ghost" onClick={() => downloadText(buildSRT(story, settings), `${slug(story.title)}.srt`)}>💬 Legenda SRT</button>
+        <button className="btn-ghost" onClick={() => downloadDataUrl(buildThumbnail(story, settings), `${slug(story.title)}-thumb.png`)}>🖼️ Thumbnail</button>
+        <button className="btn-ghost" onClick={() => downloadText(story.caption + '\n\n' + story.hashtags.join(' '), `${slug(story.title)}-descricao.txt`)}>✍️ Descrição</button>
+        <button className="btn-ghost" onClick={() => save()}>💾 Salvar projeto</button>
+      </div>
+    </div>
+  );
+}
+
+function Check({ label, v, on }: { label: string; v: boolean; on: (v: boolean) => void }) {
+  return (
+    <label className="flex items-center gap-2 text-sm text-white/70">
+      <input type="checkbox" checked={v} onChange={(e) => on(e.target.checked)} className="accent-[#7C3AED]" />
+      {label}
+    </label>
+  );
+}
+function slug(s: string) { return (s || 'video').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '').slice(0, 40); }

@@ -1,0 +1,13 @@
+{
+  "name": "Chat Viral Studio",
+  "short_name": "ChatViral",
+  "description": "Gere vídeos verticais virais de histórias fictícias em formato de chat.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#0E0B16",
+  "theme_color": "#7C3AED",
+  "orientation": "portrait",
+  "icons": [
+    { "src": "/icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any maskable" }
+  ]
+}

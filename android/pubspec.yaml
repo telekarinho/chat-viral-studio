@@ -1,0 +1,29 @@
+name: chat_viral_studio
+description: Chat Viral Studio — vídeos verticais virais de histórias fictícias em chat.
+publish_to: 'none'
+version: 0.1.0+1
+
+environment:
+  sdk: '>=3.3.0 <4.0.0'
+
+# MVP buildável: o app gera a história pela API e mostra o chat. Só precisa de http.
+dependencies:
+  flutter:
+    sdk: flutter
+  http: ^1.2.0
+  cupertino_icons: ^1.0.8
+
+# ── Fase 2 (descomente ao implementar editor/câmera/render no app) ──
+#   provider: ^6.1.2              # estado
+#   camera: ^0.11.0               # câmera (modo reação / eu narrando)
+#   record: ^6.0.0               # microfone — use 6.x (5.x tem conflito record_linux/platform_interface)
+#   path_provider: ^2.1.0        # salvar arquivos locais
+#   share_plus: ^10.0.0          # compartilhar o MP4
+#   ffmpeg_kit_flutter_new: ^1.6.0  # render/transcode MP4 no device
+#   shared_preferences: ^2.2.0   # autosave local
+
+dev_dependencies:
+  flutter_lints: ^4.0.0
+
+flutter:
+  uses-material-design: true

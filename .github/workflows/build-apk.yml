@@ -1,0 +1,87 @@
+name: Build APK (Flutter)
+
+# Workflow para quando o Chat Viral Studio estiver no SEU PRÓPRIO repositório
+# (estrutura na raiz: web/ backend/ android/ docs/). Gera APK e publica em Release.
+
+on:
+  workflow_dispatch:
+    inputs:
+      buildMode:
+        description: 'debug ou release'
+        required: true
+        default: 'debug'
+  push:
+    branches: [main]
+    paths:
+      - 'android/**'
+      - '.github/workflows/build-apk.yml'
+
+permissions:
+  contents: write
+
+concurrency:
+  group: cvs-apk-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-apk:
+    runs-on: ubuntu-latest
+    env:
+      MODE: ${{ github.event.inputs.buildMode || 'debug' }}
+    defaults:
+      run:
+        working-directory: android
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+      - uses: android-actions/setup-android@v3
+        with:
+          accept-android-sdk-licenses: true
+
+      - name: Generate native shell (preserva pubspec/main.dart)
+        run: |
+          cp pubspec.yaml /tmp/pubspec.yaml
+          cp lib/main.dart /tmp/main.dart
+          flutter create . --org com.chatviral --project-name chat_viral_studio --platforms=android
+          cp /tmp/pubspec.yaml pubspec.yaml
+          cp /tmp/main.dart lib/main.dart
+
+      - name: Add Android permissions
+        run: |
+          MANIFEST=android/app/src/main/AndroidManifest.xml
+          perl -0pi -e 's#(<manifest[^>]*>)#$1\n    <uses-permission android:name="android.permission.INTERNET"/>\n    <uses-permission android:name="android.permission.CAMERA"/>\n    <uses-permission android:name="android.permission.RECORD_AUDIO"/>#' "$MANIFEST"
+
+      - run: flutter pub get
+      - run: flutter build apk --$MODE
+
+      - name: Locate APK
+        id: apk
+        run: |
+          APK=$(find build/app/outputs/flutter-apk -name "*.apk" | head -1)
+          echo "path=android/$APK" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/upload-artifact@v4
+        continue-on-error: true
+        with:
+          name: chat-viral-studio-${{ env.MODE }}-apk
+          path: ${{ steps.apk.outputs.path }}
+          retention-days: 14
+          if-no-files-found: warn
+
+      - uses: softprops/action-gh-release@v2
+        with:
+          tag_name: apk-${{ github.run_number }}
+          name: Chat Viral Studio APK #${{ github.run_number }} (${{ env.MODE }})
+          body: |
+            APK ${{ env.MODE }} gerado automaticamente.
+            Baixe o .apk, copie pro Android e instale (fontes desconhecidas).
+            História fictícia para entretenimento.
+          files: ${{ steps.apk.outputs.path }}
+          make_latest: 'true'
