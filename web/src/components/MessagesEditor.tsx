@@ -12,6 +12,7 @@ const TYPES: { v: MsgType; label: string }[] = [
   { v: 'system', label: '— Sistema' },
 ];
 const STATUS: MsgStatus[] = ['sent', 'delivered', 'read'];
+const REACTIONS = ['❤️', '😂', '😮', '😢', '😡', '👍', '🔥', '🙏'];
 
 export function MessagesEditor() {
   const { story, updateMessage, addMessage, removeMessage, moveMessage } = useStudio();
@@ -68,6 +69,21 @@ export function MessagesEditor() {
                   {STATUS.map((s) => <option key={s} value={s}>{s}</option>)}
                 </select>
               </label>
+            </div>
+
+            <div className="flex flex-wrap items-center gap-1">
+              <span className="text-xs text-white/50">Reação:</span>
+              {REACTIONS.map((e) => (
+                <button key={e}
+                  className={`rounded-lg px-1.5 py-0.5 text-base transition ${m.reaction === e ? 'bg-brand/30 ring-1 ring-brand' : 'hover:bg-white/10'}`}
+                  onClick={() => updateMessage(m.id, { reaction: m.reaction === e ? undefined : e })}>
+                  {e}
+                </button>
+              ))}
+              {m.reaction && (
+                <button className="ml-1 text-xs text-white/40 hover:text-white/70"
+                  onClick={() => updateMessage(m.id, { reaction: undefined })}>limpar</button>
+              )}
             </div>
 
             <button className="text-xs text-brand" onClick={() => addMessage(m.id)}>+ inserir mensagem abaixo</button>
