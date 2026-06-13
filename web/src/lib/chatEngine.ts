@@ -137,7 +137,15 @@ export function drawFrame(ctx: CanvasRenderingContext2D, t: number, d: DrawCtx) 
   }
 
   // fiction seal + watermark
-  if (settings.withFictionSeal) drawSeal(ctx, W, headerH + 14 * s, s);
+  // fiction seal — só nos últimos segundos do vídeo (end-card), com fade-in
+  if (settings.withFictionSeal) {
+    const tail = 3; // últimos 3s
+    const start = timeline.duration - tail;
+    if (t >= start) {
+      const a = clamp((t - start) / 0.5, 0, 1);
+      drawSeal(ctx, W, H, s, a);
+    }
+  }
   if (settings.withWatermark) drawWatermark(ctx, W, H, s, settings.watermarkText);
 }
 
@@ -306,17 +314,22 @@ function drawCaption(ctx: CanvasRenderingContext2D, text: string, W: number, y: 
   ctx.textAlign = 'left';
 }
 
-function drawSeal(ctx: CanvasRenderingContext2D, W: number, y: number, s: number) {
-  const label = 'História fictícia para entretenimento';
-  ctx.font = `${22 * s}px system-ui`;
+function drawSeal(ctx: CanvasRenderingContext2D, W: number, H: number, s: number, alpha = 1) {
+  const label = '⚠️ História fictícia para entretenimento';
+  ctx.save();
+  ctx.globalAlpha = alpha;
+  ctx.font = `bold ${26 * s}px system-ui`;
   ctx.textAlign = 'center';
-  const w = ctx.measureText(label).width + 36 * s;
-  ctx.fillStyle = 'rgba(0,0,0,0.55)';
-  roundRect(ctx, W / 2 - w / 2, y, w, 44 * s, 22 * s);
+  const w = Math.min(W * 0.9, ctx.measureText(label).width + 48 * s);
+  const x = W / 2 - w / 2;
+  const y = H * 0.46;
+  ctx.fillStyle = 'rgba(0,0,0,0.8)';
+  roundRect(ctx, x, y, w, 64 * s, 16 * s);
   ctx.fill();
   ctx.fillStyle = '#fff';
-  ctx.fillText(label, W / 2, y + 30 * s);
+  ctx.fillText(label, W / 2, y + 40 * s);
   ctx.textAlign = 'left';
+  ctx.restore();
 }
 
 function drawWatermark(ctx: CanvasRenderingContext2D, W: number, H: number, s: number, text?: string) {
