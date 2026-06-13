@@ -13,27 +13,37 @@ const SCHEMA_HINT = `Responda APENAS com JSON válido (sem markdown), no formato
 
 export function buildStoryPrompt(p: any = {}) {
   const { category = 'comédia', duration = 40, intensity = 'médio', emotion = 'engraçado', ending = 'plot twist', messageCount = 14 } = p;
-  return `Você é o MELHOR roteirista de vídeos virais de TikTok/Reels do Brasil. Crie uma HISTÓRIA 100% FICTÍCIA em formato de conversa de WhatsApp que prenda do 1º ao último segundo.
+  return `Aja como roteirista ESPECIALISTA em vídeos curtos virais (TikTok/Shorts/Reels) de histórias narradas de WhatsApp. Crie um roteiro 100% FICTÍCIO de até 1 minuto que prenda do início ao fim usando INDIGNAÇÃO, FOFOCA ou CHOQUE.
 
-PARÂMETROS: categoria=${category}; duração≈${duration}s; intensidade=${intensity}; clima=${emotion}; final=${ending}; ~${messageCount} mensagens.
+PARÂMETROS: categoria base=${category}; duração≈${duration}s; intensidade=${intensity}; ~${messageCount} mensagens; final=${ending}.
 
-TEMA = CONFLITO QUE GERA REVOLTA (o que mais viraliza e enche de comentário). Escolha um ângulo forte dentro de "${category}":
-- Traição descoberta de forma absurda + cara de pau (a pessoa pega no flagra ainda tenta justificar).
-- Patrão/cliente folgado exigindo o impossível (hora extra não paga, pedido absurdo, abuso de autoridade).
-- Parceiro(a)/parente tóxico ou folgado (exige dinheiro, controla roupa, pedido sem noção) x uma VÍTIMA SENSATA.
-Sempre: um VILÃO folgado/audacioso/hipócrita VS uma vítima sensata que no fim dá a resposta atravessada e BLOQUEIA.
+ESCOLHA UM TEMA (o que mais viraliza):
+1) Traição com reviravolta extrema (a vítima se vinga de forma absurda).
+2) Patrão tóxico exigindo trabalho não pago / metas impossíveis.
+3) Pessoas sem noção (vizinho/parente fazendo pedido íntimo ou absurdo).
 
-FÓRMULA VIRAL (siga à risca):
-- GANCHO BRUTAL (1ª msg): já joga a bomba/acusação. Nada de "oi tudo bem".
-- ESCADA DE TENSÃO: cada msg aumenta o absurdo do folgado. Use mini-cliffhanger ("você não vai acreditar", "senta que lá vem").
-- FALAS CURTAS e humanas: gíria BR real ("mano", "rapaz", "pelo amor", "kkkk", "surtei", "tu já pensou?"), erros leves de digitação. Alterne os 2 personagens.
-- CLÍMAX/PLOT TWIST (${ending}): o folgado faz o pedido final absurdo e a vítima responde atravessado e BLOQUEIA ("sendo assim, cancelo o jantar e você da minha vida. Bloqueado.").
-- EMOÇÃO REAL por mensagem (NUNCA tudo "neutro"): raiva nas brigas, surpresa no choque, ironia no deboche, medo no susto, alegria/tristeza quando couber.
-- "title" chamativo; "hook" de 1 linha em tom de NARRADOR indignado com emoji ("Rapaz, olha a coragem dessa patroa 😱"); "caption" SEMPRE com CHAMADA PRA COMENTAR ("E aí, o que VOCÊ faria? Comenta 👇"); "part2_hook" que faz querer a parte 2; 4-6 hashtags fortes (#fofoca #treta #viral #fy).
-- "narration": texto do narrador conversando com o público (gírias "mano/rapaz"), com a reação indignada no fim + CTA pra comentários.
-- RITMO: "delay" 0.6–2.5s somando ≈${duration}s; "time" HH:MM crescente.
+ESTRUTURA OBRIGATÓRIA (4 passos):
+1. GANCHO NARRADO (0–5s): narrador com tom de fofoca/indignação apresenta o VILÃO. Ex: "Rapaz, pensa numa...", "Mano, eu já vi de tudo, mas...", "Veja só a coragem dessa pessoa...".
+2. DESENVOLVIMENTO (diálogo rápido no chat): o VILÃO age com naturalidade diante do absurdo; a VÍTIMA começa sensata e vai perdendo a paciência. Falas curtas, alternando os 2.
+3. CLÍMAX / PLOT TWIST: explosão — a vítima dá uma invertida chocante / revela segredo destrutivo, OU o vilão faz a exigência final que passa de todos os limites.
+4. REAÇÃO DO NARRADOR + CTA: o narrador reage ao absurdo e joga pros comentários. Ex: "Mano, tu já pensou? Quem tá certo? Deixa tua opinião aí que eu quero saber!".
 
-REGRAS DE SEGURANÇA: ficção/dramatização; sem pessoas/empresas reais; sem dados pessoais, golpes aplicáveis, instruções ilegais, conteúdo sexual explícito, ódio ou humilhação real.
+TOM: informal, como quem conta fofoca no bar. Use "Mano", "Rapaz", "Tu já pensou?", "Cara". Gíria BR real, erros leves de digitação.
+
+EXEMPLOS DA LÓGICA E DO TOM (siga este padrão, NÃO copie):
+— Traição: (Narrador) "Rapaz, pensa numa namorada que achou que tava por cima e tomou a pior invertida da história!" (Chat) Vilã: "tô te traindo com seu irmão, ele é mais alto e mais rico 😏" → Vítima: "relaxa. eu e ele apostamos quem pegava mais gente essa semana kkkk" → (clímax) Vítima: "missão nova: vou ficar com a sua família toda. manda um abraço pra sua mãe 😈" → (Narrador/CTA) "Mano, o cara transformou o chifre em campeonato! Ele foi longe demais ou ela mereceu? Comenta aí!".
+— Patroa tóxica: (Narrador) "Mano, eu já vi chefe abusada, mas igual a dona Luciana não existe!" (Chat) Patroa: "você abriu 7h04, foram 4 min de atraso, não se repita." → Funcionária: "ok, mas já saí 18h30 sem você reclamar 🙄" → (clímax) Patroa: "amanhã chega 5h30 e arruma o coquetel sozinha, eu e minha filha vamos no salão. você é paga pra isso!" → (CTA) "Rapaz, tu queria uma dona Luciana na tua vida? Deixa tua opinião!".
+— Vizinha sem noção: (Narrador) "Cara, vizinha intrometida tem de monte, mas essa passou de todos os limites!" (Chat) Vizinha: "pergunta pro seu namorado quanto ele cobra pra fazer uma tattoo bem pequenininha 🙃" → Namorada: "claro, onde você quer?" → (clímax) Vizinha: "perto da virilha, mas tem que ser com ele que eu confio 😅" → Namorada: "ele NÃO vai fazer." → (CTA) "Mano, se teu namorado fosse tatuador, tu deixaria? Comenta!".
+
+MAPEAMENTO PRO JSON:
+- "hook": o gancho narrado do passo 1 (1 linha, tom de narrador, com emoji).
+- "messages": só o DIÁLOGO do chat (passos 2 e 3), alternando vilão (c1, side left) e vítima (c2, side right). EMOÇÃO certa por mensagem (NUNCA tudo "neutro"): raiva nas brigas, surpresa/medo no choque, ironia no deboche. Termine com a vítima invertendo/bloqueando.
+- "narration": o roteiro COMPLETO do narrador (gancho + reação final + CTA), em tom de fofoca de bar.
+- "caption": SEMPRE com CTA pra comentar ("E aí, o que VOCÊ faria? Comenta 👇").
+- "title" chamativo; "part2_hook" que faz querer a parte 2; 4–6 hashtags fortes (#fofoca #treta #viral #fy).
+- "delay" 0.6–2.5s somando ≈${duration}s; "time" HH:MM crescente.
+
+REGRAS DE SEGURANÇA: ficção/dramatização; sem pessoas/empresas reais; sem dados pessoais, golpes aplicáveis, instruções ilegais, conteúdo sexual explícito, ódio ou humilhação real (mantenha o tom de fofoca/comédia, sem apelar).
 ${SCHEMA_HINT}`;
 }
 
