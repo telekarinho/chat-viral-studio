@@ -16,7 +16,7 @@ const FALLBACK_VOICES = [
 ];
 
 export function VoicePanel() {
-  const { story, voice, setVoice, settings, setSettings, setAudioBuffers, audioBuffers, narratorBuffers, setNarratorBuffers } = useStudio();
+  const { story, voice, setVoice, settings, setSettings, setAudioBuffers, audioBuffers, narratorBuffers, setNarratorBuffers, patchStory } = useStudio();
   const [voices, setVoices] = useState(FALLBACK_VOICES);
   const [gen, setGen] = useState<{ done: number; total: number } | null>(null);
   const [previewing, setPreviewing] = useState(false);
@@ -65,10 +65,17 @@ export function VoicePanel() {
   async function narrate() {
     if (!story) return;
     if (narratorMode) {
-      if (!story.narration?.trim()) { alert('Sem roteiro de narração — gere a história primeiro.'); return; }
       setGen({ done: 0, total: 1 });
       try {
-        const { buffers } = await synthNarration(story.narration, voice, (done, total) => setGen({ done, total }));
+        // 1) escreve o roteiro da locução combinando com as mensagens atuais
+        let script = story.narration || '';
+        try {
+          const r = await api.narration(story);
+          if (r.narration?.trim()) { script = r.narration.trim(); patchStory({ narration: script }); }
+        } catch { /* usa o roteiro existente */ }
+        if (!script.trim()) throw new Error('sem roteiro de narração');
+        // 2) sintetiza a voz do locutor
+        const { buffers } = await synthNarration(script, voice, (done, total) => setGen({ done, total }));
         if (!buffers.length) throw new Error('nenhum áudio gerado');
         setNarratorBuffers(buffers);
       } catch (e: any) {
