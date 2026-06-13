@@ -28,6 +28,7 @@ export interface Message {
   audioDuration?: number;     // seconds, measured after decode
   showTyping?: boolean;       // render "digitando..." before this msg
   reaction?: string;          // emoji reaction stuck on the bubble (❤️ 😂 😮 …)
+  imageUrl?: string;          // data URL of an attached photo (for type:'image')
 }
 
 export interface ViralScore {

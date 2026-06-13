@@ -3,7 +3,7 @@
 // transcode to MP4. Works fully client-side up to the MP4 step.
 
 import type { Story, ExportSettings } from './types';
-import { buildTimeline, drawFrame, type DrawCtx } from './chatEngine';
+import { buildTimeline, drawFrame, preloadImages, type DrawCtx } from './chatEngine';
 import { api } from './api';
 import { startCamera, getCameraEl } from './camera';
 
@@ -44,6 +44,8 @@ export async function exportVideo(
   if (settings.withCamera) {
     try { await startCamera(); } catch { /* segue sem câmera se negar permissão */ }
   }
+  // pré-carrega fotos anexadas pra aparecerem desde o 1º frame
+  await preloadImages(story).catch(() => {});
 
   // ── audio graph ──
   const audioCtx = new (window.AudioContext || (window as any).webkitAudioContext)();

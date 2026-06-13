@@ -19,6 +19,30 @@ export interface Timeline {
 
 const TYPING = 0.9; // seconds of "digitando…" before a received msg
 
+// cache de imagens anexadas (fotos das mensagens). data URLs não "sujam" o canvas,
+// então a exportação continua funcionando.
+const imgCache = new Map<string, HTMLImageElement>();
+function getLoadedImg(url?: string): HTMLImageElement | null {
+  if (!url || typeof Image === 'undefined') return null;
+  let im = imgCache.get(url);
+  if (!im) { im = new Image(); im.crossOrigin = 'anonymous'; im.src = url; imgCache.set(url, im); }
+  return im.complete && im.naturalWidth > 0 ? im : null;
+}
+
+// Pré-carrega as fotos das mensagens antes de exportar (pra aparecerem desde o 1º frame).
+export function preloadImages(story: Story): Promise<void> {
+  if (typeof Image === 'undefined') return Promise.resolve();
+  const urls = story.messages.filter((m) => m.type === 'image' && m.imageUrl).map((m) => m.imageUrl!);
+  return Promise.all(urls.map((url) => new Promise<void>((res) => {
+    let im = imgCache.get(url);
+    if (im && im.complete) return res();
+    if (!im) { im = new Image(); im.crossOrigin = 'anonymous'; im.src = url; imgCache.set(url, im); }
+    if (im.complete) return res();
+    im.onload = () => res();
+    im.onerror = () => res();
+  }))).then(() => undefined);
+}
+
 export function buildTimeline(story: Story, settings: ExportSettings): Timeline {
   const speed = settings.messageSpeed || 1;
   let t = 0.6; // small intro
@@ -224,18 +248,30 @@ function drawBlock(
     const iw = b.bw - pad * 2;
     const ih = iw * 0.74;
     const ix = x + pad, iy = y + pad;
-    const g = ctx.createLinearGradient(ix, iy, ix + iw, iy + ih);
-    g.addColorStop(0, '#3a4a5a'); g.addColorStop(1, '#1f2933');
-    ctx.fillStyle = g;
-    roundRect(ctx, ix, iy, iw, ih, 14 * s);
-    ctx.fill();
-    ctx.fillStyle = 'rgba(255,255,255,0.85)';
-    ctx.textAlign = 'center';
-    ctx.font = `${64 * s}px system-ui`;
-    ctx.fillText('🖼️', ix + iw / 2, iy + ih / 2 + 8 * s);
-    ctx.font = `${20 * s}px system-ui`;
-    ctx.fillStyle = 'rgba(255,255,255,0.65)';
-    ctx.fillText('Foto', ix + iw / 2, iy + ih - 18 * s);
+    const photo = getLoadedImg(it.msg.imageUrl);
+    if (photo) {
+      // foto real anexada — cover-fit dentro do card (recortado)
+      ctx.save();
+      roundRect(ctx, ix, iy, iw, ih, 14 * s);
+      ctx.clip();
+      const sc = Math.max(iw / photo.naturalWidth, ih / photo.naturalHeight);
+      const dw = photo.naturalWidth * sc, dh = photo.naturalHeight * sc;
+      try { ctx.drawImage(photo, ix + (iw - dw) / 2, iy + (ih - dh) / 2, dw, dh); } catch { /* noop */ }
+      ctx.restore();
+    } else {
+      const g = ctx.createLinearGradient(ix, iy, ix + iw, iy + ih);
+      g.addColorStop(0, '#3a4a5a'); g.addColorStop(1, '#1f2933');
+      ctx.fillStyle = g;
+      roundRect(ctx, ix, iy, iw, ih, 14 * s);
+      ctx.fill();
+      ctx.fillStyle = 'rgba(255,255,255,0.85)';
+      ctx.textAlign = 'center';
+      ctx.font = `${64 * s}px system-ui`;
+      ctx.fillText('🖼️', ix + iw / 2, iy + ih / 2 + 8 * s);
+      ctx.font = `${20 * s}px system-ui`;
+      ctx.fillStyle = 'rgba(255,255,255,0.65)';
+      ctx.fillText('Foto', ix + iw / 2, iy + ih - 18 * s);
+    }
     // legenda
     ctx.textAlign = 'left';
     ctx.fillStyle = incoming ? theme.bubbleInText : theme.bubbleOutText;

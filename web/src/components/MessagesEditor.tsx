@@ -45,7 +45,30 @@ export function MessagesEditor() {
 
             {m.type !== 'call_missed' && m.type !== 'deleted' && (
               <textarea className="input min-h-[44px]" value={m.text}
-                onChange={(e) => updateMessage(m.id, { text: e.target.value })} placeholder="Texto da mensagem…" />
+                onChange={(e) => updateMessage(m.id, { text: e.target.value })}
+                placeholder={m.type === 'image' ? 'Legenda da foto (ex: foto do relógio caro)…' : 'Texto da mensagem…'} />
+            )}
+
+            {m.type === 'image' && (
+              <div className="flex flex-wrap items-center gap-2">
+                {m.imageUrl
+                  ? <img src={m.imageUrl} alt="" className="h-16 w-16 rounded-lg object-cover" />
+                  : <span className="text-xs text-white/40">Sem foto (mostra um card cinza no vídeo)</span>}
+                <label className="btn-ghost !py-1 cursor-pointer text-sm">
+                  {m.imageUrl ? '🔁 Trocar foto' : '📷 Enviar foto'}
+                  <input type="file" accept="image/*" className="hidden"
+                    onChange={(e) => {
+                      const f = e.target.files?.[0]; if (!f) return;
+                      const r = new FileReader();
+                      r.onload = () => updateMessage(m.id, { imageUrl: String(r.result) });
+                      r.readAsDataURL(f);
+                    }} />
+                </label>
+                {m.imageUrl && (
+                  <button className="text-xs text-white/40 hover:text-white/70"
+                    onClick={() => updateMessage(m.id, { imageUrl: undefined })}>remover</button>
+                )}
+              </div>
             )}
 
             <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
