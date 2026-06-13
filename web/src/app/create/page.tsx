@@ -27,7 +27,11 @@ function CreateInner() {
   });
   const [text, setText] = useState('');
   const [loading, setLoading] = useState(false);
+  const [progress, setProgress] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+
+  const TARGET = 95;   // só aceita história com viralização >= 95%
+  const MAX_TRIES = 5;
 
   // prefill from template
   useEffect(() => {
@@ -41,17 +45,37 @@ function CreateInner() {
   const set = (p: Partial<GenerateParams>) => setParams((s) => ({ ...s, ...p }));
 
   async function generate() {
-    setLoading(true); setError(null);
+    setLoading(true); setError(null); setProgress(null);
     try {
-      const res = tab === 'ia'
-        ? await api.generate(params)
-        : await api.textToChat(text, params);
-      setStory(res.story);
+      // modo texto: 1 tentativa (entrada é fixa)
+      if (tab === 'text') {
+        const res = await api.textToChat(text, params);
+        setStory(res.story);
+        router.push('/editor');
+        return;
+      }
+
+      // modo IA: portão de qualidade — gera, avalia e regera até score >= TARGET
+      let best: any = null;
+      let bestScore = -1;
+      for (let i = 1; i <= MAX_TRIES; i++) {
+        setProgress(`Gerando história viral… tentativa ${i}/${MAX_TRIES}`);
+        const res = await api.generate(params);
+        const score = res.story?.viralScore?.total ?? 0;
+        if (score > bestScore) { best = res.story; bestScore = score; }
+        setProgress(`Tentativa ${i}: viralização ${score}%${score >= TARGET ? ' ✓' : ' — buscando 95%+…'}`);
+        if (score >= TARGET) break;
+        // se caiu no gerador local (sem IA), não adianta repetir — para no melhor
+        if (res.source && res.source !== 'gemini') break;
+      }
+      if (!best) throw new Error('Não foi possível gerar a história.');
+      setStory(best);
       router.push('/editor');
     } catch (e: any) {
       setError(e.message || 'Falha ao gerar. Verifique o backend.');
     } finally {
       setLoading(false);
+      setProgress(null);
     }
   }
 
@@ -108,9 +132,11 @@ function CreateInner() {
       {error && <p className="rounded-lg bg-red-500/20 px-3 py-2 text-sm text-red-200">{error}</p>}
 
       <button className="btn-primary w-full text-lg" disabled={loading || (tab === 'text' && !text.trim())} onClick={generate}>
-        {loading ? '⏳ Gerando história…' : '🚀 Gerar história'}
+        {loading ? '⏳ Gerando história…' : '🚀 Gerar história viral'}
       </button>
+      {progress && <p className="text-center text-sm text-brand">{progress}</p>}
       <p className="text-center text-xs text-white/40">
+        No modo IA, geramos várias versões e só entregamos a de maior potencial viral (meta: 95%+).
         Tudo é tratado como ficção. Sem chave Gemini, usamos um gerador local de demonstração.
       </p>
     </div>
