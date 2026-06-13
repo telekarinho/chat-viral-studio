@@ -94,7 +94,7 @@ export function drawFrame(ctx: CanvasRenderingContext2D, t: number, d: DrawCtx) 
 
   // ── lay out visible messages ──
   const visible = timeline.items.filter((it) => t >= it.typingAt);
-  type Block = { it: TimelineItem; lines: string[]; bw: number; bh: number; incoming: boolean; typing: boolean };
+  type Block = { it: TimelineItem; lines: string[]; bw: number; bh: number; incoming: boolean; typing: boolean; image?: boolean };
   const blocks: Block[] = [];
   ctx.font = `${34 * s}px system-ui, sans-serif`;
   const maxBubble = W * 0.74;
@@ -108,6 +108,14 @@ export function drawFrame(ctx: CanvasRenderingContext2D, t: number, d: DrawCtx) 
     }
     // mensagem de saída sendo "digitada" aparece na barra de input, não como balão
     if (typing && !incoming) continue;
+    // foto enviada — card de imagem (prova visual)
+    if (it.msg.type === 'image' && !typing) {
+      const iw = Math.min(maxBubble, W * 0.62);
+      const capLines = it.msg.text ? wrap(ctx, it.msg.text, iw - 32 * s) : [];
+      const bh = iw * 0.74 + (capLines.length ? capLines.length * 38 * s + 14 * s : 0) + 40 * s + (it.msg.reaction ? 22 * s : 0);
+      blocks.push({ it, lines: capLines, bw: iw + 20 * s, bh, incoming, typing: false, image: true });
+      continue;
+    }
     const label = typing ? '•••' : displayText(it.msg);
     const lines = wrap(ctx, label, maxBubble - 48 * s);
     const bw = Math.min(maxBubble, Math.max(...lines.map((l) => ctx.measureText(l).width)) + 48 * s);
@@ -209,6 +217,33 @@ function drawBlock(
   roundRect(ctx, x, y, b.bw, b.bh, 22 * s, incoming ? 'in' : 'out');
   ctx.fill();
   noShadow(ctx);
+
+  // foto (prova visual) — placeholder com gradiente + ícone + legenda
+  if (b.image) {
+    const pad = 10 * s;
+    const iw = b.bw - pad * 2;
+    const ih = iw * 0.74;
+    const ix = x + pad, iy = y + pad;
+    const g = ctx.createLinearGradient(ix, iy, ix + iw, iy + ih);
+    g.addColorStop(0, '#3a4a5a'); g.addColorStop(1, '#1f2933');
+    ctx.fillStyle = g;
+    roundRect(ctx, ix, iy, iw, ih, 14 * s);
+    ctx.fill();
+    ctx.fillStyle = 'rgba(255,255,255,0.85)';
+    ctx.textAlign = 'center';
+    ctx.font = `${64 * s}px system-ui`;
+    ctx.fillText('🖼️', ix + iw / 2, iy + ih / 2 + 8 * s);
+    ctx.font = `${20 * s}px system-ui`;
+    ctx.fillStyle = 'rgba(255,255,255,0.65)';
+    ctx.fillText('Foto', ix + iw / 2, iy + ih - 18 * s);
+    // legenda
+    ctx.textAlign = 'left';
+    ctx.fillStyle = incoming ? theme.bubbleInText : theme.bubbleOutText;
+    ctx.font = `${30 * s}px system-ui, sans-serif`;
+    let cy = iy + ih + 34 * s;
+    for (const line of b.lines) { ctx.fillText(line, ix, cy); cy += 38 * s; }
+    return;
+  }
 
   // text
   ctx.fillStyle = incoming ? theme.bubbleInText : theme.bubbleOutText;
