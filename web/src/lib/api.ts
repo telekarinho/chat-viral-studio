@@ -1,4 +1,5 @@
 import type { Story, GenerateParams, ViralScore } from './types';
+import { configHeaders } from './config';
 
 // When NEXT_PUBLIC_API_URL is set → use the standalone Express backend (FFmpeg MP4 + SQLite).
 // When empty → same-origin Next.js API routes (Vercel single-project mode): generation/TTS work,
@@ -9,7 +10,7 @@ const SAME_ORIGIN = API === '';
 async function jpost<T>(path: string, body: unknown): Promise<T> {
   const res = await fetch(`${API}${path}`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: { 'Content-Type': 'application/json', ...configHeaders() },
     body: JSON.stringify(body),
   });
   const data = await res.json().catch(() => ({}));
