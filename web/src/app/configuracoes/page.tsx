@@ -44,7 +44,16 @@ export default function ConfigPage() {
       if (r.source === 'gemini') {
         setGeminiMsg('✓ Chave Gemini funcionando! Histórias serão geradas por IA.');
       } else if (r.source === 'mock-fallback') {
-        setGeminiMsg('❌ Chave inválida ou sem cota: ' + (r.warning || 'a chamada ao Gemini falhou.'));
+        const w = String(r.warning || '');
+        if (/429|quota|exceeded/i.test(w)) {
+          setGeminiMsg('⏳ Chave e modelo OK, mas a cota da sua chave foi atingida (limite de uso). Aguarde ~1 min e teste de novo, ou confira o plano/cota no Google AI Studio.');
+        } else if (/404|not found|not supported/i.test(w)) {
+          setGeminiMsg('❌ Modelo indisponível para essa chave. Deixe o campo "Modelo Gemini" vazio para usar o padrão.');
+        } else if (/api key|API_KEY|invalid|permission|403|400/i.test(w)) {
+          setGeminiMsg('❌ Chave inválida ou sem permissão. Gere uma nova em "Gerar chave Gemini".');
+        } else {
+          setGeminiMsg('❌ Falha ao chamar o Gemini: ' + (w || 'erro desconhecido'));
+        }
       } else {
         setGeminiMsg('⚠️ Nenhuma chave detectada — cole sua Gemini API Key acima e salve.');
       }
