@@ -22,6 +22,25 @@ const EMOTION: Record<string, { pitch: number; rate: number }> = {
 };
 const clamp = (n: number, lo: number, hi: number) => Math.max(lo, Math.min(hi, n));
 
+// Quando a mensagem vem como "neutro", inferimos a emoção pelo texto para a
+// narração nunca soar plana (CAPS, pontuação, gírias e emojis).
+function inferEmotion(text: string): string {
+  const t = (text || '').trim();
+  if (!t) return 'neutro';
+  const letters = t.replace(/[^A-Za-zÀ-ÿ]/g, '');
+  const isShout = letters.length >= 3 && letters === letters.toUpperCase();
+  if (/[😱😨😰😥😓]|que medo|assust|socorro|n[aã]o acredito/i.test(t)) return 'medo';
+  if (/[😡🤬😠]|raiva|[óo]dio|absurdo|como assim|que isso|me poupe/i.test(t) || isShout) return 'raiva';
+  if (/[😢😭]|triste|chor|magoad|d[oó]i/i.test(t)) return 'tristeza';
+  if (/[😏🙄]|sei\.\.\.|aham|claro\b|imagina/i.test(t)) return 'ironia';
+  if (/[😂🤣]|kk+|haha|rsrs|hilári|que engra/i.test(t)) return 'alegria';
+  if (/[😍🥰❤️🥹]|te amo|maravilh|que lind|amei/i.test(t)) return 'alegria';
+  if (/[😮😲😳🤯]|nossa|s[ée]rio\?|jura|\?\?\?+|!!!+|caramba|meu deus/i.test(t)) return 'surpresa';
+  if (/!/.test(t)) return 'alegria';
+  if (/\?/.test(t)) return 'surpresa';
+  return 'neutro';
+}
+
 // Minimal near-silent MP3 placeholder so timing/sync works without a TTS key.
 const BEEP =
   '//uQxAAAAAAAAAAAAAAAAAAAAAAAWGluZwAAAA8AAAACAAACcQCA' +
@@ -35,7 +54,8 @@ export async function POST(req: Request) {
   // user's own key (sent from the Settings page) wins, else server env
   const key = req.headers.get('x-google-tts-key')?.trim() || process.env.GOOGLE_TTS_API_KEY;
   const preset = VOICES[voice] || VOICES.narradora_fem;
-  const emo = EMOTION[emotion] || EMOTION.neutro;
+  const effEmotion = (emotion && emotion !== 'neutro') ? emotion : inferEmotion(text);
+  const emo = EMOTION[effEmotion] || EMOTION.neutro;
   const finalPitch = clamp(preset.pitch + emo.pitch + Number(pitch || 0), -20, 20);
   const finalRate = clamp(preset.rate + emo.rate + (Number(speed || 1) - 1), 0.25, 4);
 

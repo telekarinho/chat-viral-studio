@@ -12,11 +12,21 @@ const SCHEMA_HINT = `Responda APENAS com JSON válido (sem markdown), no formato
 "narration":"","hashtags":["#viral"],"caption":"","part2_hook":""}`;
 
 export function buildStoryPrompt(p: any = {}) {
-  const { category = 'comédia', duration = 45, intensity = 'médio', emotion = 'engraçado', ending = 'plot twist', messageCount = 14 } = p;
-  return `Você é roteirista de vídeos virais verticais. Crie uma HISTÓRIA 100% FICTÍCIA em formato de conversa de app de mensagens.
-REGRAS: ficção/dramatização; sem nomes reais; sem dados pessoais, golpes aplicáveis, instruções ilegais, conteúdo sexual explícito, ódio ou humilhação real.
-PARÂMETROS: categoria=${category}; duração=${duration}s; intensidade=${intensity}; emoção=${emotion}; final=${ending}; ~${messageCount} mensagens.
-QUALIDADE: gancho forte na 1ª msg; falas curtas alternando 2 personagens; tensão crescente até o final ${ending}; "delay" 0.6–2.5s somando ≈${duration}s; "emotion"∈[neutro,alegria,raiva,medo,surpresa,tristeza,ironia]; "time" HH:MM crescente.
+  const { category = 'comédia', duration = 40, intensity = 'médio', emotion = 'engraçado', ending = 'plot twist', messageCount = 14 } = p;
+  return `Você é o MELHOR roteirista de vídeos virais de TikTok/Reels do Brasil. Crie uma HISTÓRIA 100% FICTÍCIA em formato de conversa de WhatsApp que prenda do 1º ao último segundo.
+
+PARÂMETROS: categoria=${category}; duração≈${duration}s; intensidade=${intensity}; clima=${emotion}; final=${ending}; ~${messageCount} mensagens.
+
+FÓRMULA VIRAL (siga à risca):
+- GANCHO BRUTAL: a 1ª mensagem já joga uma bomba/segredo/acusação que dá vontade de saber o que vem. Nada de "oi tudo bem".
+- ESCADA DE TENSÃO: cada mensagem aumenta a treta/curiosidade. Use mini-cliffhangers ("você não vai acreditar no que descobri", "senta que lá vem história").
+- FALAS CURTAS e humanas: gíria brasileira real (tipo "mano", "pelo amor", "kkkk", "surtei", "para tudo"), erros propositais de digitação leves, áudios e prints citados. Alterne os 2 personagens.
+- REVIRAVOLTA no final (${ending}) que reinterpreta tudo — a última mensagem tem que ser um soco.
+- EMOÇÃO REAL: defina "emotion" CERTA pra CADA mensagem conforme o que ela sente (NUNCA deixe tudo "neutro"). Varie bastante: alegria, raiva, medo, surpresa, tristeza, ironia. Mensagens de choque = surpresa/medo; brigas = raiva; deboche = ironia.
+- TÍTULO chamativo + "hook" de 1 linha com emoji + "caption" com pergunta que gera comentário + "part2_hook" que faz querer a parte 2 + 4-6 hashtags fortes.
+- RITMO: "delay" entre 0.6 e 2.5s, somando ≈${duration}s; "time" HH:MM crescente e realista.
+
+REGRAS DE SEGURANÇA: ficção/dramatização; sem pessoas/empresas reais; sem dados pessoais, golpes aplicáveis, instruções ilegais, conteúdo sexual explícito, ódio ou humilhação real.
 ${SCHEMA_HINT}`;
 }
 
