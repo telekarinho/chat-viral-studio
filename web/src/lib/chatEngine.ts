@@ -27,7 +27,9 @@ export function buildTimeline(story: Story, settings: ExportSettings): Timeline 
   for (const msg of story.messages) {
     const incoming = isIncoming(story, msg);
     const delay = Math.max(0.3, (msg.delay || 1) / speed);
-    const typingDur = incoming && msg.type === 'text' ? TYPING / speed : 0;
+    // incoming: "digitando…" no balão; outgoing: tempo p/ "digitar" na barra de input
+    const outTyping = clamp(0.5 + (msg.text?.length || 0) * 0.035, 0.6, 2.2);
+    const typingDur = msg.type === 'text' ? (incoming ? TYPING : outTyping) / speed : 0;
 
     const typingAt = t;
     const appearAt = t + typingDur;
@@ -104,6 +106,8 @@ export function drawFrame(ctx: CanvasRenderingContext2D, t: number, d: DrawCtx) 
       blocks.push({ it, lines: [it.msg.text], bw: 0, bh: 56 * s, incoming, typing: false });
       continue;
     }
+    // mensagem de saída sendo "digitada" aparece na barra de input, não como balão
+    if (typing && !incoming) continue;
     const label = typing ? '•••' : displayText(it.msg);
     const lines = wrap(ctx, label, maxBubble - 48 * s);
     const bw = Math.min(maxBubble, Math.max(...lines.map((l) => ctx.measureText(l).width)) + 48 * s);
@@ -135,8 +139,17 @@ export function drawFrame(ctx: CanvasRenderingContext2D, t: number, d: DrawCtx) 
 
   // header (drawn after bubbles so it overlaps cleanly)
   drawHeader(ctx, story, theme, W, headerH, s);
-  // fake input bar
-  drawInputBar(ctx, theme, W, H, inputH, s);
+  // fake input bar — simula você digitando a próxima mensagem de saída letra por letra
+  let typingText: string | null = null;
+  const composing = timeline.items.find(
+    (it) => !isIncoming(story, it.msg) && it.msg.type === 'text' && t >= it.typingAt && t < it.appearAt,
+  );
+  if (composing) {
+    const prog = clamp((t - composing.typingAt) / Math.max(0.001, composing.appearAt - composing.typingAt), 0, 1);
+    const full = displayText(composing.msg);
+    typingText = full.slice(0, Math.max(1, Math.floor(full.length * prog)));
+  }
+  drawInputBar(ctx, theme, W, H, inputH, s, typingText, t);
   // progress bar
   drawProgress(ctx, t, timeline.duration, W, headerH, theme, s);
 
@@ -284,21 +297,40 @@ function drawHeader(ctx: CanvasRenderingContext2D, story: Story, theme: any, W: 
   ctx.textAlign = 'left';
 }
 
-function drawInputBar(ctx: CanvasRenderingContext2D, theme: any, W: number, H: number, h: number, s: number) {
+function drawInputBar(
+  ctx: CanvasRenderingContext2D, theme: any, W: number, H: number, h: number, s: number,
+  typingText?: string | null, t = 0,
+) {
   ctx.fillStyle = theme.bg;
   ctx.fillRect(0, H - h, W, h);
   // pill
+  const pillX = 24 * s, pillW = W - 130 * s;
   ctx.fillStyle = theme.inputBg;
-  roundRect(ctx, 24 * s, H - h + 22 * s, W - 130 * s, h - 44 * s, (h - 44 * s) / 2);
+  roundRect(ctx, pillX, H - h + 22 * s, pillW, h - 44 * s, (h - 44 * s) / 2);
   ctx.fill();
-  ctx.fillStyle = theme.meta;
+  const baseline = H - h / 2 + 10 * s;
   ctx.font = `${28 * s}px system-ui`;
-  ctx.fillText('Mensagem', 60 * s, H - h / 2 + 10 * s);
-  // send button
+  ctx.textAlign = 'left';
+  if (typingText) {
+    // texto sendo digitado (cabe na pill) + cursor piscando
+    ctx.fillStyle = theme.bubbleInText || '#0b141a';
+    const maxTextW = pillW - 72 * s;
+    let shown = typingText;
+    while (shown.length > 1 && ctx.measureText(shown).width > maxTextW) shown = shown.slice(1);
+    if (shown !== typingText) shown = '…' + shown.slice(1);
+    const cursor = Math.floor(t * 2) % 2 === 0 ? '|' : '';
+    ctx.fillText(shown + cursor, 60 * s, baseline);
+  } else {
+    ctx.fillStyle = theme.meta;
+    ctx.fillText('Mensagem', 60 * s, baseline);
+  }
+  // send button (mais vivo enquanto digita)
   ctx.beginPath();
   ctx.arc(W - 64 * s, H - h / 2, 40 * s, 0, Math.PI * 2);
   ctx.fillStyle = theme.accent;
+  ctx.globalAlpha = typingText ? 1 : 0.85;
   ctx.fill();
+  ctx.globalAlpha = 1;
   ctx.fillStyle = '#fff';
   ctx.font = `${34 * s}px system-ui`;
   ctx.textAlign = 'center';
