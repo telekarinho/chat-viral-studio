@@ -3,6 +3,7 @@ import { useState } from 'react';
 import { useStudio } from '@/store/useStudioStore';
 import { exportVideo, downloadBlob } from '@/lib/exporter';
 import { exportMp4 } from '@/lib/ffmpegExporter';
+import { exportMp4WebCodecs, webCodecsSupported } from '@/lib/webcodecsExporter';
 import { narratorWav } from '@/lib/audio';
 import { buildScript, buildSRT, buildThumbnail, downloadText, downloadDataUrl } from '@/lib/outputs';
 
@@ -21,11 +22,17 @@ export function ExportPanel() {
   async function doExportMp4() {
     setBusy('mp4'); setProgress(0); setStage('Iniciando…');
     try {
-      const mp4 = await exportMp4(story!, settings, audioBuffers, {
-        narratorBuffers,
-        onProgress: setProgress,
-        onStage: setStage,
-      });
+      const fast = await webCodecsSupported(settings.format);
+      const run = fast ? exportMp4WebCodecs : exportMp4;
+      let mp4: Blob;
+      try {
+        mp4 = await run(story!, settings, audioBuffers, { narratorBuffers, onProgress: setProgress, onStage: setStage });
+      } catch (err) {
+        // se o caminho rápido falhar no meio, tenta o ffmpeg.wasm como rede de segurança
+        if (!fast) throw err;
+        setStage('Caminho rápido indisponível — usando o motor de reserva…'); setProgress(0);
+        mp4 = await exportMp4(story!, settings, audioBuffers, { narratorBuffers, onProgress: setProgress, onStage: setStage });
+      }
       downloadBlob(mp4, `${slug(story!.title)}.mp4`);
       await useStudio.getState().save().catch(() => {});
     } catch (e: any) {
@@ -176,11 +183,8 @@ export function ExportPanel() {
             <div className="h-full bg-brand transition-all" style={{ width: `${progress * 100}%` }} />
           </div>
         )}
-        <p className="text-center text-xs text-amber-300/80">
-          ⚠️ Durante a renderização, <b>não troque de aba nem minimize</b> a janela — o navegador congela o vídeo e ele sai vazio.
-        </p>
         <p className="text-center text-xs text-white/40">
-          O vídeo é gravado no navegador (Canvas + áudio). Sai em WebM (funciona em TikTok/Reels/CapCut).
+          🚀 O MP4 é gerado no seu aparelho usando o encoder de vídeo do navegador (rápido). Sai um <b>.mp4</b> real (H.264 + AAC) que abre em qualquer player e funciona em TikTok/Reels/CapCut. O <b>WebM</b> abaixo é só o modo antigo de reserva.
         </p>
       </div>
 

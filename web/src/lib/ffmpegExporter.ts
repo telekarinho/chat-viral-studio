@@ -58,11 +58,12 @@ function audioBufferToWav(buf: AudioBuffer): Uint8Array {
   return new Uint8Array(ab);
 }
 
-// renderiza o áudio (narrador OU vozes por msg) offline → WAV
-async function renderWav(
+// renderiza o áudio (narrador OU vozes por msg) offline → AudioBuffer mixado.
+// Compartilhado entre o exportador ffmpeg (→ WAV) e o WebCodecs (→ AAC).
+export async function renderMixedAudio(
   story: Story, settings: ExportSettings, audioBuffers: Map<string, AudioBuffer>,
   narratorBuffers: AudioBuffer[], durationSec: number,
-): Promise<Uint8Array | null> {
+): Promise<AudioBuffer | null> {
   const narratorOn = !!(settings.withNarrator && narratorBuffers.length);
   const hasMsgAudio = audioBuffers.size > 0;
   if (!narratorOn && !hasMsgAudio) return null; // sem áudio → vídeo mudo
@@ -81,8 +82,16 @@ async function renderWav(
       s.connect(g).connect(oac.destination); s.start(Math.min(durationSec - 0.01, it.speakStart));
     }
   }
-  const rendered = await oac.startRendering();
-  return audioBufferToWav(rendered);
+  return oac.startRendering();
+}
+
+// renderiza o áudio offline → WAV (usado pelo ffmpeg)
+async function renderWav(
+  story: Story, settings: ExportSettings, audioBuffers: Map<string, AudioBuffer>,
+  narratorBuffers: AudioBuffer[], durationSec: number,
+): Promise<Uint8Array | null> {
+  const rendered = await renderMixedAudio(story, settings, audioBuffers, narratorBuffers, durationSec);
+  return rendered ? audioBufferToWav(rendered) : null;
 }
 
 export async function exportMp4(
