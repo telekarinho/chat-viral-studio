@@ -69,6 +69,24 @@ export function buildTimeline(story: Story, settings: ExportSettings): Timeline 
   return { items, duration: t + 1.4 /* tail for the last bubble + seal */ };
 }
 
+// Reescala a timeline pra durar `targetSec` (espalha as mensagens proporcionalmente).
+// Usado no modo locutor: as bolhas aparecem ao longo da narração, e o vídeo passa
+// a durar o que a narração dura (que por sua vez segue a duração-alvo escolhida).
+export function scaleTimeline(tl: Timeline, targetSec: number): Timeline {
+  if (!tl.duration || !targetSec || targetSec <= 0) return tl;
+  const f = targetSec / tl.duration;
+  return {
+    duration: targetSec,
+    items: tl.items.map((it) => ({
+      ...it,
+      appearAt: it.appearAt * f,
+      typingAt: it.typingAt * f,
+      speakStart: it.speakStart * f,
+      speakEnd: it.speakEnd * f,
+    })),
+  };
+}
+
 function isIncoming(story: Story, msg: Message): boolean {
   const c = story.characters.find((c) => c.id === msg.sender);
   return (c?.side ?? 'left') === 'left';

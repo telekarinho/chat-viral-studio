@@ -39,8 +39,20 @@ const localProjects = {
       format: payload.format || '1080x1920', thumbnail: payload.thumbnail || null,
       createdAt: existing?.createdAt || now, updatedAt: now,
     };
-    lsSaveIndex([...rows.filter((r) => r.id !== id), meta]);
-    localStorage.setItem(`cvs-project-${id}`, JSON.stringify({ ...meta, story: payload.story }));
+    // tira mídia pesada (data: URLs) p/ não estourar a cota do localStorage
+    const story = payload.story ? {
+      ...payload.story,
+      messages: (payload.story.messages || []).map((m: any) => {
+        const mm = { ...m };
+        if (typeof mm.imageUrl === 'string' && mm.imageUrl.startsWith('data:')) delete mm.imageUrl;
+        if (typeof mm.audioUrl === 'string' && mm.audioUrl.startsWith('data:')) delete mm.audioUrl;
+        return mm;
+      }),
+    } : payload.story;
+    try {
+      lsSaveIndex([...rows.filter((r) => r.id !== id), meta]);
+      localStorage.setItem(`cvs-project-${id}`, JSON.stringify({ ...meta, story }));
+    } catch { /* cota cheia — não persiste, mas não quebra o app */ }
     return { ok: true, id };
   },
   remove: (id: string) => {

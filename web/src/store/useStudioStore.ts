@@ -1,7 +1,29 @@
 import { create } from 'zustand';
-import { persist } from 'zustand/middleware';
+import { persist, createJSONStorage } from 'zustand/middleware';
 import type { Story, Message, Character, ExportSettings, ThemeId } from '@/lib/types';
 import { api } from '@/lib/api';
+
+// Storage à prova de cota: nunca deixa o app quebrar se o localStorage encher
+// (imagens base64 são grandes). Se estourar, ignora a gravação silenciosamente.
+const safeStorage = {
+  getItem: (n: string) => { try { return localStorage.getItem(n); } catch { return null; } },
+  setItem: (n: string, v: string) => { try { localStorage.setItem(n, v); } catch { /* cota cheia — segue sem persistir */ } },
+  removeItem: (n: string) => { try { localStorage.removeItem(n); } catch { /* noop */ } },
+};
+
+// Tira mídia pesada (data: URLs de fotos/áudios) antes de persistir — mantém o
+// localStorage leve. As imagens seguem em memória pro export funcionar normal.
+function stripMedia(story: Story): Story {
+  return {
+    ...story,
+    messages: (story.messages || []).map((m) => {
+      const mm: any = { ...m };
+      if (typeof mm.imageUrl === 'string' && mm.imageUrl.startsWith('data:')) delete mm.imageUrl;
+      if (typeof mm.audioUrl === 'string' && mm.audioUrl.startsWith('data:')) delete mm.audioUrl;
+      return mm;
+    }),
+  };
+}
 
 const DEFAULT_SETTINGS: ExportSettings = {
   format: '1080x1920',
@@ -133,6 +155,7 @@ export const useStudio = create<StudioState>()(
     {
       name: 'cvs-studio',
       version: 1,
+      storage: createJSONStorage(() => safeStorage),
       // música de fundo virou padrão — liga pra quem já tinha estado salvo (v0)
       migrate: (persisted: any) => {
         if (persisted?.settings) {
@@ -141,8 +164,8 @@ export const useStudio = create<StudioState>()(
         }
         return persisted;
       },
-      // don't persist audio buffers (not serializable)
-      partialize: (s) => ({ story: s.story, settings: s.settings, voice: s.voice, projectId: s.projectId }),
+      // não persiste buffers de áudio (não serializáveis) nem mídia pesada (data: URLs)
+      partialize: (s) => ({ story: s.story ? stripMedia(s.story) : s.story, settings: s.settings, voice: s.voice, projectId: s.projectId }),
     }
   )
 );

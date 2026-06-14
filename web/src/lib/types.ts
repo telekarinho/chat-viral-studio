@@ -51,6 +51,7 @@ export interface Story {
   part2_hook: string;
   fictionSeal: boolean;
   viralScore: ViralScore | null;
+  targetDuration?: number;   // duração-alvo do vídeo em segundos (escolhida no Criar)
 }
 
 export interface ExportSettings {

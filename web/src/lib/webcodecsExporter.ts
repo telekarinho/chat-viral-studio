@@ -2,7 +2,7 @@
 // do navegador (VideoEncoder) + AAC (AudioEncoder), empacotado com mp4-muxer.
 // É 10-20× mais rápido que o ffmpeg.wasm (libx264 em software), que vira fallback.
 import type { Story, ExportSettings } from './types';
-import { buildTimeline, drawFrame, preloadImages } from './chatEngine';
+import { buildTimeline, scaleTimeline, drawFrame, preloadImages } from './chatEngine';
 import { renderMixedAudio } from './ffmpegExporter';
 import { Muxer, ArrayBufferTarget } from 'mp4-muxer';
 
@@ -56,9 +56,12 @@ export async function exportMp4WebCodecs(
   const fps = 30;
   const narratorBuffers = opts.narratorBuffers || [];
   const narratorOn = !!(settings.withNarrator && narratorBuffers.length);
-  const timeline = buildTimeline(story, settings);
   const narratorTotal = narratorOn ? narratorBuffers.reduce((a, b) => a + b.duration, 0) : 0;
-  const duration = Math.min(150, Math.max(timeline.duration, narratorOn ? narratorTotal + 0.8 : 0));
+  // modo locutor: o vídeo dura o que a narração dura (que segue a duração-alvo),
+  // e as mensagens são espalhadas ao longo dela.
+  let timeline = buildTimeline(story, settings);
+  if (narratorOn && narratorTotal > 0) timeline = scaleTimeline(timeline, narratorTotal + 0.8);
+  const duration = Math.min(150, narratorOn ? narratorTotal + 0.8 : timeline.duration);
   const totalFrames = Math.max(1, Math.ceil(duration * fps));
   // bitrate proporcional à área (≈ 8 Mbps em 1080×1920)
   const bitrate = Math.round((W * H) / (1080 * 1920) * 8_000_000);
