@@ -1,5 +1,6 @@
 import type { Story, GenerateParams, ViralScore } from './types';
 import { configHeaders } from './config';
+import { recordTtsUsage, type TtsEngine } from './usage';
 
 // When NEXT_PUBLIC_API_URL is set → use the standalone Express backend (FFmpeg MP4 + SQLite).
 // When empty → same-origin Next.js API routes (Vercel single-project mode): generation/TTS work,
@@ -87,8 +88,12 @@ export const api = {
 
   voices: () => fetch(`${API}/api/voices`).then((r) => r.json()),
 
-  tts: (text: string, voice: string, emotion: string, speed = 1, pitch = 0) =>
-    jpost<{ audioContent: string; mime: string; mock?: boolean; source?: string }>('/api/tts', { text, voice, emotion, speed, pitch }),
+  tts: async (text: string, voice: string, emotion: string, speed = 1, pitch = 0) => {
+    const r = await jpost<{ audioContent: string; mime: string; mock?: boolean; source?: string; engine?: TtsEngine; chars?: number }>(
+      '/api/tts', { text, voice, emotion, speed, pitch });
+    recordTtsUsage(r.engine, r.chars); // contabiliza no free tier (só chirp/neural2)
+    return r;
+  },
 
   // MP4 transcode needs the Express+FFmpeg backend. In same-origin mode we skip it
   // and the exporter falls back to a downloadable WebM (aceito por TikTok/Reels).
