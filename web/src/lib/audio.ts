@@ -1,5 +1,36 @@
 import { api } from './api';
-import type { Story, Message } from './types';
+import type { Story, Message, Character } from './types';
+
+// ── Vozes por personagem (diálogo a 2 vozes: ele x ela) ───────────────
+// Usa as melhores Neural2: feminina = Neural2-A, masculina = Neural2-B; e
+// secundárias distintas quando há 2 do mesmo gênero, pra nunca soarem iguais.
+const FEM_VOICES = ['narradora_fem', 'voz_jovem', 'voz_calma'];
+const MASC_VOICES = ['narrador_masc', 'voz_suspense'];
+
+const KNOWN_F = new Set(['ana', 'maria', 'lucia', 'rafaela', 'laura', 'julia', 'bia', 'duda', 'leticia', 'fernanda', 'patricia', 'sandra', 'carla', 'bruna', 'amanda', 'camila', 'vanessa', 'larissa', 'jessica', 'gabriela', 'beatriz', 'manu', 'sofia', 'sophia', 'alice', 'helena', 'valentina', 'rebeca', 'luiza', 'isabela', 'dona', 'tia', 'mae', 'mãe', 'vizinha', 'sogra', 'cunhada', 'ex']);
+const KNOWN_M = new Set(['joao', 'pedro', 'leo', 'gabriel', 'lucas', 'mateus', 'marcos', 'felipe', 'rafael', 'rodrigo', 'bruno', 'thiago', 'tiago', 'carlos', 'andre', 'paulo', 'vitor', 'victor', 'gustavo', 'daniel', 'diego', 'caio', 'igor', 'enzo', 'davi', 'miguel', 'arthur', 'bernardo', 'heitor', 'seu', 'tio', 'pai', 'chefe', 'patrao', 'patrão', 'vizinho']);
+
+function firstName(s: string): string {
+  return (s || '').trim().toLowerCase().split(/\s+/)[0].replace(/[^a-zà-ú]/g, '');
+}
+function inferGender(name: string): 'f' | 'm' {
+  const n = firstName(name);
+  if (!n) return 'm';
+  if (KNOWN_F.has(n)) return 'f';
+  if (KNOWN_M.has(n)) return 'm';
+  return n.endsWith('a') ? 'f' : 'm'; // heurística pt-BR (Maria→f, João→m)
+}
+
+// Mapa personagem→voz, garantindo vozes distintas por lado/gênero.
+export function assignCharacterVoices(characters: Character[]): Record<string, string> {
+  const map: Record<string, string> = {};
+  let fi = 0, mi = 0;
+  for (const c of characters || []) {
+    if (inferGender(c.name) === 'f') map[c.id] = FEM_VOICES[fi++ % FEM_VOICES.length];
+    else map[c.id] = MASC_VOICES[mi++ % MASC_VOICES.length];
+  }
+  return map;
+}
 
 // Decode a base64 MP3 from the TTS endpoint into an AudioBuffer (and a data URL).
 export async function synthMessage(
@@ -30,11 +61,13 @@ export async function synthStory(
   const audioCtx = new (window.AudioContext || (window as any).webkitAudioContext)();
   const buffers = new Map<string, AudioBuffer>();
   const messages = story.messages.map((m) => ({ ...m }));
+  // cada personagem fala com a SUA voz (ele x ela) — quem envia x quem recebe
+  const voiceMap = assignCharacterVoices(story.characters);
 
   let done = 0;
   for (const m of messages) {
     try {
-      const r = await synthMessage(audioCtx, m, voice);
+      const r = await synthMessage(audioCtx, m, voiceMap[m.sender] || voice);
       if (r) {
         m.audioUrl = r.dataUrl;
         m.audioDuration = r.duration;
