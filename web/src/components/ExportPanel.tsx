@@ -15,6 +15,7 @@ export function ExportPanel() {
   const [progress, setProgress] = useState(0);
   const [stage, setStage] = useState<string | null>(null);
   const [result, setResult] = useState<{ webm: Blob; mp4Url?: string } | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
   if (!story) return null;
 
   const narratorOn = settings.withNarrator === true;
@@ -22,16 +23,22 @@ export function ExportPanel() {
 
   // Prepara TUDO sozinho antes de exportar: gera as fotos faltantes e a narração.
   // Resiliente — se algo falhar, segue (foto vira placeholder, vídeo sai mudo).
-  async function prepareAssets() {
+  // Retorna quantas fotos NÃO geraram, pra avisar o usuário em vez de falhar calado.
+  async function prepareAssets(): Promise<{ photoFails: number }> {
     const get = useStudio.getState;
-    // 1) fotos faltantes das mensagens de imagem
+    // 1) fotos faltantes das mensagens de imagem (com 1 retry cada)
     const imgMsgs = (get().story?.messages || []).filter((m) => m.type === 'image' && !m.imageUrl);
+    let photoFails = 0;
     for (let i = 0; i < imgMsgs.length; i++) {
       setStage(`Gerando as fotos… ${i + 1}/${imgMsgs.length}`); setProgress(0);
-      try {
-        const r = await api.genImage(imgMsgs[i].text || 'foto chocante de conversa de whatsapp');
-        if (r?.dataUrl) get().updateMessage(imgMsgs[i].id, { imageUrl: r.dataUrl });
-      } catch { /* segue com o placeholder cinza */ }
+      let ok = false;
+      for (let attempt = 0; attempt < 2 && !ok; attempt++) {
+        try {
+          const r = await api.genImage(imgMsgs[i].text || 'foto chocante de conversa de whatsapp');
+          if (r?.dataUrl) { get().updateMessage(imgMsgs[i].id, { imageUrl: r.dataUrl }); ok = true; }
+        } catch { /* tenta de novo */ }
+      }
+      if (!ok) photoFails++;
     }
     // 2) áudio — só gera se ainda não existe
     const voice = get().voice;
@@ -51,14 +58,18 @@ export function ExportPanel() {
         get().setAudioBuffers(buffers, messages);
       } catch { /* vídeo sai mudo */ }
     }
+    return { photoFails };
   }
 
   // Export MP4 robusto (WebCodecs por hardware; ffmpeg.wasm de reserva). Tudo
   // automático: ao clicar, prepara fotos + narração e baixa o MP4 no fim.
   async function doExportMp4() {
-    setBusy('mp4'); setProgress(0); setStage('Iniciando…');
+    setBusy('mp4'); setProgress(0); setStage('Iniciando…'); setNotice(null);
     try {
-      await prepareAssets();
+      const { photoFails } = await prepareAssets();
+      if (photoFails > 0) {
+        setNotice(`⚠️ ${photoFails} foto${photoFails > 1 ? 's' : ''} não gerou automaticamente (a IA de imagem está indisponível/sem cota agora). O vídeo sai com um card neutro no lugar. Dica: na aba Mensagens você pode enviar a sua foto ou tentar "Gerar foto" de novo.`);
+      }
       // lê o estado já preparado (fotos + buffers recém-gerados)
       const cur = useStudio.getState();
       const liveStory = cur.story!;
@@ -143,6 +154,9 @@ export function ExportPanel() {
         <p className="text-center text-xs text-white/40">
           Um clique faz tudo: gera as <b>fotos</b> que faltam, cria a <b>narração</b> e baixa o <b>.mp4</b> pronto pra postar.
         </p>
+        {notice && (
+          <p className="rounded-lg bg-amber-500/15 px-3 py-2 text-xs leading-relaxed text-amber-200">{notice}</p>
+        )}
       </div>
 
       <div className="card space-y-4">
