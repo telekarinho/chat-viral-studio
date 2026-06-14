@@ -40,16 +40,40 @@ export async function exportVideo(
   const ctx = canvas.getContext('2d')!;
   const drawData: DrawCtx = { story, timeline, settings, W, H };
 
+  // AudioContext criado JÁ (ainda dentro do gesto do clique) e retomado — se nascer
+  // "suspended" (por causa dos awaits abaixo), a faixa de áudio fica sem dados e
+  // TRAVA o gravador, gerando vídeo vazio. Por isso resume() aqui.
+  const audioCtx = new (window.AudioContext || (window as any).webkitAudioContext)();
+  await audioCtx.resume().catch(() => {});
+  const dest = audioCtx.createMediaStreamDestination();
+
   // ensure the webcam is live before recording, if the reaction overlay is on
   if (settings.withCamera) {
     try { await startCamera(); } catch { /* segue sem câmera se negar permissão */ }
   }
   // pré-carrega fotos anexadas pra aparecerem desde o 1º frame
   await preloadImages(story).catch(() => {});
+  await audioCtx.resume().catch(() => {});
 
-  // ── audio graph ──
-  const audioCtx = new (window.AudioContext || (window as any).webkitAudioContext)();
-  const dest = audioCtx.createMediaStreamDestination();
+  // ── combine streams ──
+  // desenha 1 frame antes de capturar (garante que a faixa de vídeo inicialize)
+  try { drawFrame(ctx, 0, drawData); } catch { /* noop */ }
+  const videoStream = canvas.captureStream(fps);
+  // segurança: só inclui a faixa de áudio se o contexto está rodando — uma faixa de
+  // áudio "suspensa" trava o muxer e gera vídeo vazio. Pior caso: vídeo sem áudio.
+  const audioTracks = audioCtx.state === 'running' ? dest.stream.getAudioTracks() : [];
+  const mixed = new MediaStream([...videoStream.getVideoTracks(), ...audioTracks]);
+
+  const mime = pickMime();
+  const recorder = new MediaRecorder(mixed, { mimeType: mime, videoBitsPerSecond: 8_000_000 });
+  const chunks: BlobPart[] = [];
+  recorder.ondataavailable = (e) => e.data.size && chunks.push(e.data);
+  recorder.onerror = (e: any) => console.warn('MediaRecorder error', e?.error || e);
+
+  const stopped = new Promise<void>((res) => (recorder.onstop = () => res()));
+  recorder.start(1000); // timeslice: descarrega dados a cada 1s (não perde tudo se algo falhar)
+
+  // ── áudio: agenda agora, junto do início da gravação (mantém sincronia) ──
   if (narratorOn) {
     // locutor narra tudo: toca os blocos da narração em sequência, do início
     let at = audioCtx.currentTime + 0.25;
@@ -77,23 +101,6 @@ export async function exportVideo(
   }
   // optional background music (looped, low volume) — uses a soft synth pad if no file
   if (settings.withMusic) addAmbientPad(audioCtx, dest, settings.musicVolume ?? 0.15, videoDuration);
-
-  // ── combine streams ──
-  // desenha 1 frame antes de capturar (garante que a faixa de vídeo inicialize)
-  try { drawFrame(ctx, 0, drawData); } catch { /* noop */ }
-  const videoStream = canvas.captureStream(fps);
-  const mixed = new MediaStream([
-    ...videoStream.getVideoTracks(),
-    ...dest.stream.getAudioTracks(),
-  ]);
-
-  const mime = pickMime();
-  const recorder = new MediaRecorder(mixed, { mimeType: mime, videoBitsPerSecond: 8_000_000 });
-  const chunks: BlobPart[] = [];
-  recorder.ondataavailable = (e) => e.data.size && chunks.push(e.data);
-
-  const stopped = new Promise<void>((res) => (recorder.onstop = () => res()));
-  recorder.start(1000); // timeslice: descarrega dados a cada 1s (não perde tudo se algo falhar)
 
   // ── drive the animation in real time ──
   const start = performance.now();
