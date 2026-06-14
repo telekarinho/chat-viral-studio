@@ -31,8 +31,11 @@ export async function exportVideo(
   // modo narrador: o vídeo precisa durar o tempo da locução (pode ser maior que o chat)
   const narratorOn = !!(settings.withNarrator && opts.narratorBuffers?.length);
   const narratorTotal = narratorOn ? opts.narratorBuffers!.reduce((a, b) => a + b.duration, 0) : 0;
-  const videoDuration = Math.max(timeline.duration, narratorOn ? narratorTotal + 0.8 : 0);
+  // cap de segurança: gravação muito longa no navegador pode estourar memória e sair vazia
+  const videoDuration = Math.min(180, Math.max(timeline.duration, narratorOn ? narratorTotal + 0.8 : 0));
   const durationMs = Math.ceil(videoDuration * 1000);
+  // vídeos longos: bitrate menor pra não pesar a memória do gravador
+  const bitrate = videoDuration > 60 ? 6_000_000 : 8_000_000;
 
   const canvas = document.createElement('canvas');
   canvas.width = W;
@@ -65,7 +68,7 @@ export async function exportVideo(
   const mixed = new MediaStream([...videoStream.getVideoTracks(), ...audioTracks]);
 
   const mime = pickMime(audioTracks.length > 0);
-  const recorder = new MediaRecorder(mixed, { mimeType: mime, videoBitsPerSecond: 8_000_000 });
+  const recorder = new MediaRecorder(mixed, { mimeType: mime, videoBitsPerSecond: bitrate });
   const chunks: BlobPart[] = [];
   recorder.ondataavailable = (e) => e.data.size && chunks.push(e.data);
   recorder.onerror = (e: any) => console.warn('MediaRecorder error', e?.error || e);

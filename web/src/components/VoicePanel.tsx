@@ -22,7 +22,7 @@ export function VoicePanel() {
   const [previewing, setPreviewing] = useState(false);
   const playRef = useRef<{ ctx: AudioContext; srcs: AudioBufferSourceNode[] } | null>(null);
 
-  const narratorMode = settings.withNarrator !== false;
+  const narratorMode = settings.withNarrator === true;
 
   useEffect(() => {
     api.voices().then((r) => r?.voices?.length && setVoices(r.voices)).catch(() => {});

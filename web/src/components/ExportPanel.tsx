@@ -11,7 +11,7 @@ export function ExportPanel() {
   const [result, setResult] = useState<{ webm: Blob; mp4Url?: string } | null>(null);
   if (!story) return null;
 
-  const narratorOn = settings.withNarrator !== false;
+  const narratorOn = settings.withNarrator === true;
   const narratorMissing = narratorOn && narratorBuffers.length === 0;
 
   async function doExport() {
