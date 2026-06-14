@@ -76,7 +76,7 @@ export const api = {
   voices: () => fetch(`${API}/api/voices`).then((r) => r.json()),
 
   tts: (text: string, voice: string, emotion: string, speed = 1, pitch = 0) =>
-    jpost<{ audioContent: string; mime: string; mock?: boolean }>('/api/tts', { text, voice, emotion, speed, pitch }),
+    jpost<{ audioContent: string; mime: string; mock?: boolean; source?: string }>('/api/tts', { text, voice, emotion, speed, pitch }),
 
   // MP4 transcode needs the Express+FFmpeg backend. In same-origin mode we skip it
   // and the exporter falls back to a downloadable WebM (aceito por TikTok/Reels).
