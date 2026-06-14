@@ -104,8 +104,13 @@ export function VoicePanel() {
 
       <label className="flex items-center gap-2 text-sm text-white/80">
         <input type="checkbox" checked={narratorMode} onChange={(e) => setSettings({ withNarrator: e.target.checked })} className="accent-[#7C3AED]" />
-        🎙️ Locutor narra tudo (estilo "Histórias de WhatsApp")
+        🎙️ Locutor narra tudo (1 voz conta a história, estilo "Histórias de WhatsApp")
       </label>
+      {!narratorMode && (
+        <p className="rounded-lg bg-brand/15 px-3 py-2 text-xs text-white/80">
+          🗣️🗣️ <b>Modo diálogo (2 vozes):</b> cada mensagem é falada pela voz do personagem — <b>voz masculina pra ele e feminina pra ela</b> (detecta pelo nome). Fica fácil de entender quem está falando.
+        </p>
+      )}
 
       <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
         {voices.map((v) => (
@@ -125,7 +130,7 @@ export function VoicePanel() {
           ? (narratorMode ? `🎙️ Gerando locução ${gen.done}/${gen.total}…` : `🎧 Gerando narração ${gen.done}/${gen.total}…`)
           : narratorMode
             ? (hasNarrator ? '🔁 Regerar locução do narrador' : '🎙️ Gerar locução do narrador')
-            : (hasMsgAudio ? '🔁 Regenerar vozes' : '🎙️ Gerar vozes por mensagem')}
+            : (hasMsgAudio ? '🔁 Regerar diálogo (2 vozes)' : '🗣️ Gerar diálogo — 2 vozes (ele e ela)')}
       </button>
 
       {narratorMode && hasNarrator && (
@@ -142,7 +147,7 @@ export function VoicePanel() {
       <p className="text-xs text-white/40">
         {narratorMode
           ? 'Um locutor único lê o roteiro inteiro (gancho + falas + reação + CTA) por cima do vídeo. Gere a locução e exporte. Sem chave de TTS, sai um placeholder.'
-          : 'Cada mensagem vira um bloco de áudio com a emoção da cena. Sem chave de TTS, um placeholder mantém a sincronia.'}
+          : 'Diálogo a 2 vozes: cada personagem fala com a própria voz (homem/mulher), com a emoção da cena. Ótimo pra quem assiste entender quem é quem.'}
       </p>
     </div>
   );
