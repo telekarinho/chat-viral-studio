@@ -140,7 +140,7 @@ export async function POST(req: Request) {
       });
       if (!r.ok) throw new Error(`TTS ${r.status}`);
       const data = await r.json();
-      if (data.audioContent) return NextResponse.json({ audioContent: data.audioContent, mime: 'audio/mp3' });
+      if (data.audioContent) return NextResponse.json({ audioContent: data.audioContent, mime: 'audio/mp3', source: 'google' });
     } catch { /* cai pro TTS grátis abaixo */ }
   }
 

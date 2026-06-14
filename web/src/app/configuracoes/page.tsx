@@ -70,8 +70,10 @@ export default function ConfigPage() {
       // persist first so the key is sent with the request
       setConfig(cfg);
       const r = await api.tts('Essa é a voz da sua narração no Chat Viral Studio.', voice, 'alegria');
-      if (r.mock) { setTestMsg('⚠️ Sem chave válida — tocando placeholder. Cole sua chave do Google TTS acima.'); }
-      else { setTestMsg('✓ Voz real gerada com sua chave!'); }
+      if (r.source === 'google') { setTestMsg('✓ Sua chave Google funciona! Voz Neural2 com emoção será usada na narração.'); }
+      else if (r.source === 'gtrans') { setTestMsg('⚠️ Sua chave NÃO funcionou (a API Text-to-Speech não está ativada ou a chave é inválida/restrita). Tocando a voz GRÁTIS de reserva. Clique em "① Ativar Text-to-Speech" e confira a chave.'); }
+      else if (r.mock) { setTestMsg('⚠️ Sem chave e sem voz grátis no momento — tocando placeholder.'); }
+      else { setTestMsg('✓ Voz gerada!'); }
       const audio = new Audio(`data:${r.mime};base64,${r.audioContent}`);
       await audio.play().catch(() => {});
     } catch (e: any) {
