@@ -132,6 +132,15 @@ export const useStudio = create<StudioState>()(
     }),
     {
       name: 'cvs-studio',
+      version: 1,
+      // música de fundo virou padrão — liga pra quem já tinha estado salvo (v0)
+      migrate: (persisted: any) => {
+        if (persisted?.settings) {
+          persisted.settings.withMusic = true;
+          if (!persisted.settings.musicVolume || persisted.settings.musicVolume < 0.1) persisted.settings.musicVolume = 0.22;
+        }
+        return persisted;
+      },
       // don't persist audio buffers (not serializable)
       partialize: (s) => ({ story: s.story, settings: s.settings, voice: s.voice, projectId: s.projectId }),
     }
