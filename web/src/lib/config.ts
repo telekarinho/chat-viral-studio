@@ -1,6 +1,7 @@
 // App configuration kept in the browser (localStorage) so each user plugs in
 // their own AI keys without touching Vercel env vars. Sent to our own API routes
 // via headers; routes fall back to server env when a key is absent.
+// build: redeploy check 2026-06-14
 export interface AppConfig {
   geminiKey: string;
   geminiModel: string;   // optional, defaults server-side
