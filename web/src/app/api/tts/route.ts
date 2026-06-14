@@ -23,6 +23,36 @@ const EMOTION: Record<string, { pitch: number; rate: number }> = {
 };
 const clamp = (n: number, lo: number, hi: number) => Math.max(lo, Math.min(hi, n));
 
+// Abreviações de chat → forma por extenso, pra a voz ler natural ("vc" → "você").
+const ABBREV: Record<string, string> = {
+  vc: 'você', vcs: 'vocês', voce: 'você', 'voce^': 'você',
+  q: 'que', qnd: 'quando', qdo: 'quando', qto: 'quanto', qse: 'quase',
+  pq: 'porque', pqp: 'puta que pariu', pf: 'por favor', pfv: 'por favor',
+  pra: 'pra', pro: 'pro', praque: 'pra que',
+  tb: 'também', tbm: 'também', tmb: 'também', tbem: 'também',
+  td: 'tudo', tds: 'todos', tdo: 'tudo',
+  mt: 'muito', mto: 'muito', mta: 'muita', mtas: 'muitas', mts: 'muitos',
+  blz: 'beleza', vlw: 'valeu', flw: 'falou', slk: 'sla', sla: 'sei lá',
+  msg: 'mensagem', msgs: 'mensagens', vdd: 'verdade', vdde: 'verdade',
+  dnv: 'de novo', dps: 'depois', agr: 'agora', hj: 'hoje', amnh: 'amanhã',
+  cmg: 'comigo', ctg: 'contigo', vce: 'você',
+  n: 'não', naum: 'não', nao: 'não', ñ: 'não',
+  eh: 'é', neh: 'né', ne: 'né',
+  fds: 'fim de semana', gnt: 'gente', glr: 'galera', mds: 'meu deus',
+  obg: 'obrigado', dsclp: 'desculpa', flr: 'falar', fzr: 'fazer',
+  qm: 'quem', cd: 'cadê', oq: 'o que', pqe: 'porque',
+};
+
+// expande abreviações (palavra inteira, ignora caixa) e some com "kkk"/"rsrs"
+function expandAbbrev(text: string): string {
+  let t = text.replace(/\bk{2,}\b/gi, '').replace(/\b(?:ha){2,}\b/gi, '').replace(/\b(?:rs){2,}\b/gi, '');
+  t = t.replace(/[a-zA-ZÀ-ÿ]+/g, (w) => {
+    const low = w.toLowerCase();
+    return Object.prototype.hasOwnProperty.call(ABBREV, low) ? ABBREV[low] : w;
+  });
+  return t.replace(/\s{2,}/g, ' ').trim();
+}
+
 // Remove emojis/símbolos/pictogramas pra a voz NÃO ler "carinha sorridente".
 // (As emoções continuam sendo inferidas do texto ORIGINAL, com os emojis.)
 function stripForSpeech(t: string): string {
@@ -114,8 +144,8 @@ export async function POST(req: Request) {
   const { text = '', voice = 'narradora_fem', emotion = 'neutro', speed = 1, pitch = 0 } = await req.json().catch(() => ({}));
   if (!text.trim()) return NextResponse.json({ error: 'texto vazio' }, { status: 400 });
 
-  // texto realmente falado (sem emojis); emoção inferida do texto original
-  const spoken = stripForSpeech(text);
+  // texto realmente falado (sem emojis, abreviações por extenso); emoção do original
+  const spoken = expandAbbrev(stripForSpeech(text));
   if (!spoken) return NextResponse.json({ audioContent: BEEP, mime: 'audio/mp3', mock: true });
 
   // user's own key (sent from the Settings page) wins, else server env
