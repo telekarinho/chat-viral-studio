@@ -13,6 +13,7 @@ export interface Character {
   online: boolean;
   avatarColor: string;
   avatarUrl?: string;
+  gender?: 'f' | 'm';   // define a voz (feminina/masculina); a IA preenche pelo contexto
 }
 
 export interface Message {
@@ -72,6 +73,19 @@ export interface ExportSettings {
   dramaticZoom?: boolean;    // slow ken-burns zoom over the video
   withCamera?: boolean;      // overlay the user's webcam (reaction)
   cameraCorner?: 'tl' | 'tr' | 'bl' | 'br';
+}
+
+// Roteiro UGC/review pra TikTok Shop (creator falando na câmera, formato que vende).
+export interface ShopScript {
+  hook: string;            // 0–3s, prende e mostra a dor/desejo
+  problem: string;         // a dor que o produto resolve
+  solution: string;        // o produto entrando como solução
+  proof: string;           // demonstração/prova (sem promessa falsa)
+  cta: string;             // chamada pra comprar (link/cestinha)
+  onScreenText: string[];  // textos curtos pra colar na tela
+  caption: string;         // legenda do post
+  hashtags: string[];
+  disclosure: string;      // aviso de publicidade/parceria (#publi) — obrigatório p/ afiliado
 }
 
 export interface GenerateParams {

@@ -1,4 +1,4 @@
-import type { Story, GenerateParams, ViralScore } from './types';
+import type { Story, GenerateParams, ViralScore, ShopScript } from './types';
 import { configHeaders } from './config';
 import { recordTtsUsage, type TtsEngine } from './usage';
 
@@ -93,6 +93,10 @@ export const api = {
 
   viralScore: (story: Story) =>
     jpost<{ viralScore: ViralScore }>('/api/viral-score', { story }),
+
+  // TikTok Shop: gera roteiro UGC e/ou "chat shoppable" (vídeo) que vende.
+  shop: (input: Record<string, unknown>) =>
+    jpost<{ script: ShopScript | null; story: Story | null; source: string }>('/api/shop', input),
 
   // gera uma foto grátis (IA Pollinations, fallback banco de imagens) → data URL
   genImage: (prompt: string) =>

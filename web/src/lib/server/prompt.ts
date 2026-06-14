@@ -17,7 +17,7 @@ export const PLATFORM_COMPLIANCE = `REGRAS DE MONETIZAÇÃO (OBRIGATÓRIAS — p
 - O conflito vem da SITUAÇÃO ABSURDA + diálogo afiado (humor/indignação) — NUNCA da degradação real de uma pessoa.`;
 
 const SCHEMA_HINT = `Responda APENAS com JSON válido (sem markdown), no formato:
-{"title":"","hook":"","characters":[{"id":"c1","name":"","side":"left","online":true},{"id":"c2","name":"Você","side":"right","online":true}],
+{"title":"","hook":"","characters":[{"id":"c1","name":"","side":"left","gender":"f","online":true},{"id":"c2","name":"Você","side":"right","gender":"m","online":true}],
 "messages":[{"sender":"c1","type":"text","text":"","emotion":"neutro","delay":1.2,"time":"21:48","status":"read"}],
 "narration":"","hashtags":["#viral"],"caption":"","part2_hook":""}`;
 
@@ -59,6 +59,7 @@ EXEMPLOS DA LÓGICA E DO TOM (siga este padrão, NÃO copie):
 
 MAPEAMENTO PRO JSON:
 - "hook": o gancho narrado do passo 1 (1 linha, tom de narrador, com emoji).
+- "characters": defina "gender" ("f" ou "m") de CADA personagem conforme o contexto (quem é homem/mulher na história), INCLUSIVE o "Você" — isso escolhe a voz (feminina/masculina). Se houver 2 do mesmo gênero, mantenha o gênero certo (o app dá 2 vozes diferentes do mesmo gênero).
 - "messages": só o DIÁLOGO do chat (passos 2 e 3), alternando vilão (c1, side left) e vítima (c2, side right). EMOÇÃO certa por mensagem (NUNCA tudo "neutro"): raiva nas brigas, surpresa/medo no choque, ironia no deboche. Termine com a vítima invertendo/bloqueando.
 - "narration": é a LOCUÇÃO falada do narrador — ele CONTA ESTA MESMA história (a mesma de "messages"), reagindo. NÃO pode ser genérica: tem que citar o que os personagens disseram. Estrutura OBRIGATÓRIA, texto corrido (sem tags), em 1ª pessoa de fofoqueiro:
   (1) ABRE com: "Rapaz, pensa num(a) [adjetivo + pessoa]. Veja só essa história!" (ou "Mano,...").
@@ -124,7 +125,7 @@ export function buildContinuationPrompt(prev: any = {}, p: any = {}) {
   const duration = Number(p.duration || prev.targetDuration || 45);
   const longo = (p.platform || 'curto') === 'longo';
   const part = Number(p.part || (Number(prev.part || 1) + 1));
-  const chars = (prev.characters || []).map((c: any) => `${c.id}=${c.name} (${c.side})`).join(', ');
+  const chars = (prev.characters || []).map((c: any) => `${c.id}=${c.name} (${c.side}, ${c.gender || '?'})`).join(', ');
   const recap = (prev.messages || [])
     .filter((m: any) => m.type !== 'system')
     .slice(-16)
@@ -147,7 +148,7 @@ ${recap || '(sem histórico)'}
 
 REGRAS DA CONTINUAÇÃO:
 1. Os 3 primeiros segundos RELEMBRAM em 1 frase o que rolou e JÁ entregam novidade — quem não viu a Parte ${part - 1} entende; quem viu sente que evoluiu.
-2. MANTENHA os mesmos personagens (mesmos ids c1/c2 e nomes). Pode entrar 1 personagem novo só se intensificar o conflito.
+2. MANTENHA os mesmos personagens (mesmos ids c1/c2, nomes e o MESMO "gender" de cada um). Pode entrar 1 personagem novo só se intensificar o conflito.
 3. Traga uma NOVA reviravolta (não repita a anterior) e termine com atitude drástica no app (sticker debochado e/ou system de bloqueio quando couber).
 4. Deixe um NOVO "part2_hook" forte, emendando a PRÓXIMA parte — a série nunca "fecha de vez".
 5. EMOÇÃO certa por mensagem (raiva/surpresa/ironia), prova visual (1 "type":"image") quando fizer sentido, e CTA pra comentar.
@@ -164,6 +165,66 @@ export function buildTextToChatPrompt(text: string, p: any = {}) {
   const { emotion = 'engraçado' } = p;
   return `Transforme o TEXTO numa conversa fictícia de app de mensagens entre 2 personagens. Mensagens curtas alternando remetentes, com pausas (delay) e horários. Emoção dominante: ${emotion}. Trate como ficção.
 TEXTO: """${(text || '').slice(0, 4000)}"""
+${PLATFORM_COMPLIANCE}
+${SCHEMA_HINT}`;
+}
+
+// ── TikTok Shop ───────────────────────────────────────────────────────────
+// Regras específicas de Shop/afiliado pra vender SEM quebrar política (e sem
+// derrubar a conta): honestidade, sem promessa milagrosa, disclosure de publi.
+export const SHOP_COMPLIANCE = `REGRAS DO TIKTOK SHOP / AFILIADO (OBRIGATÓRIAS — pra vender sem ser banido/desmonetizado):
+- HONESTIDADE: descreva só benefícios REAIS e plausíveis do produto. PROIBIDO promessa milagrosa, "cura", "100% garantido", resultado garantido, antes/depois médico, emagrecimento milagroso, enriquecimento rápido.
+- SEM categoria proibida (remédio/suplemento com alegação de saúde, arma, conteúdo adulto, falsificado, dinheiro/serviço financeiro duvidoso).
+- PUBLICIDADE TRANSPARENTE: se for afiliado/parceria, INCLUA aviso claro em "disclosure" e no texto (#publi / "parceria paga" / "ganho comissão"). Se for loja própria, deixe claro que é seu produto.
+- SEM dado falso, sem urgência mentirosa ("só hoje" só se for verdade), sem depoimento inventado de pessoa real.
+- CTA leva pra "cestinha"/link do produto de forma natural; nada de pedir pra "sair do app".`;
+
+// Roteiro UGC/review pra creator gravar (gancho → dor → produto → prova → CTA).
+export function buildShopScriptPrompt(input: any = {}) {
+  const { product = '', benefits = '', offer = '', audience = '', role = 'afiliado', duration = 30 } = input;
+  const isAff = role === 'afiliado' || role === 'ambos';
+  return `Você é um roteirista de UGC (vídeos que VENDEM) pra TikTok Shop. Escreva um roteiro CURTO de ~${duration}s, em PT-BR, de um creator falando na câmera, no estilo "descobri isso e mudou tudo", altamente persuasivo e ORIGINAL.
+
+PRODUTO: ${product}
+BENEFÍCIOS/DOR QUE RESOLVE: ${benefits}
+${offer ? `OFERTA/PREÇO: ${offer}` : ''}
+${audience ? `PÚBLICO: ${audience}` : ''}
+PAPEL: ${isAff ? 'AFILIADO (precisa de aviso de publicidade)' : 'VENDEDOR (loja própria)'}
+
+ESTRUTURA (cada campo é uma fala curta, natural, com gírias leves):
+- "hook": 0–3s que PRENDE mostrando a dor ou o resultado ("Para de gastar dinheiro à toa com…", "Se você sofre com X, presta atenção").
+- "problem": a dor/frustração que o público sente.
+- "solution": o produto entrando como solução, de forma natural.
+- "proof": demonstração/benefício concreto (sem promessa falsa).
+- "cta": chamada pra comprar pela cestinha/link ("toca na cestinha amarela", "link no perfil").
+- "onScreenText": 3 a 5 textos curtos pra colar na tela (legendas de impacto).
+- "caption": legenda do post com CTA.
+- "hashtags": 4–6 (#tiktokshop #achadinhos + nicho).
+- "disclosure": ${isAff ? 'aviso de publicidade/parceria obrigatório (ex: "Publi • ganho comissão por compras pelo meu link").' : 'aviso curto de que é produto da sua loja.'}
+
+${SHOP_COMPLIANCE}
+Responda APENAS JSON: {"hook":"","problem":"","solution":"","proof":"","cta":"","onScreenText":["",""],"caption":"","hashtags":["#tiktokshop"],"disclosure":""}`;
+}
+
+// Versão "chat shoppable": uma conversa fictícia onde o produto resolve um problema
+// de forma engraçada/viral e termina com CTA — reaproveita o motor de vídeo.
+export function buildShopChatPrompt(input: any = {}) {
+  const { product = '', benefits = '', offer = '', role = 'afiliado', duration = 30, messageCount = 12 } = input;
+  const isAff = role === 'afiliado' || role === 'ambos';
+  return `Crie uma conversa fictícia de WhatsApp (PT-BR) que VENDE um produto do TikTok Shop de forma natural e viral, em ~${duration}s (~${messageCount} mensagens). Um amigo conta pro outro como o produto resolveu o problema dele — leve, engraçado, com prova, terminando em CTA pra cestinha/link.
+
+PRODUTO: ${product}
+BENEFÍCIOS/DOR: ${benefits}
+${offer ? `OFERTA: ${offer}` : ''}
+PAPEL: ${isAff ? 'AFILIADO (mencione naturalmente que ganha comissão / é parceria)' : 'VENDEDOR (loja própria)'}
+
+REGRAS:
+- c1 = amigo que indica (left), c2 = "Você" curioso (right). Alterne, falas curtas, emoção certa por mensagem.
+- 1 mensagem "type":"image" mostrando o produto/resultado (no "text" descreva a foto).
+- Termine com "caption" e um "part2_hook" puxando "review completo na parte 2".
+- "narration": locução curta vendendo o produto e fechando com CTA pra cestinha.
+- "hashtags" com #tiktokshop.
+${SHOP_COMPLIANCE}
 ${PLATFORM_COMPLIANCE}
 ${SCHEMA_HINT}`;
 }
