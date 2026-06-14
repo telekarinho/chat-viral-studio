@@ -7,6 +7,7 @@ const ITEMS = [
   { href: '/create', label: 'Criar', icon: '✨' },
   { href: '/editor', label: 'Editor', icon: '✏️' },
   { href: '/record', label: 'Narrar', icon: '🎙️' },
+  { href: '/shop', label: 'Shop', icon: '🛍️' },
   { href: '/library', label: 'Biblioteca', icon: '📚' },
   { href: '/configuracoes', label: 'Config', icon: '⚙️' },
 ];

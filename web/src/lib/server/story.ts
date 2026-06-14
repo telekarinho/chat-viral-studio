@@ -12,6 +12,9 @@ export function normalizeStory(raw: any = {}, params: any = {}): any {
     side: c.side || (i === 0 ? 'left' : 'right'),
     online: c.online ?? true,
     avatarColor: c.avatarColor || ['#25D366', '#34B7F1', '#FF7A59', '#A78BFA'][i % 4],
+    // gênero define a voz (f/m). A IA preenche pelo contexto; senão fica indefinido
+    // e o cliente (audio.ts) infere pelo nome.
+    gender: c.gender === 'f' || c.gender === 'm' ? c.gender : undefined,
   }));
   const ids = new Set(characters.map((c: any) => c.id));
 
@@ -84,8 +87,8 @@ export function mockStory(params: any = {}): any {
     title: category === 'cliente maluco' ? 'O cliente que QUERIA errar' : 'Ela mentiu pra me testar',
     hook: category === 'cliente maluco' ? 'Esse cliente queria o pedido ERRADO 😳' : 'Ela esqueceu o celular aberto…',
     characters: [
-      { id: 'c1', name: category === 'cliente maluco' ? 'Cliente' : 'Bem 💚', side: 'left' },
-      { id: 'c2', name: 'Você', side: 'right' },
+      { id: 'c1', name: category === 'cliente maluco' ? 'Cliente' : 'Bem 💚', side: 'left', gender: category === 'cliente maluco' ? 'm' : 'f' },
+      { id: 'c2', name: 'Você', side: 'right', gender: category === 'cliente maluco' ? 'f' : 'm' },
     ],
     messages,
     narration: 'Essa conversa começou tranquila… mas o final ninguém esperava. Presta atenção até o fim porque a última mensagem muda tudo.',
@@ -94,6 +97,86 @@ export function mockStory(params: any = {}): any {
     part2_hook: 'A reação dele na parte 2 foi PIOR…',
     viralScore: { hook: 84, curiosity: 80, retention: 74, emotion: 88, ending: 90, part2: 78, total: 82, suggestions: [] },
   }, params);
+}
+
+// Tira o prefixo "Parte N — " do título pra achar o título-base da série.
+export function seriesBaseTitle(title = ''): string {
+  return (title || '').replace(/^\s*parte\s*\d+\s*[—\-:]\s*/i, '').trim();
+}
+
+// Continuação local (fallback sem IA): reaproveita os personagens da parte anterior
+// e o gancho part2_hook, montando uma Parte N coerente e escalada.
+export function mockContinuation(prev: any = {}, params: any = {}): any {
+  const characters = (prev.characters?.length ? prev.characters : [
+    { id: 'c1', name: 'Contato', side: 'left' },
+    { id: 'c2', name: 'Você', side: 'right' },
+  ]);
+  const v = characters[0]?.name || 'ele';
+  const hook = (prev.part2_hook || '').trim() || `A treta com ${v} continuou… e ficou pior 👀`;
+  const messages = [
+    { sender: 'c1', type: 'text', text: 'oi… sobre tudo aquilo de ontem', emotion: 'neutro', delay: 1, status: 'read' },
+    { sender: 'c2', type: 'text', text: 'eu ainda nem processei o que você fez', emotion: 'raiva', delay: 1.2, status: 'read' },
+    { sender: 'c1', type: 'text', text: 'calma que tem MAIS coisa que você não sabe', emotion: 'surpresa', delay: 1.3, status: 'read' },
+    { sender: 'c2', type: 'text', text: 'COMO ASSIM mais coisa???', emotion: 'surpresa', delay: 1, status: 'read' },
+    { sender: 'c1', type: 'image', text: 'print que prova tudo', emotion: 'medo', delay: 1.5, status: 'read' },
+    { sender: 'c2', type: 'text', text: 'pronto. agora você explica isso pra todo mundo 💅', emotion: 'ironia', delay: 1.2, status: 'read' },
+    { sender: 'c2', type: 'system', text: `Você bloqueou ${v}.`, emotion: 'neutro', delay: 1, status: 'read' },
+  ];
+  return normalizeStory({
+    title: seriesBaseTitle(prev.title) || prev.title || 'A continuação',
+    hook,
+    characters,
+    narration: '',
+    messages,
+    hashtags: prev.hashtags?.length ? prev.hashtags : ['#parte2', '#fofoca', '#viral', '#fy'],
+    caption: 'A parte 2 chegou 👀 E aí, o que VOCÊ faria? Comenta #ficção',
+    part2_hook: 'E na parte 3? Ninguém esperava esse plot…',
+  }, { ...params, category: prev.category, duration: params.duration || prev.targetDuration });
+}
+
+// Roteiro UGC local (fallback sem IA) pra TikTok Shop.
+export function mockShopScript(input: any = {}): any {
+  const p = (input.product || 'esse produto').trim();
+  const b = (input.benefits || 'resolve aquele problema chato do dia a dia').trim();
+  const isAff = input.role === 'afiliado' || input.role === 'ambos';
+  return {
+    hook: `Para de perder tempo e dinheiro — ${p} mudou minha rotina 👀`,
+    problem: `Sabe aquela dor de cabeça com isso? ${b}.`,
+    solution: `Aí eu testei ${p} e simplesmente resolveu.`,
+    proof: `Olha como é fácil de usar — sem complicação, no dia a dia.`,
+    cta: `Toca na cestinha amarela aqui embaixo e garante o seu 🛒`,
+    onScreenText: [`${p} 😮`, 'testei por você', 'antes x depois', 'tá na cestinha 👇'],
+    caption: `${p} virou meu queridinho 😍 corre que tá com oferta! #tiktokshop`,
+    hashtags: ['#tiktokshop', '#achadinhos', '#achados', '#tiktokmefezcomprar', '#viral'],
+    disclosure: isAff ? 'Publi • ganho uma comissão por compras feitas pelo meu link/cestinha.' : 'Produto da minha loja.',
+  };
+}
+
+// "Chat shoppable" local (fallback sem IA): conversa que vende o produto.
+export function mockShopChat(input: any = {}): any {
+  const p = (input.product || 'aquele produto').trim();
+  const isAff = input.role === 'afiliado' || input.role === 'ambos';
+  const messages = [
+    { sender: 'c1', type: 'text', text: `amiga, descobri ${p} e não consigo mais viver sem`, emotion: 'alegria', delay: 1, status: 'read' },
+    { sender: 'c2', type: 'text', text: 'serio? eu tava louca atrás de algo assim', emotion: 'surpresa', delay: 1.1, status: 'read' },
+    { sender: 'c1', type: 'text', text: 'mudou minha rotina, juro', emotion: 'alegria', delay: 1, status: 'read' },
+    { sender: 'c1', type: 'image', text: `foto do ${p} em uso`, emotion: 'neutro', delay: 1.4, status: 'read' },
+    { sender: 'c2', type: 'text', text: 'caramba que prático 😍 onde compra?', emotion: 'surpresa', delay: 1.1, status: 'read' },
+    { sender: 'c1', type: 'text', text: isAff ? 'tá na cestinha do meu perfil (ganho uma comissãozinha 🙈)' : 'tá na cestinha da minha lojinha 🛒', emotion: 'alegria', delay: 1.2, status: 'read' },
+  ];
+  return normalizeStory({
+    title: `${p} — o achadinho que todo mundo quer`,
+    hook: `Esse achadinho tá viralizando 👀`,
+    characters: [
+      { id: 'c1', name: 'Amiga 💕', side: 'left', gender: 'f' },
+      { id: 'c2', name: 'Você', side: 'right', gender: 'f' },
+    ],
+    messages,
+    narration: '',
+    hashtags: ['#tiktokshop', '#achadinhos', '#viral', '#fy'],
+    caption: 'Corre que tá na cestinha 🛒 #tiktokshop',
+    part2_hook: 'Na parte 2 eu mostro o review completo…',
+  }, { ...input, category: 'compra errada' });
 }
 
 export function textToChatLocal(text: string, params: any = {}): any {

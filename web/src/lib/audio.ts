@@ -22,11 +22,14 @@ function inferGender(name: string): 'f' | 'm' {
 }
 
 // Mapa personagem→voz, garantindo vozes distintas por lado/gênero.
+// Usa o `gender` definido pela IA (mais confiável); só cai na heurística do nome
+// quando o gênero não veio. 2 mulheres = 2 vozes femininas diferentes (idem homens).
 export function assignCharacterVoices(characters: Character[]): Record<string, string> {
   const map: Record<string, string> = {};
   let fi = 0, mi = 0;
   for (const c of characters || []) {
-    if (inferGender(c.name) === 'f') map[c.id] = FEM_VOICES[fi++ % FEM_VOICES.length];
+    const g = c.gender === 'f' || c.gender === 'm' ? c.gender : inferGender(c.name);
+    if (g === 'f') map[c.id] = FEM_VOICES[fi++ % FEM_VOICES.length];
     else map[c.id] = MASC_VOICES[mi++ % MASC_VOICES.length];
   }
   return map;
