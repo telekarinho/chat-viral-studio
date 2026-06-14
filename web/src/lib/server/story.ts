@@ -45,6 +45,8 @@ export function normalizeStory(raw: any = {}, params: any = {}): any {
     part2_hook: raw.part2_hook || '',
     fictionSeal: true,
     viralScore: raw.viralScore || null,
+    // duração-alvo (s) escolhida no Criar — guia o tamanho da narração e do vídeo
+    targetDuration: Number(params.duration || raw.targetDuration || 45) || 45,
   };
 }
 
@@ -145,7 +147,12 @@ export function buildNarrationLocal(story: any = {}): string {
     return `${mid}Aí ${who} ${what}`;
   }).join('. ');
   const cta = 'E aí pessoal, deixa a tua opinião nos comentários. Quem tá certo? O que tu faria numa situação dessa? Deixa aí que eu quero saber!';
-  return `${open}. ${body}. ${cta}`;
+  // cabe na duração-alvo (~2,5 palavras/s): trunca o corpo mantendo abertura + CTA
+  const secs = Math.max(8, Math.min(150, Number(story.targetDuration) || 45));
+  const budget = Math.max(12, Math.round(secs * 2.5) - open.split(/\s+/).length - cta.split(/\s+/).length);
+  const bodyWords = body.split(/\s+/);
+  const trimmedBody = bodyWords.length > budget ? bodyWords.slice(0, budget).join(' ') + '…' : body;
+  return `${open}. ${trimmedBody}. ${cta}`;
 }
 
 export function heuristicScore(story: any = {}): any {

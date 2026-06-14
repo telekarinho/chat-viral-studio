@@ -91,7 +91,11 @@ export function buildNarrationPrompt(story: any = {}) {
     }
   };
   const convo = (story.messages || []).filter((m: any) => m.type !== 'system').map(line).join('\n');
+  // a locução tem que CABER na duração-alvo: ~2,5 palavras faladas por segundo
+  const secs = Math.max(8, Math.min(150, Number(story.targetDuration) || 45));
+  const words = Math.round(secs * 2.5);
   return `Você é um NARRADOR de fofocas de WhatsApp (TikTok/Reels), tipo um amigo contando uma treta no bar. Escreva a LOCUÇÃO FALADA (texto corrido, SEM tags, sem aspas) que conta ESTA conversa abaixo, reagindo a ela.
+TAMANHO OBRIGATÓRIO: a locução INTEIRA deve durar ~${secs} segundos falados — ou seja, NO MÁXIMO ~${words} palavras no total (abertura + meio + fechamento). Seja conciso; corte o que não couber. Esse limite é mais importante que detalhar tudo.
 ESTRUTURA OBRIGATÓRIA:
 1) ABRE com "Rapaz, pensa num(a) [adjetivo+pessoa]. Veja só essa história!" (ou "Mano,...").
 2) CONTA a conversa na ordem, relatando com as próprias palavras o que cada um mandou + reagindo.
