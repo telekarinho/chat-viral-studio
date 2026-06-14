@@ -38,33 +38,50 @@ function srtTime(s: number): string {
   return `${hh}:${mm}:${ss},${String(ms).padStart(3, '0')}`;
 }
 
-// Render a vertical thumbnail: chat snapshot + big viral headline.
+// Descrição viral pronta pra colar no TikTok/Reels: título + legenda + CTA + hashtags.
+export function buildDescription(story: Story): string {
+  const title = (story.title || '').trim();
+  const caption = (story.caption || '').trim();
+  const hook = (story.hook || '').trim();
+  const tags = (story.hashtags || []).filter(Boolean);
+  const lines: string[] = [];
+  if (title) lines.push(`🔥 ${title}`);
+  const body = caption || hook;
+  if (body && body !== title) lines.push(body);
+  lines.push('Comenta o que VOCÊ faria 👇 (parte 2 se chegar a 1000 curtidas!)');
+  if (tags.length) lines.push(tags.join(' '));
+  return lines.join('\n\n');
+}
+
+// Thumbnail vertical NO TAMANHO DO VÍDEO (9:16, conforme o formato escolhido):
+// snapshot do chat perto do clímax + headline viral grande + seta.
 export function buildThumbnail(story: Story, settings: ExportSettings, headline?: string): string {
-  const W = 720, H = 1280;
+  const [fw, fh] = (settings.format || '1080x1920').split('x').map(Number);
+  const W = fw || 1080, H = fh || 1920;
+  const k = W / 720; // escala relativa ao desenho original (720 de largura)
   const canvas = document.createElement('canvas');
   canvas.width = W;
   canvas.height = H;
   const ctx = canvas.getContext('2d')!;
   const timeline = buildTimeline(story, settings);
-  // draw a frame near the climax (~75%)
+  // draw a frame near the climax (~70%)
   const t = timeline.duration * 0.7;
   drawFrame(ctx, t, { story, timeline, settings, W, H });
 
   // headline band
   const text = (headline || story.hook || story.title || 'OLHA O FINAL').toUpperCase();
-  const theme = THEMES[story.theme] || THEMES.verde;
-  ctx.fillStyle = 'rgba(0,0,0,0.6)';
-  ctx.fillRect(0, H * 0.62, W, H * 0.18);
+  ctx.fillStyle = 'rgba(0,0,0,0.62)';
+  ctx.fillRect(0, H * 0.6, W, H * 0.2);
   ctx.fillStyle = '#FFE600';
-  ctx.font = `bold 64px system-ui`;
+  ctx.font = `bold ${68 * k}px system-ui`;
   ctx.textAlign = 'center';
-  wrapDraw(ctx, text, W / 2, H * 0.7, W * 0.86, 66);
+  wrapDraw(ctx, text, W / 2, H * 0.685, W * 0.88, 74 * k);
   // red arrow accent
   ctx.fillStyle = '#FF2D55';
   ctx.beginPath();
-  ctx.moveTo(W - 120, H * 0.55);
-  ctx.lineTo(W - 60, H * 0.55);
-  ctx.lineTo(W - 90, H * 0.6);
+  ctx.moveTo(W - 120 * k, H * 0.55);
+  ctx.lineTo(W - 60 * k, H * 0.55);
+  ctx.lineTo(W - 90 * k, H * 0.6);
   ctx.fill();
   return canvas.toDataURL('image/png');
 }
