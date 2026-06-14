@@ -96,6 +96,41 @@ export function mockStory(params: any = {}): any {
   }, params);
 }
 
+// Tira o prefixo "Parte N — " do título pra achar o título-base da série.
+export function seriesBaseTitle(title = ''): string {
+  return (title || '').replace(/^\s*parte\s*\d+\s*[—\-:]\s*/i, '').trim();
+}
+
+// Continuação local (fallback sem IA): reaproveita os personagens da parte anterior
+// e o gancho part2_hook, montando uma Parte N coerente e escalada.
+export function mockContinuation(prev: any = {}, params: any = {}): any {
+  const characters = (prev.characters?.length ? prev.characters : [
+    { id: 'c1', name: 'Contato', side: 'left' },
+    { id: 'c2', name: 'Você', side: 'right' },
+  ]);
+  const v = characters[0]?.name || 'ele';
+  const hook = (prev.part2_hook || '').trim() || `A treta com ${v} continuou… e ficou pior 👀`;
+  const messages = [
+    { sender: 'c1', type: 'text', text: 'oi… sobre tudo aquilo de ontem', emotion: 'neutro', delay: 1, status: 'read' },
+    { sender: 'c2', type: 'text', text: 'eu ainda nem processei o que você fez', emotion: 'raiva', delay: 1.2, status: 'read' },
+    { sender: 'c1', type: 'text', text: 'calma que tem MAIS coisa que você não sabe', emotion: 'surpresa', delay: 1.3, status: 'read' },
+    { sender: 'c2', type: 'text', text: 'COMO ASSIM mais coisa???', emotion: 'surpresa', delay: 1, status: 'read' },
+    { sender: 'c1', type: 'image', text: 'print que prova tudo', emotion: 'medo', delay: 1.5, status: 'read' },
+    { sender: 'c2', type: 'text', text: 'pronto. agora você explica isso pra todo mundo 💅', emotion: 'ironia', delay: 1.2, status: 'read' },
+    { sender: 'c2', type: 'system', text: `Você bloqueou ${v}.`, emotion: 'neutro', delay: 1, status: 'read' },
+  ];
+  return normalizeStory({
+    title: seriesBaseTitle(prev.title) || prev.title || 'A continuação',
+    hook,
+    characters,
+    narration: '',
+    messages,
+    hashtags: prev.hashtags?.length ? prev.hashtags : ['#parte2', '#fofoca', '#viral', '#fy'],
+    caption: 'A parte 2 chegou 👀 E aí, o que VOCÊ faria? Comenta #ficção',
+    part2_hook: 'E na parte 3? Ninguém esperava esse plot…',
+  }, { ...params, category: prev.category, duration: params.duration || prev.targetDuration });
+}
+
 export function textToChatLocal(text: string, params: any = {}): any {
   const chunks = (text || '')
     .replace(/\s+/g, ' ')

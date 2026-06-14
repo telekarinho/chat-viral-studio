@@ -38,6 +38,7 @@ const localProjects = {
       id, title: payload.title || payload.story?.title || 'Sem título',
       status: payload.status || 'draft', duration: payload.duration || 0,
       format: payload.format || '1080x1920', thumbnail: payload.thumbnail || null,
+      part: payload.story?.part || null, seriesId: payload.story?.seriesId || null,
       createdAt: existing?.createdAt || now, updatedAt: now,
     };
     // tira mídia pesada (data: URLs) p/ não estourar a cota do localStorage
@@ -71,6 +72,21 @@ export const api = {
 
   generate: (params: GenerateParams) =>
     jpost<{ story: Story; source: string }>('/api/generate', params),
+
+  // gera a PARTE N+1 (continuação/série) a partir de uma história já criada.
+  // tira mídia pesada (data: URLs) do recap antes de enviar pro servidor.
+  continueStory: (prev: Story, params: Partial<GenerateParams> = {}) => {
+    const lean = {
+      ...prev,
+      messages: (prev.messages || []).map((m) => {
+        const mm: any = { ...m };
+        delete mm.audioUrl; delete mm.audioDuration;
+        if (typeof mm.imageUrl === 'string' && mm.imageUrl.startsWith('data:')) delete mm.imageUrl;
+        return mm;
+      }),
+    };
+    return jpost<{ story: Story; source: string; warning?: string }>('/api/continue', { prev: lean, params });
+  },
 
   textToChat: (text: string, params: Partial<GenerateParams>) =>
     jpost<{ story: Story; source: string }>('/api/text-to-chat', { text, ...params }),

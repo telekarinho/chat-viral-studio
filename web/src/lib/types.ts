@@ -52,6 +52,8 @@ export interface Story {
   fictionSeal: boolean;
   viralScore: ViralScore | null;
   targetDuration?: number;   // duração-alvo do vídeo em segundos (escolhida no Criar)
+  seriesId?: string;         // agrupa as partes de uma mesma série (= id da parte 1)
+  part?: number;             // número da parte na série (1, 2, 3…)
 }
 
 export interface ExportSettings {

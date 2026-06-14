@@ -6,6 +6,16 @@ export const CATEGORIES = [
   'segredo revelado', 'caso absurdo', 'suspense leve', 'comédia',
 ];
 
+// Regras de conteúdo p/ NÃO perder monetização (TikTok, YouTube/Shorts, Reels/Instagram,
+// Kwai, Facebook). O conteúdo precisa ser ORIGINAL e "advertiser-friendly".
+export const PLATFORM_COMPLIANCE = `REGRAS DE MONETIZAÇÃO (OBRIGATÓRIAS — pra NÃO desmonetizar nem ser removido em TikTok/YouTube/Reels/Kwai/Facebook):
+- CONTEÚDO ORIGINAL: roteiro 100% inédito; não copie falas/roteiros de terceiros; NÃO cite marcas, músicas, filmes, novelas ou PESSOAS REAIS (use nomes fictícios comuns).
+- FICÇÃO CLARA: é dramatização/entretenimento; nada apresentado como fato real, notícia ou denúncia verdadeira.
+- ADVERTISER-FRIENDLY: sem palavrão pesado (no máximo algo leve tipo "droga"); sem xingamento ofensivo. Pode ter treta e indignação, mas sem baixaria.
+- PROIBIDO (derruba o vídeo / tira monetização): violência gráfica ou sangue, ameaça real, conteúdo sexual/nudez/insinuação explícita, assédio, discurso de ódio (raça, gênero, religião, orientação, deficiência), bullying real, automutilação/suicídio, uso ou venda de drogas, armas, golpe/fraude aplicável, desinformação (saúde/eleições), atividade ilegal ou perigosa imitável.
+- SEM dados pessoais reais (telefone, CPF, endereço, placa, rosto identificável).
+- O conflito vem da SITUAÇÃO ABSURDA + diálogo afiado (humor/indignação) — NUNCA da degradação real de uma pessoa.`;
+
 const SCHEMA_HINT = `Responda APENAS com JSON válido (sem markdown), no formato:
 {"title":"","hook":"","characters":[{"id":"c1","name":"","side":"left","online":true},{"id":"c2","name":"Você","side":"right","online":true}],
 "messages":[{"sender":"c1","type":"text","text":"","emotion":"neutro","delay":1.2,"time":"21:48","status":"read"}],
@@ -69,7 +79,7 @@ REGRAS DE OURO PARA VIRALIZAR (use TODAS quando couber):
 
 TIPOS de mensagem disponíveis em "type": "text" | "image" (foto) | "sticker" (figurinha, use emoji no text) | "audio" | "system" (aviso central, ex: bloqueio) | "deleted" | "call_missed".
 
-REGRAS DE SEGURANÇA: ficção/dramatização; sem pessoas/empresas reais; sem dados pessoais, golpes aplicáveis, instruções ilegais, conteúdo sexual explícito, ódio ou humilhação real (mantenha o tom de fofoca/comédia, sem apelar).
+${PLATFORM_COMPLIANCE}
 ${SCHEMA_HINT}`;
 }
 
@@ -108,10 +118,53 @@ CONVERSA:
 ${convo.slice(0, 4000)}`;
 }
 
+// Continuação de uma história já criada (Parte N+1 de uma SÉRIE). Reaproveita os
+// MESMOS personagens + o gancho "part2_hook" e escala o absurdo, sem repetir.
+export function buildContinuationPrompt(prev: any = {}, p: any = {}) {
+  const duration = Number(p.duration || prev.targetDuration || 45);
+  const longo = (p.platform || 'curto') === 'longo';
+  const part = Number(p.part || (Number(prev.part || 1) + 1));
+  const chars = (prev.characters || []).map((c: any) => `${c.id}=${c.name} (${c.side})`).join(', ');
+  const recap = (prev.messages || [])
+    .filter((m: any) => m.type !== 'system')
+    .slice(-16)
+    .map((m: any) => {
+      const who = (prev.characters || []).find((c: any) => c.id === m.sender)?.name || m.sender;
+      return `${who}: ${m.type === 'text' ? m.text : '[' + m.type + (m.text ? ': ' + m.text : '') + ']'}`;
+    })
+    .join('\n');
+  const platformRules = longo
+    ? `DESTINO: YouTube/Facebook (LONGO). "narration" 500–1500 palavras com "salve" + inscreva-se; diálogo detalhado (${Math.max(p.messageCount || 16, 18)}+ mensagens).`
+    : `DESTINO: TikTok/Reels/Shorts/Kwai (CURTO, até ~${duration}s). Ritmo acelerado; choca nos 3 primeiros segundos; "narration" no MÁXIMO ~${Math.round(duration * 2.5)} palavras.`;
+  return `Aja como roteirista de SÉRIES de fofoca/treta narradas de WhatsApp. Escreva a PARTE ${part} (continuação direta) desta história 100% FICTÍCIA, mantendo OS MESMOS personagens e o fio da trama, ESCALANDO o absurdo (a parte nova tem que ser ainda mais chocante que a anterior).
+
+HISTÓRIA ANTERIOR (Parte ${part - 1}):
+- Título: ${prev.title || ''}
+- Personagens (REUSE os mesmos ids e nomes): ${chars || 'c1=Contato (left), c2=Você (right)'}
+- Como terminou (últimas mensagens):
+${recap || '(sem histórico)'}
+- Gancho deixado pra esta parte: ${prev.part2_hook || '(crie uma virada nova e coerente)'}
+
+REGRAS DA CONTINUAÇÃO:
+1. Os 3 primeiros segundos RELEMBRAM em 1 frase o que rolou e JÁ entregam novidade — quem não viu a Parte ${part - 1} entende; quem viu sente que evoluiu.
+2. MANTENHA os mesmos personagens (mesmos ids c1/c2 e nomes). Pode entrar 1 personagem novo só se intensificar o conflito.
+3. Traga uma NOVA reviravolta (não repita a anterior) e termine com atitude drástica no app (sticker debochado e/ou system de bloqueio quando couber).
+4. Deixe um NOVO "part2_hook" forte, emendando a PRÓXIMA parte — a série nunca "fecha de vez".
+5. EMOÇÃO certa por mensagem (raiva/surpresa/ironia), prova visual (1 "type":"image") quando fizer sentido, e CTA pra comentar.
+6. "title": curto e chamativo, SEM escrever "Parte X" (o app numera sozinho).
+7. "narration": locução do narrador contando ESTA parte (cita o que os personagens disseram), no tom de fofoca ("Rapaz,", "Mano,"), fechando com "deixa tua opinião nos comentários…".
+
+${platformRules}
+
+${PLATFORM_COMPLIANCE}
+${SCHEMA_HINT}`;
+}
+
 export function buildTextToChatPrompt(text: string, p: any = {}) {
   const { emotion = 'engraçado' } = p;
   return `Transforme o TEXTO numa conversa fictícia de app de mensagens entre 2 personagens. Mensagens curtas alternando remetentes, com pausas (delay) e horários. Emoção dominante: ${emotion}. Trate como ficção.
 TEXTO: """${(text || '').slice(0, 4000)}"""
+${PLATFORM_COMPLIANCE}
 ${SCHEMA_HINT}`;
 }
 
