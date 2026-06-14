@@ -2,8 +2,8 @@ import { api } from './api';
 import type { Story, Message, Character } from './types';
 
 // ── Vozes por personagem (diálogo a 2 vozes: ele x ela) ───────────────
-// Usa as melhores Neural2: feminina = Neural2-A, masculina = Neural2-B; e
-// secundárias distintas quando há 2 do mesmo gênero, pra nunca soarem iguais.
+// Femininas = Chirp3-HD (Aoede/Leda/Kore — bem mais naturais); masculina = Neural2-B.
+// Secundárias distintas quando há 2 do mesmo gênero, pra nunca soarem iguais.
 const FEM_VOICES = ['narradora_fem', 'voz_jovem', 'voz_calma'];
 const MASC_VOICES = ['narrador_masc', 'voz_suspense'];
 
