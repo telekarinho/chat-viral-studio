@@ -24,11 +24,12 @@ export function ExportPanel() {
   // Prepara TUDO sozinho antes de exportar: gera as fotos faltantes e a narração.
   // Resiliente — se algo falhar, segue (foto vira placeholder, vídeo sai mudo).
   // Retorna quantas fotos NÃO geraram, pra avisar o usuário em vez de falhar calado.
-  async function prepareAssets(): Promise<{ photoFails: number }> {
+  async function prepareAssets(): Promise<{ photoFails: number; reason: string }> {
     const get = useStudio.getState;
     // 1) fotos faltantes das mensagens de imagem (com 1 retry cada)
     const imgMsgs = (get().story?.messages || []).filter((m) => m.type === 'image' && !m.imageUrl);
     let photoFails = 0;
+    let reason = '';
     for (let i = 0; i < imgMsgs.length; i++) {
       setStage(`Gerando as fotos… ${i + 1}/${imgMsgs.length}`); setProgress(0);
       let ok = false;
@@ -36,7 +37,8 @@ export function ExportPanel() {
         try {
           const r = await api.genImage(imgMsgs[i].text || 'foto chocante de conversa de whatsapp');
           if (r?.dataUrl) { get().updateMessage(imgMsgs[i].id, { imageUrl: r.dataUrl }); ok = true; }
-        } catch { /* tenta de novo */ }
+          else if (r?.reason) reason = r.reason;
+        } catch (e: any) { reason = e?.message || String(e); }
       }
       if (!ok) photoFails++;
     }
@@ -58,7 +60,7 @@ export function ExportPanel() {
         get().setAudioBuffers(buffers, messages);
       } catch { /* vídeo sai mudo */ }
     }
-    return { photoFails };
+    return { photoFails, reason };
   }
 
   // Export MP4 robusto (WebCodecs por hardware; ffmpeg.wasm de reserva). Tudo
@@ -66,9 +68,9 @@ export function ExportPanel() {
   async function doExportMp4() {
     setBusy('mp4'); setProgress(0); setStage('Iniciando…'); setNotice(null);
     try {
-      const { photoFails } = await prepareAssets();
+      const { photoFails, reason } = await prepareAssets();
       if (photoFails > 0) {
-        setNotice(`⚠️ ${photoFails} foto${photoFails > 1 ? 's' : ''} não gerou automaticamente (a IA de imagem está indisponível/sem cota agora). O vídeo sai com um card neutro no lugar. Dica: na aba Mensagens você pode enviar a sua foto ou tentar "Gerar foto" de novo.`);
+        setNotice(`⚠️ ${photoFails} foto${photoFails > 1 ? 's' : ''} não gerou automaticamente. Motivo: ${reason || 'IA de imagem indisponível'}. O vídeo sai com um card neutro; você pode enviar a sua foto na aba Mensagens. ${/api key not valid|API_KEY_INVALID|400/i.test(reason) ? '➡️ Sua chave Gemini parece inválida — confira em Configurações.' : ''}`);
       }
       // lê o estado já preparado (fotos + buffers recém-gerados)
       const cur = useStudio.getState();

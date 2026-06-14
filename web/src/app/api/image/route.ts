@@ -43,27 +43,36 @@ const GEMINI_IMG_MODELS = [
   'gemini-2.0-flash-preview-image-generation',
   'gemini-2.0-flash-exp-image-generation',
 ];
-async function geminiImage(prompt: string, key: string): Promise<string | null> {
+async function geminiImage(prompt: string, key: string): Promise<{ url: string | null; reason: string }> {
   const body = JSON.stringify({
     contents: [{ role: 'user', parts: [{ text: prompt }] }],
     generationConfig: { responseModalities: ['TEXT', 'IMAGE'] },
   });
+  let reason = 'sem resposta';
   for (const model of GEMINI_IMG_MODELS) {
     const ctrl = new AbortController();
     const to = setTimeout(() => ctrl.abort(), 45000);
     try {
       const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${key}`;
       const r = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body, signal: ctrl.signal });
-      if (!r.ok) { clearTimeout(to); if (r.status === 404 || r.status === 400) continue; return null; }
+      if (!r.ok) {
+        clearTimeout(to);
+        const txt = await r.text().catch(() => '');
+        const msg = (txt.match(/"message":\s*"([^"]+)"/)?.[1] || '').slice(0, 120);
+        reason = `Gemini ${r.status}: ${msg || 'erro'}`;
+        if (r.status === 404 || r.status === 400) continue; // modelo indisponível p/ a chave → tenta o próximo
+        return { url: null, reason };
+      }
       const data = await r.json(); clearTimeout(to);
       const parts = data?.candidates?.[0]?.content?.parts || [];
       for (const p of parts) {
         const inline = p.inlineData || p.inline_data;
-        if (inline?.data) return `data:${inline.mimeType || inline.mime_type || 'image/png'};base64,${inline.data}`;
+        if (inline?.data) return { url: `data:${inline.mimeType || inline.mime_type || 'image/png'};base64,${inline.data}`, reason: 'ok' };
       }
-    } catch { clearTimeout(to); /* tenta o próximo modelo */ }
+      reason = 'Gemini: resposta sem imagem';
+    } catch (e: any) { clearTimeout(to); reason = `Gemini: ${e?.message || 'falha de rede'}`; }
   }
-  return null;
+  return { url: null, reason };
 }
 
 export async function POST(req: Request) {
@@ -73,12 +82,14 @@ export async function POST(req: Request) {
 
   const desc = cleanDesc(raw);
   const geminiKey = req.headers.get('x-gemini-key')?.trim() || process.env.GEMINI_API_KEY;
+  let reason = 'sem chave Gemini configurada';
 
   // 1) Gemini (chave do usuário) — caminho confiável
   if (geminiKey) {
     const gPrompt = `Generate a realistic, candid smartphone photo (no text, no watermark, photorealistic) showing: ${desc}`;
-    const dataUrl = await geminiImage(gPrompt, geminiKey).catch(() => null);
-    if (dataUrl) return NextResponse.json({ dataUrl, source: 'gemini' });
+    const g = await geminiImage(gPrompt, geminiKey).catch((e) => ({ url: null, reason: String(e?.message || e) }));
+    if (g.url) return NextResponse.json({ dataUrl: g.url, source: 'gemini' });
+    reason = g.reason;
   }
 
   // 2) Pollinations grátis (sem chave) — tenta algumas vezes (fila costuma liberar)
@@ -90,6 +101,7 @@ export async function POST(req: Request) {
     if (dataUrl) return NextResponse.json({ dataUrl, source: 'pollinations' });
     if (attempt < 2) await sleep(1500 * (attempt + 1)); // 1.5s, 3s
   }
-  // sem imagem relevante → o cliente mantém o card neutro (melhor que foto aleatória)
-  return NextResponse.json({ error: 'a geração de imagem está ocupada, tente de novo em instantes' }, { status: 502 });
+  // sem imagem relevante → 200 com dataUrl nulo + MOTIVO (o cliente avisa o usuário
+  // com a causa real e mantém o card neutro, em vez de uma foto aleatória).
+  return NextResponse.json({ dataUrl: null, reason: `${reason}; Pollinations: ocupado/sem cota` });
 }
