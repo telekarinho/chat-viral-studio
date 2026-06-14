@@ -5,6 +5,8 @@ import { exportVideo, downloadBlob } from '@/lib/exporter';
 import { exportMp4 } from '@/lib/ffmpegExporter';
 import { exportMp4WebCodecs, webCodecsSupported } from '@/lib/webcodecsExporter';
 import { narratorWav } from '@/lib/audio';
+import { synthNarration, synthStory } from '@/lib/audio';
+import { api } from '@/lib/api';
 import { buildScript, buildSRT, buildThumbnail, downloadText, downloadDataUrl } from '@/lib/outputs';
 
 export function ExportPanel() {
@@ -18,22 +20,63 @@ export function ExportPanel() {
   const narratorOn = settings.withNarrator === true;
   const narratorMissing = narratorOn && narratorBuffers.length === 0;
 
-  // Export MP4 robusto (ffmpeg.wasm — sem MediaRecorder, não trava em vídeo longo/aba)
+  // Prepara TUDO sozinho antes de exportar: gera as fotos faltantes e a narração.
+  // Resiliente — se algo falhar, segue (foto vira placeholder, vídeo sai mudo).
+  async function prepareAssets() {
+    const get = useStudio.getState;
+    // 1) fotos faltantes das mensagens de imagem
+    const imgMsgs = (get().story?.messages || []).filter((m) => m.type === 'image' && !m.imageUrl);
+    for (let i = 0; i < imgMsgs.length; i++) {
+      setStage(`Gerando as fotos… ${i + 1}/${imgMsgs.length}`); setProgress(0);
+      try {
+        const r = await api.genImage(imgMsgs[i].text || 'foto chocante de conversa de whatsapp');
+        if (r?.dataUrl) get().updateMessage(imgMsgs[i].id, { imageUrl: r.dataUrl });
+      } catch { /* segue com o placeholder cinza */ }
+    }
+    // 2) áudio — só gera se ainda não existe
+    const voice = get().voice;
+    if (settings.withNarrator && get().narratorBuffers.length === 0) {
+      setStage('Escrevendo o roteiro da narração…'); setProgress(0);
+      try {
+        let script = get().story?.narration || '';
+        try { const r = await api.narration(get().story!); if (r.narration?.trim()) { script = r.narration.trim(); get().patchStory({ narration: script }); } } catch { /* usa o roteiro atual */ }
+        if (script.trim()) {
+          const { buffers } = await synthNarration(script, voice, (d, t) => setStage(`Gerando a narração… ${d}/${t}`));
+          if (buffers.length) get().setNarratorBuffers(buffers);
+        }
+      } catch { /* vídeo sai mudo */ }
+    } else if (!settings.withNarrator && get().audioBuffers.size === 0) {
+      try {
+        const { messages, buffers } = await synthStory(get().story!, voice, (d, t) => setStage(`Gerando as vozes… ${d}/${t}`));
+        get().setAudioBuffers(buffers, messages);
+      } catch { /* vídeo sai mudo */ }
+    }
+  }
+
+  // Export MP4 robusto (WebCodecs por hardware; ffmpeg.wasm de reserva). Tudo
+  // automático: ao clicar, prepara fotos + narração e baixa o MP4 no fim.
   async function doExportMp4() {
     setBusy('mp4'); setProgress(0); setStage('Iniciando…');
     try {
+      await prepareAssets();
+      // lê o estado já preparado (fotos + buffers recém-gerados)
+      const cur = useStudio.getState();
+      const liveStory = cur.story!;
+      const liveAudio = cur.audioBuffers;
+      const liveNarrator = cur.narratorBuffers;
+      setStage('Iniciando o vídeo…'); setProgress(0);
       const fast = await webCodecsSupported(settings.format);
       const run = fast ? exportMp4WebCodecs : exportMp4;
       let mp4: Blob;
       try {
-        mp4 = await run(story!, settings, audioBuffers, { narratorBuffers, onProgress: setProgress, onStage: setStage });
+        mp4 = await run(liveStory, settings, liveAudio, { narratorBuffers: liveNarrator, onProgress: setProgress, onStage: setStage });
       } catch (err) {
         // se o caminho rápido falhar no meio, tenta o ffmpeg.wasm como rede de segurança
         if (!fast) throw err;
         setStage('Caminho rápido indisponível — usando o motor de reserva…'); setProgress(0);
-        mp4 = await exportMp4(story!, settings, audioBuffers, { narratorBuffers, onProgress: setProgress, onStage: setStage });
+        mp4 = await exportMp4(liveStory, settings, liveAudio, { narratorBuffers: liveNarrator, onProgress: setProgress, onStage: setStage });
       }
-      downloadBlob(mp4, `${slug(story!.title)}.mp4`);
+      downloadBlob(mp4, `${slug(liveStory.title)}.mp4`);
       await useStudio.getState().save().catch(() => {});
     } catch (e: any) {
       alert('Falha ao exportar MP4: ' + (e?.message || e));
@@ -163,7 +206,7 @@ export function ExportPanel() {
           </p>
         )}
         <button className="btn-primary w-full text-lg" onClick={doExportMp4} disabled={!!busy}>
-          {busy === 'mp4' ? `🎬 ${stage || 'Renderizando'} ${Math.round(progress * 100)}%…` : '⬇️ Exportar MP4 (recomendado)'}
+          {busy === 'mp4' ? `🎬 ${stage || 'Renderizando'} ${Math.round(progress * 100)}%…` : '⬇️ Gerar tudo e baixar o MP4'}
         </button>
         {busy === 'mp4' && stage && <p className="text-center text-xs text-white/50">{stage}</p>}
 
@@ -184,7 +227,7 @@ export function ExportPanel() {
           </div>
         )}
         <p className="text-center text-xs text-white/40">
-          🚀 O MP4 é gerado no seu aparelho usando o encoder de vídeo do navegador (rápido). Sai um <b>.mp4</b> real (H.264 + AAC) que abre em qualquer player e funciona em TikTok/Reels/CapCut. O <b>WebM</b> abaixo é só o modo antigo de reserva.
+          🚀 Um clique faz tudo: gera as <b>fotos</b> que faltam, cria a <b>narração</b> e exporta. Sai um <b>.mp4</b> real (H.264 + AAC, codificado por hardware no seu aparelho) que abre em qualquer player e funciona em TikTok/Reels/CapCut. O <b>WebM</b> abaixo é só o modo antigo de reserva.
         </p>
       </div>
 
