@@ -50,13 +50,13 @@ export function ExportPanel() {
         let script = get().story?.narration || '';
         try { const r = await api.narration(get().story!); if (r.narration?.trim()) { script = r.narration.trim(); get().patchStory({ narration: script }); } } catch { /* usa o roteiro atual */ }
         if (script.trim()) {
-          const { buffers } = await synthNarration(script, voice, (d, t) => setStage(`Gerando a narração… ${d}/${t}`));
+          const { buffers } = await synthNarration(script, voice, (d, t) => setStage(`Gerando a narração… ${d}/${t}`), settings.voiceSpeed ?? 1);
           if (buffers.length) get().setNarratorBuffers(buffers);
         }
       } catch { /* vídeo sai mudo */ }
     } else if (!settings.withNarrator && get().audioBuffers.size === 0) {
       try {
-        const { messages, buffers } = await synthStory(get().story!, voice, (d, t) => setStage(`Gerando as vozes… ${d}/${t}`));
+        const { messages, buffers } = await synthStory(get().story!, voice, (d, t) => setStage(`Gerando as vozes… ${d}/${t}`), settings.voiceSpeed ?? 1);
         get().setAudioBuffers(buffers, messages);
       } catch { /* vídeo sai mudo */ }
     }

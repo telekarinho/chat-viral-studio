@@ -60,7 +60,7 @@ export function VoicePanel() {
   async function preview() {
     setPreviewing(true);
     try {
-      const r = await api.tts('Oi! Essa é a minha voz pra narrar a sua história — com emoção de verdade.', voice, 'alegria');
+      const r = await api.tts('Oi! Essa é a minha voz pra narrar a sua história — com emoção de verdade.', voice, 'alegria', settings.voiceSpeed ?? 1);
       const audio = new Audio(`data:${r.mime};base64,${r.audioContent}`);
       await audio.play().catch(() => {});
     } catch (e: any) {
@@ -99,7 +99,7 @@ export function VoicePanel() {
         } catch { /* usa o roteiro existente */ }
         if (!script.trim()) throw new Error('sem roteiro de narração');
         // 2) sintetiza a voz do locutor
-        const { buffers } = await synthNarration(script, voice, (done, total) => setGen({ done, total }));
+        const { buffers } = await synthNarration(script, voice, (done, total) => setGen({ done, total }), settings.voiceSpeed ?? 1);
         if (!buffers.length) throw new Error('nenhum áudio gerado');
         setNarratorBuffers(buffers);
       } catch (e: any) {
@@ -109,7 +109,7 @@ export function VoicePanel() {
     }
     setGen({ done: 0, total: story.messages.length });
     try {
-      const { messages, buffers } = await synthStory(story, voice, (done, total) => setGen({ done, total }));
+      const { messages, buffers } = await synthStory(story, voice, (done, total) => setGen({ done, total }), settings.voiceSpeed ?? 1);
       setAudioBuffers(buffers, messages);
     } catch (e: any) {
       alert('Falha na narração: ' + e.message);
@@ -144,6 +144,20 @@ export function VoicePanel() {
             🎙️ {v.label}
           </button>
         ))}
+      </div>
+
+      <div>
+        <label className="flex items-center justify-between text-sm text-white/70">
+          <span>🏃 Velocidade da leitura</span>
+          <span className="text-white/50">{(settings.voiceSpeed ?? 1).toFixed(2)}×</span>
+        </label>
+        <input type="range" min={0.7} max={1.5} step={0.05} value={settings.voiceSpeed ?? 1}
+          onChange={(e) => setSettings({ voiceSpeed: +e.target.value })}
+          className="w-full accent-[#7C3AED]" />
+        <div className="flex justify-between text-[11px] text-white/35">
+          <span>devagar</span><span>natural</span><span>rápido</span>
+        </div>
+        <p className="text-[11px] text-white/40">Ajuste e gere de novo pra ouvir. Vale pro diálogo e pra locução.</p>
       </div>
 
       <button className="btn-ghost w-full" onClick={preview} disabled={previewing}>

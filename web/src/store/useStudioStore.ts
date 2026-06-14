@@ -34,6 +34,7 @@ const DEFAULT_SETTINGS: ExportSettings = {
   musicVolume: 0.22,
   narrationVolume: 1,
   messageSpeed: 1,
+  voiceSpeed: 1,
   withNarrator: true,
   effect: 'none',
   dramaticZoom: false,

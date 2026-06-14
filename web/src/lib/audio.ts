@@ -37,13 +37,14 @@ export async function synthMessage(
   audioCtx: AudioContext,
   msg: Message,
   voice: string,
+  speed = 1,
 ): Promise<{ buffer: AudioBuffer; dataUrl: string; duration: number } | null> {
   const text = msg.text?.trim();
   // só mensagens de TEXTO são faladas. Foto (legenda = direção de cena),
   // figurinha (emoji), áudio fake, apagada e chamada perdida NÃO são lidas.
   if (!text || msg.type !== 'text') return null;
 
-  const { audioContent, mime } = await api.tts(text, voice, msg.emotion);
+  const { audioContent, mime } = await api.tts(text, voice, msg.emotion, speed);
   if (!audioContent) return null;
   const dataUrl = `data:${mime};base64,${audioContent}`;
   const bytes = base64ToBytes(audioContent);
@@ -57,6 +58,7 @@ export async function synthStory(
   story: Story,
   voice: string,
   onProgress?: (done: number, total: number) => void,
+  speed = 1,
 ): Promise<{ messages: Message[]; buffers: Map<string, AudioBuffer> }> {
   const audioCtx = new (window.AudioContext || (window as any).webkitAudioContext)();
   const buffers = new Map<string, AudioBuffer>();
@@ -67,7 +69,7 @@ export async function synthStory(
   let done = 0;
   for (const m of messages) {
     try {
-      const r = await synthMessage(audioCtx, m, voiceMap[m.sender] || voice);
+      const r = await synthMessage(audioCtx, m, voiceMap[m.sender] || voice, speed);
       if (r) {
         m.audioUrl = r.dataUrl;
         m.audioDuration = r.duration;
@@ -107,6 +109,7 @@ export async function synthNarration(
   narration: string,
   voice: string,
   onProgress?: (done: number, total: number) => void,
+  speed = 1,
 ): Promise<{ buffers: AudioBuffer[]; duration: number }> {
   const text = (narration || '').trim();
   if (!text) return { buffers: [], duration: 0 };
@@ -117,7 +120,7 @@ export async function synthNarration(
   let done = 0;
   for (const part of parts) {
     try {
-      const { audioContent } = await api.tts(part, voice, 'neutro');
+      const { audioContent } = await api.tts(part, voice, 'neutro', speed);
       if (audioContent) {
         const ab = base64ToBytes(audioContent).buffer.slice(0) as ArrayBuffer;
         const buf = await audioCtx.decodeAudioData(ab);

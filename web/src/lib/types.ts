@@ -63,6 +63,7 @@ export interface ExportSettings {
   musicVolume: number;       // 0..1
   narrationVolume: number;   // 0..1
   messageSpeed: number;      // multiplier
+  voiceSpeed?: number;       // velocidade da leitura do TTS (1 = natural)
   watermarkText?: string;    // custom watermark label (defaults to "Chat Viral Studio")
   withNarrator?: boolean;    // locutor único narra a história toda (vozes por msg off)
   effect?: 'none' | 'hearts' | 'fire' | 'confetti' | 'sparkles';  // floating emoji overlay
