@@ -2,6 +2,7 @@
 import { useState } from 'react';
 import { useStudio } from '@/store/useStudioStore';
 import { exportVideo, downloadBlob } from '@/lib/exporter';
+import { narratorWav } from '@/lib/audio';
 import { buildScript, buildSRT, buildThumbnail, downloadText, downloadDataUrl } from '@/lib/outputs';
 
 export function ExportPanel() {
@@ -135,8 +136,16 @@ export function ExportPanel() {
           </p>
         )}
         <button className="btn-primary w-full text-lg" onClick={doExport} disabled={!!busy}>
-          {busy === 'video' ? `🎬 Renderizando ${Math.round(progress * 100)}%…` : '⬇️ Exportar MP4'}
+          {busy === 'video' ? `🎬 Renderizando ${Math.round(progress * 100)}%…` : '⬇️ Exportar vídeo'}
         </button>
+        {narratorBuffers.length > 0 && (
+          <button className="btn-ghost w-full" onClick={() => {
+            const wav = narratorWav(narratorBuffers);
+            if (wav) downloadBlob(wav, `${slug(story!.title)}-narracao.wav`);
+          }}>
+            🔊 Baixar só o áudio da narração (.wav) — plano B garantido
+          </button>
+        )}
         {busy === 'video' && (
           <div className="h-2 overflow-hidden rounded-full bg-white/10">
             <div className="h-full bg-brand transition-all" style={{ width: `${progress * 100}%` }} />
