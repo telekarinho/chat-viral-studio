@@ -7,7 +7,7 @@ import { exportMp4WebCodecs, webCodecsSupported } from '@/lib/webcodecsExporter'
 import { narratorWav } from '@/lib/audio';
 import { synthNarration, synthStory } from '@/lib/audio';
 import { api } from '@/lib/api';
-import { buildScript, buildSRT, buildThumbnail, downloadText, downloadDataUrl } from '@/lib/outputs';
+import { buildScript, buildSRT, buildThumbnail, buildDescription, downloadText } from '@/lib/outputs';
 
 export function ExportPanel() {
   const { story, settings, setSettings, audioBuffers, narratorBuffers, save } = useStudio();
@@ -16,7 +16,19 @@ export function ExportPanel() {
   const [stage, setStage] = useState<string | null>(null);
   const [result, setResult] = useState<{ webm: Blob; mp4Url?: string } | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
+  const [copied, setCopied] = useState<string | null>(null);
+  const [thumb, setThumb] = useState<string | null>(null);
   if (!story) return null;
+
+  function copy(key: string, text: string) {
+    navigator.clipboard?.writeText(text)
+      .then(() => { setCopied(key); setTimeout(() => setCopied(null), 1600); })
+      .catch(() => downloadText(text, 'copia.txt'));
+  }
+  function makeThumb() {
+    try { setThumb(buildThumbnail(useStudio.getState().story!, useStudio.getState().settings)); }
+    catch (e: any) { alert('Falha ao gerar thumbnail: ' + (e?.message || e)); }
+  }
 
   const narratorOn = settings.withNarrator === true;
   const narratorMissing = narratorOn && narratorBuffers.length === 0;
@@ -278,12 +290,55 @@ export function ExportPanel() {
         </div>
       )}
 
-      <div className="card grid grid-cols-2 gap-2 sm:grid-cols-3">
-        <button className="btn-ghost" onClick={() => downloadText(buildScript(story), `${slug(story.title)}-roteiro.txt`)}>📄 Roteiro</button>
-        <button className="btn-ghost" onClick={() => downloadText(buildSRT(story, settings), `${slug(story.title)}.srt`)}>💬 Legenda SRT</button>
-        <button className="btn-ghost" onClick={() => downloadDataUrl(buildThumbnail(story, settings), `${slug(story.title)}-thumb.png`)}>🖼️ Thumbnail</button>
-        <button className="btn-ghost" onClick={() => downloadText(story.caption + '\n\n' + story.hashtags.join(' '), `${slug(story.title)}-descricao.txt`)}>✍️ Descrição</button>
-        <button className="btn-ghost" onClick={() => save()}>💾 Salvar projeto</button>
+      {/* Conteúdo pra postar (descrição viral, thumbnail, roteiro, SRT) */}
+      <div className="card space-y-4">
+        <span className="label">📋 Conteúdo pra postar</span>
+
+        {/* Descrição viral: título + legenda + CTA + hashtags */}
+        <div className="space-y-2">
+          <div className="flex items-center justify-between gap-2">
+            <span className="text-sm text-white/70">📝 Descrição viral (título + hashtags)</span>
+            <div className="flex gap-2">
+              <button className="btn-primary !py-1 text-sm" onClick={() => copy('desc', buildDescription(story))}>
+                {copied === 'desc' ? '✓ Copiado!' : '📋 Copiar'}
+              </button>
+              <button className="btn-ghost !py-1 text-sm" title="Baixar .txt"
+                onClick={() => downloadText(buildDescription(story), `${slug(story.title)}-descricao.txt`)}>⬇️</button>
+            </div>
+          </div>
+          <textarea readOnly value={buildDescription(story)}
+            className="input min-h-[120px] w-full text-sm" onFocus={(e) => e.currentTarget.select()} />
+        </div>
+
+        {/* Thumbnail viral no tamanho do vídeo */}
+        <div className="space-y-2">
+          <div className="flex items-center justify-between gap-2">
+            <span className="text-sm text-white/70">🖼️ Thumbnail viral ({settings.format.replace('x', '×')})</span>
+            <button className="btn-ghost !py-1 text-sm" onClick={makeThumb}>
+              {thumb ? '🔁 Regerar' : '🖼️ Gerar thumbnail'}
+            </button>
+          </div>
+          {thumb && (
+            <>
+              <img src={thumb} alt="thumbnail" className="mx-auto max-h-[44vh] rounded-xl border border-white/10" />
+              <a className="btn-primary block w-full text-center" href={thumb} download={`${slug(story.title)}-thumb.png`}>
+                ⬇️ Baixar thumbnail (tamanho do vídeo)
+              </a>
+            </>
+          )}
+        </div>
+
+        {/* Roteiro + Legenda SRT + Salvar (copiar e/ou baixar) */}
+        <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+          <button className="btn-ghost" onClick={() => copy('roteiro', buildScript(story))}>
+            {copied === 'roteiro' ? '✓ Copiado' : '📄 Copiar roteiro'}
+          </button>
+          <button className="btn-ghost" onClick={() => downloadText(buildScript(story), `${slug(story.title)}-roteiro.txt`)}>⬇️ Roteiro .txt</button>
+          <button className="btn-ghost" onClick={() => copy('srt', buildSRT(story, settings))}>
+            {copied === 'srt' ? '✓ Copiado' : '💬 Copiar SRT'}
+          </button>
+          <button className="btn-ghost" onClick={() => save()}>💾 Salvar projeto</button>
+        </div>
       </div>
     </div>
   );
