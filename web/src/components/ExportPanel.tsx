@@ -127,6 +127,24 @@ export function ExportPanel() {
 
   return (
     <div className="space-y-5">
+      {/* CTA principal — tudo automático, sempre visível no topo */}
+      <div className="card space-y-3 border-brand/40 bg-brand/5">
+        <button className="btn-primary w-full text-lg" onClick={doExportMp4} disabled={!!busy}>
+          {busy === 'mp4' ? `🎬 ${stage || 'Renderizando'} ${Math.round(progress * 100)}%…` : '⬇️ Gerar tudo e baixar o MP4'}
+        </button>
+        {busy === 'mp4' && (
+          <>
+            <div className="h-2 overflow-hidden rounded-full bg-white/10">
+              <div className="h-full bg-brand transition-all" style={{ width: `${progress * 100}%` }} />
+            </div>
+            {stage && <p className="text-center text-xs text-white/60">{stage}</p>}
+          </>
+        )}
+        <p className="text-center text-xs text-white/40">
+          Um clique faz tudo: gera as <b>fotos</b> que faltam, cria a <b>narração</b> e baixa o <b>.mp4</b> pronto pra postar.
+        </p>
+      </div>
+
       <div className="card space-y-4">
         <span className="label">Painel de exportação</span>
 
@@ -201,15 +219,10 @@ export function ExportPanel() {
         )}
 
         {narratorMissing && (
-          <p className="rounded-lg bg-amber-500/15 px-3 py-2 text-center text-xs text-amber-200">
-            🎙️ Modo locutor ligado: vá na aba <b>Voz</b> e clique em <b>Gerar locução do narrador</b> antes de exportar (senão o vídeo sai sem narração).
+          <p className="rounded-lg bg-emerald-500/15 px-3 py-2 text-center text-xs text-emerald-200">
+            🎙️ A narração é gerada automaticamente ao exportar. (Quer ouvir antes? Vá na aba <b>Voz</b>.)
           </p>
         )}
-        <button className="btn-primary w-full text-lg" onClick={doExportMp4} disabled={!!busy}>
-          {busy === 'mp4' ? `🎬 ${stage || 'Renderizando'} ${Math.round(progress * 100)}%…` : '⬇️ Gerar tudo e baixar o MP4'}
-        </button>
-        {busy === 'mp4' && stage && <p className="text-center text-xs text-white/50">{stage}</p>}
-
         <button className="btn-ghost w-full" onClick={doExport} disabled={!!busy}>
           {busy === 'video' ? `Renderizando ${Math.round(progress * 100)}%…` : 'Exportar WebM (modo rápido/antigo)'}
         </button>
