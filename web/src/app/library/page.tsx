@@ -69,6 +69,11 @@ export default function LibraryPage() {
       </div>
 
       {error && <p className="rounded-lg bg-amber-500/15 px-3 py-2 text-sm text-amber-200">{error}</p>}
+      {!loading && rows.length > 0 && (
+        <div className="rounded-lg bg-brand/10 px-3 py-2 text-sm text-white/70">
+          📺 <b>Fazer série (Parte 1 → 2 → 3…):</b> em cada vídeo abaixo tem o botão <b>“🎬 Criar continuação”</b>. Ele gera a <b>próxima parte automaticamente</b>, com os mesmos personagens e continuando de onde parou — você só revisa e exporta. Ótimo pra prender o público em sequência.
+        </div>
+      )}
       {loading ? (
         <p className="text-white/50">Carregando…</p>
       ) : rows.length === 0 ? (

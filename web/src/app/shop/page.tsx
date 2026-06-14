@@ -76,6 +76,25 @@ export default function ShopPage() {
         <p className="text-sm text-white/50">Gera conteúdo que VENDE — roteiro pra gravar e/ou vídeo de chat — dentro das regras de Shop/afiliado.</p>
       </div>
 
+      <details className="card" open>
+        <summary className="cursor-pointer select-none font-semibold">❓ Como isso vende um produto? (toque pra ver)</summary>
+        <ol className="mt-3 list-decimal space-y-2 pl-5 text-sm text-white/75">
+          <li><b>Descreve o produto</b> aqui embaixo (nome + pra que serve / a dor que resolve).</li>
+          <li>O app <b>cria o conteúdo viral</b> pra você: um <b>roteiro</b> pra gravar na câmera e/ou um <b>vídeo de chat</b> pronto.</li>
+          <li>Você <b>grava ou exporta</b> o vídeo (o chat vira vídeo no Editor).</li>
+          <li>Posta no TikTok e <b>vincula o produto na cestinha amarela</b> (TikTok Shop):
+            <ul className="mt-1 list-disc pl-5 text-white/55">
+              <li><b>Afiliado:</b> pega o produto no <i>Plano de Afiliados</i> do TikTok Shop e adiciona ao vídeo.</li>
+              <li><b>Vendedor:</b> liga o produto da <i>sua loja</i> ao vídeo.</li>
+            </ul>
+          </li>
+          <li>Quando o vídeo viraliza, o público <b>toca na cestinha e compra</b> — você ganha comissão (afiliado) ou a venda (loja).</li>
+        </ol>
+        <p className="mt-3 rounded-lg bg-amber-500/15 px-3 py-2 text-xs text-amber-200">
+          ⚠️ Este app cria o <b>conteúdo</b> que leva pra sua cestinha. A venda, o pagamento e a entrega acontecem no <b>TikTok Shop / sua loja</b> — o app não processa pagamento nem estoque.
+        </p>
+      </details>
+
       <div className="card space-y-4">
         <Field label="Produto">
           <input className="input w-full" value={product} placeholder="Ex: Mini liquidificador portátil"
@@ -161,6 +180,9 @@ export default function ShopPage() {
           <ScriptRow label="Legenda" text={script.caption} />
           <p className="text-sm text-white/60">{(script.hashtags || []).join(' ')}</p>
           <p className="rounded-lg bg-amber-500/15 px-3 py-2 text-xs text-amber-200">⚠️ {script.disclosure}</p>
+          <p className="rounded-lg bg-brand/10 px-3 py-2 text-xs text-white/60">
+            👉 <b>Próximo passo:</b> grave o vídeo seguindo o roteiro → poste no TikTok → vincule o produto na <b>cestinha</b> (afiliado ou sua loja). O roteiro chama o público pra cestinha; é ela que fecha a venda.
+          </p>
         </div>
       )}
 
@@ -170,6 +192,9 @@ export default function ShopPage() {
           <p className="text-sm text-white/70">{story.title}</p>
           <p className="text-xs text-white/45">{story.messages?.length || 0} mensagens · pronto pra virar vídeo (vozes, narração e export no editor).</p>
           <button className="btn-primary w-full" onClick={openInEditor}>✏️ Abrir vídeo no editor</button>
+          <p className="rounded-lg bg-brand/10 px-3 py-2 text-xs text-white/60">
+            👉 <b>Próximo passo:</b> exporte o vídeo no Editor → poste no TikTok → toque em <b>“Adicionar produto”</b> e vincule a <b>cestinha</b> (afiliado ou sua loja). É o link na cestinha que faz a venda.
+          </p>
         </div>
       )}
 
