@@ -58,7 +58,48 @@ function audioBufferToWav(buf: AudioBuffer): Uint8Array {
   return new Uint8Array(ab);
 }
 
-// renderiza o áudio (narrador OU vozes por msg) offline → AudioBuffer mixado.
+// Trilha de fundo GERADA na hora (síntese) — emocional/tensa, em lá menor.
+// 100% livre de direitos autorais porque é criada pelo próprio código (sem
+// sample de ninguém). Fica baixinha embaixo da narração.
+function addMusicBed(ctx: BaseAudioContext, duration: number, volume: number) {
+  const master = ctx.createGain();
+  master.gain.value = Math.max(0, Math.min(0.5, volume));
+  // filtro suave p/ soar quente e não competir com a voz (corta agudos)
+  const lp = ctx.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = 1400; lp.Q.value = 0.3;
+  lp.connect(master); master.connect(ctx.destination);
+  // progressão Am – F – C – G (i–VI–III–VII), clássica e emotiva
+  const chords = [
+    [220.0, 261.63, 329.63], // Am
+    [174.61, 220.0, 261.63], // F
+    [261.63, 329.63, 392.0], // C
+    [196.0, 246.94, 293.66], // G
+  ];
+  const bassNotes = [110.0, 87.31, 130.81, 98.0]; // A2, F2, C3, G2
+  const chordDur = 4;
+  for (let t = 0, i = 0; t < duration; t += chordDur, i++) {
+    const chord = chords[i % chords.length];
+    const end = Math.min(duration, t + chordDur);
+    // pad (tríade)
+    for (const f of chord) {
+      const o = ctx.createOscillator(); o.type = 'triangle'; o.frequency.value = f;
+      const g = ctx.createGain();
+      g.gain.setValueAtTime(0.0001, t);
+      g.gain.linearRampToValueAtTime(0.16, t + 0.9);          // swell de entrada
+      g.gain.setValueAtTime(0.16, Math.max(t + 0.9, end - 0.9));
+      g.gain.linearRampToValueAtTime(0.0001, end);             // fade de saída
+      o.connect(g).connect(lp); o.start(t); o.stop(end + 0.05);
+    }
+    // baixo suave (senoide)
+    const bo = ctx.createOscillator(); bo.type = 'sine'; bo.frequency.value = bassNotes[i % bassNotes.length];
+    const bg = ctx.createGain();
+    bg.gain.setValueAtTime(0.0001, t);
+    bg.gain.linearRampToValueAtTime(0.22, t + 0.5);
+    bg.gain.linearRampToValueAtTime(0.0001, end);
+    bo.connect(bg).connect(lp); bo.start(t); bo.stop(end + 0.05);
+  }
+}
+
+// renderiza o áudio (narrador OU vozes por msg) + música de fundo offline → AudioBuffer mixado.
 // Compartilhado entre o exportador ffmpeg (→ WAV) e o WebCodecs (→ AAC).
 export async function renderMixedAudio(
   story: Story, settings: ExportSettings, audioBuffers: Map<string, AudioBuffer>,
@@ -66,7 +107,8 @@ export async function renderMixedAudio(
 ): Promise<AudioBuffer | null> {
   const narratorOn = !!(settings.withNarrator && narratorBuffers.length);
   const hasMsgAudio = audioBuffers.size > 0;
-  if (!narratorOn && !hasMsgAudio) return null; // sem áudio → vídeo mudo
+  const musicOn = !!settings.withMusic;
+  if (!narratorOn && !hasMsgAudio && !musicOn) return null; // sem nada → vídeo mudo
   const rate = 44100;
   const oac = new (window.OfflineAudioContext || (window as any).webkitOfflineAudioContext)(
     2, Math.max(1, Math.ceil(durationSec * rate)), rate);
@@ -74,7 +116,7 @@ export async function renderMixedAudio(
   if (narratorOn) {
     const one = joinBuffers(oac, narratorBuffers);
     if (one) { const s = oac.createBufferSource(); s.buffer = one; const g = oac.createGain(); g.gain.value = gainVal; s.connect(g).connect(oac.destination); s.start(0.25); }
-  } else {
+  } else if (hasMsgAudio) {
     const tl = buildTimeline(story, settings);
     for (const it of tl.items) {
       const b = audioBuffers.get(it.msg.id); if (!b) continue;
@@ -82,6 +124,7 @@ export async function renderMixedAudio(
       s.connect(g).connect(oac.destination); s.start(Math.min(durationSec - 0.01, it.speakStart));
     }
   }
+  if (musicOn) addMusicBed(oac, durationSec, settings.musicVolume ?? 0.15);
   return oac.startRendering();
 }
 

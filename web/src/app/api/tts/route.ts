@@ -23,6 +23,16 @@ const EMOTION: Record<string, { pitch: number; rate: number }> = {
 };
 const clamp = (n: number, lo: number, hi: number) => Math.max(lo, Math.min(hi, n));
 
+// Remove emojis/símbolos/pictogramas pra a voz NÃO ler "carinha sorridente".
+// (As emoções continuam sendo inferidas do texto ORIGINAL, com os emojis.)
+function stripForSpeech(t: string): string {
+  return (t || '')
+    .replace(/\p{Extended_Pictographic}/gu, '')
+    .replace(/[\u{1F1E6}-\u{1F1FF}\u{FE00}-\u{FE0F}\u{200D}\u{2640}\u{2642}\u{2300}-\u{27BF}\u{2B00}-\u{2BFF}]/gu, '')
+    .replace(/\s{2,}/g, ' ')
+    .trim();
+}
+
 // Quando a mensagem vem como "neutro", inferimos a emoção pelo texto para a
 // narração nunca soar plana (CAPS, pontuação, gírias e emojis).
 function inferEmotion(text: string): string {
@@ -104,6 +114,10 @@ export async function POST(req: Request) {
   const { text = '', voice = 'narradora_fem', emotion = 'neutro', speed = 1, pitch = 0 } = await req.json().catch(() => ({}));
   if (!text.trim()) return NextResponse.json({ error: 'texto vazio' }, { status: 400 });
 
+  // texto realmente falado (sem emojis); emoção inferida do texto original
+  const spoken = stripForSpeech(text);
+  if (!spoken) return NextResponse.json({ audioContent: BEEP, mime: 'audio/mp3', mock: true });
+
   // user's own key (sent from the Settings page) wins, else server env
   const key = req.headers.get('x-google-tts-key')?.trim() || process.env.GOOGLE_TTS_API_KEY;
   const preset = VOICES[voice] || VOICES.narradora_fem;
@@ -119,7 +133,7 @@ export async function POST(req: Request) {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          input: { text },
+          input: { text: spoken },
           voice: { languageCode: 'pt-BR', name: preset.name },
           audioConfig: { audioEncoding: 'MP3', pitch: finalPitch, speakingRate: finalRate },
         }),
@@ -131,7 +145,7 @@ export async function POST(req: Request) {
   }
 
   // 2) TTS GRÁTIS sem chave (Google Translate) — voz real, sem custo
-  const free = await freeTts(text).catch(() => null);
+  const free = await freeTts(spoken).catch(() => null);
   if (free) return NextResponse.json({ audioContent: free, mime: 'audio/mpeg', source: 'gtrans' });
 
   // 3) último recurso: placeholder quase mudo (mantém a sincronia)
