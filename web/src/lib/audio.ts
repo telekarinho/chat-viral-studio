@@ -97,3 +97,43 @@ export async function synthNarration(
   await audioCtx.close().catch(() => {});
   return { buffers, duration };
 }
+
+// Concatena AudioBuffers num só (mono/estéreo conforme o 1º).
+function joinBuffers(ctx: BaseAudioContext, buffers: AudioBuffer[]): AudioBuffer | null {
+  if (!buffers.length) return null;
+  const channels = buffers[0].numberOfChannels;
+  const rate = buffers[0].sampleRate;
+  const total = buffers.reduce((a, b) => a + b.length, 0);
+  const out = ctx.createBuffer(channels, total, rate);
+  for (let c = 0; c < channels; c++) {
+    const data = out.getChannelData(c);
+    let offset = 0;
+    for (const b of buffers) { data.set(b.getChannelData(Math.min(c, b.numberOfChannels - 1)), offset); offset += b.length; }
+  }
+  return out;
+}
+
+// Codifica um AudioBuffer em WAV (PCM 16-bit) — download garantido, sem gravador.
+export function narratorWav(buffers: AudioBuffer[]): Blob | null {
+  const ctx = new (window.OfflineAudioContext || (window as any).webkitOfflineAudioContext)(1, 1, 44100);
+  const buf = joinBuffers(ctx, buffers);
+  if (!buf) return null;
+  const numCh = buf.numberOfChannels, len = buf.length, rate = buf.sampleRate;
+  const bytes = 44 + len * numCh * 2;
+  const ab = new ArrayBuffer(bytes);
+  const view = new DataView(ab);
+  const wr = (off: number, s: string) => { for (let i = 0; i < s.length; i++) view.setUint8(off + i, s.charCodeAt(i)); };
+  wr(0, 'RIFF'); view.setUint32(4, bytes - 8, true); wr(8, 'WAVE'); wr(12, 'fmt ');
+  view.setUint32(16, 16, true); view.setUint16(20, 1, true); view.setUint16(22, numCh, true);
+  view.setUint32(24, rate, true); view.setUint32(28, rate * numCh * 2, true);
+  view.setUint16(32, numCh * 2, true); view.setUint16(34, 16, true); wr(36, 'data');
+  view.setUint32(40, len * numCh * 2, true);
+  let off = 44;
+  for (let i = 0; i < len; i++) {
+    for (let c = 0; c < numCh; c++) {
+      const s = Math.max(-1, Math.min(1, buf.getChannelData(c)[i]));
+      view.setInt16(off, s < 0 ? s * 0x8000 : s * 0x7fff, true); off += 2;
+    }
+  }
+  return new Blob([ab], { type: 'audio/wav' });
+}
