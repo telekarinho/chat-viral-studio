@@ -38,6 +38,7 @@ const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 // Geração de imagem pela API do Gemini (chave do usuário) — MUITO mais confiável
 // que o Pollinations. Tenta os modelos de imagem disponíveis e devolve o data URL.
 const GEMINI_IMG_MODELS = [
+  'gemini-2.5-flash-image',
   'gemini-2.5-flash-image-preview',
   'gemini-2.0-flash-preview-image-generation',
   'gemini-2.0-flash-exp-image-generation',

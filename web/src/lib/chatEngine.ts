@@ -193,10 +193,12 @@ export function drawFrame(ctx: CanvasRenderingContext2D, t: number, d: DrawCtx) 
   // webcam reaction overlay (drawn over everything, fixed corner)
   if (d.cameraVideo) drawCameraOverlay(ctx, d.cameraVideo, W, H, s, settings.cameraCorner || 'br');
 
-  // captions (TikTok style) — current spoken line
+  // captions (TikTok style) — só a fala de mensagens de TEXTO. Foto/áudio/
+  // figurinha/apagada NÃO viram legenda (a legenda da foto é direção de cena,
+  // não fala — não pode aparecer como se fosse narração).
   if (settings.withCaptions) {
     const cur = timeline.items.find((it) => t >= it.speakStart && t < it.speakEnd);
-    if (cur) drawCaption(ctx, displayText(cur.msg), W, bottom + 60 * s, s);
+    if (cur && cur.msg.type === 'text' && cur.msg.text?.trim()) drawCaption(ctx, cur.msg.text, W, bottom + 60 * s, s);
   }
 
   // fiction seal + watermark

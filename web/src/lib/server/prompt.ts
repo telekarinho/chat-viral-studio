@@ -77,17 +77,29 @@ ${SCHEMA_HINT}`;
 // a narração combine com a conversa, mesmo depois de editar).
 export function buildNarrationPrompt(story: any = {}) {
   const chars = (story.characters || []).reduce((m: any, c: any) => { m[c.id] = c.name; return m; }, {});
-  const convo = (story.messages || [])
-    .filter((m: any) => m.type !== 'system')
-    .map((m: any) => `${chars[m.sender] || m.sender}: ${m.type === 'image' ? '[foto] ' : ''}${m.text}`)
-    .join('\n');
+  // serializa cada tipo entre colchetes; a legenda da foto é DIREÇÃO de cena
+  // (não é fala) — entra como anotação pro narrador mencionar, nunca ler literal.
+  const line = (m: any) => {
+    const who = chars[m.sender] || m.sender;
+    switch (m.type) {
+      case 'image': return `${who}: [enviou uma foto mostrando: ${m.text}]`;
+      case 'audio': return `${who}: [enviou um áudio]`;
+      case 'sticker': return `${who}: [enviou uma figurinha]`;
+      case 'deleted': return `${who}: [apagou uma mensagem]`;
+      case 'call_missed': return `${who}: [chamada perdida]`;
+      default: return `${who}: ${m.text}`;
+    }
+  };
+  const convo = (story.messages || []).filter((m: any) => m.type !== 'system').map(line).join('\n');
   return `Você é um NARRADOR de fofocas de WhatsApp (TikTok/Reels), tipo um amigo contando uma treta no bar. Escreva a LOCUÇÃO FALADA (texto corrido, SEM tags, sem aspas) que conta ESTA conversa abaixo, reagindo a ela.
 ESTRUTURA OBRIGATÓRIA:
 1) ABRE com "Rapaz, pensa num(a) [adjetivo+pessoa]. Veja só essa história!" (ou "Mano,...").
 2) CONTA a conversa na ordem, relatando com as próprias palavras o que cada um mandou + reagindo.
 3) NO MEIO, interrompe pelo menos 1x indignado/sarcástico: "Mano, olha a audácia…", "Rapaz, eu não tô acreditando…", "Tu já pensou um negócio desse?".
 4) FECHA SEMPRE com: "E aí pessoal, deixa a tua opinião nos comentários. Quem tá certo? O que tu faria numa situação dessa? Deixa aí que eu quero saber!".
-Gírias: mano, rapaz, tu já pensou, cara. Responda APENAS JSON: {"narration":"...texto da locução..."}.
+Gírias: mano, rapaz, tu já pensou, cara.
+REGRA CRÍTICA: o que está entre colchetes [ ] é DIREÇÃO DE CENA, NÃO é fala — NUNCA leia/transcreva literalmente. Ex.: "[enviou uma foto mostrando: foto de um desodorante]" → diga naturalmente algo como "aí ela mandou a foto do desodorante", JAMAIS "foto de um desodorante masculino específico da marca". Não fale "abre colchete", "enviou uma foto mostrando", nem repita a legenda crua.
+Responda APENAS JSON: {"narration":"...texto da locução..."}.
 CONVERSA:
 ${convo.slice(0, 4000)}`;
 }
