@@ -64,7 +64,7 @@ export async function exportVideo(
   const audioTracks = audioCtx.state === 'running' ? dest.stream.getAudioTracks() : [];
   const mixed = new MediaStream([...videoStream.getVideoTracks(), ...audioTracks]);
 
-  const mime = pickMime();
+  const mime = pickMime(audioTracks.length > 0);
   const recorder = new MediaRecorder(mixed, { mimeType: mime, videoBitsPerSecond: 8_000_000 });
   const chunks: BlobPart[] = [];
   recorder.ondataavailable = (e) => e.data.size && chunks.push(e.data);
@@ -75,16 +75,15 @@ export async function exportVideo(
 
   // ── áudio: agenda agora, junto do início da gravação (mantém sincronia) ──
   if (narratorOn) {
-    // locutor narra tudo: toca os blocos da narração em sequência, do início
-    let at = audioCtx.currentTime + 0.25;
-    for (const buf of opts.narratorBuffers!) {
+    // locutor narra tudo: 1 único bloco concatenado, tocado do início
+    const one = concatBuffers(audioCtx, opts.narratorBuffers!);
+    if (one) {
       const src = audioCtx.createBufferSource();
-      src.buffer = buf;
+      src.buffer = one;
       const gain = audioCtx.createGain();
       gain.gain.value = settings.narrationVolume ?? 1;
       src.connect(gain).connect(dest);
-      src.start(at);
-      at += buf.duration;
+      src.start(audioCtx.currentTime + 0.25);
     }
   } else {
     // vozes por mensagem, agendadas no speakStart de cada bolha
@@ -137,10 +136,32 @@ export async function exportVideo(
   return { webm, mp4Url, durationMs };
 }
 
-function pickMime(): string {
-  const prefs = ['video/webm;codecs=vp9,opus', 'video/webm;codecs=vp8,opus', 'video/webm'];
+function pickMime(hasAudio: boolean): string {
+  const prefs = hasAudio
+    ? ['video/webm;codecs=vp9,opus', 'video/webm;codecs=vp8,opus', 'video/webm']
+    : ['video/webm;codecs=vp9', 'video/webm;codecs=vp8', 'video/webm'];
   for (const m of prefs) if (typeof MediaRecorder !== 'undefined' && MediaRecorder.isTypeSupported(m)) return m;
   return 'video/webm';
+}
+
+// junta os blocos da narração num único AudioBuffer (1 source só — menos chance de
+// glitch/stall no gravador do que dezenas de sources agendados).
+function concatBuffers(ctx: AudioContext, buffers: AudioBuffer[]): AudioBuffer | null {
+  if (!buffers.length) return null;
+  const channels = Math.max(1, ...buffers.map((b) => b.numberOfChannels));
+  const rate = buffers[0].sampleRate;
+  const total = buffers.reduce((a, b) => a + b.length, 0);
+  const out = ctx.createBuffer(channels, total, rate);
+  for (let c = 0; c < channels; c++) {
+    const data = out.getChannelData(c);
+    let offset = 0;
+    for (const b of buffers) {
+      const src = b.getChannelData(Math.min(c, b.numberOfChannels - 1));
+      data.set(src, offset);
+      offset += b.length;
+    }
+  }
+  return out;
 }
 
 // Soft ambient pad so "música de fundo" works without shipping audio assets.
