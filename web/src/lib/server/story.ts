@@ -2,13 +2,43 @@
 function uid() { return Math.random().toString(36).slice(2, 10); }
 function clamp(n: number, lo: number, hi: number) { return Math.max(lo, Math.min(hi, n)); }
 
+// Bug comum: a IA às vezes deixa placeholder tipo "[Nome do seu marido]" no texto.
+// Isso NÃO pode chegar no vídeo. makeFiller troca esses placeholders por um nome
+// fictício real (coerente por gênero e consistente quando o mesmo placeholder repete);
+// outros colchetes têm os [] removidos. Use 1 filler por história.
+const MALE_NAMES = ['Bruno', 'Léo', 'Diego', 'Tiago', 'Caio', 'Murilo', 'Rafa', 'Felipe', 'Igor', 'Vitor'];
+const FEM_NAMES = ['Bia', 'Duda', 'Lara', 'Nina', 'Carol', 'Manu', 'Babi', 'Sofia', 'Helena', 'Aline'];
+function makeFiller() {
+  const cache: Record<string, string> = {};
+  const usedM = new Set<string>(), usedF = new Set<string>();
+  const pick = (inner: string) => {
+    const fem = /(esposa|mulher|namorada|m[ãa]e|filha|irm[ãa]|prima|tia|sogra|cunhada|vizinha|menina|garota|\bela\b)/i.test(inner);
+    const pool = fem ? FEM_NAMES : MALE_NAMES;
+    const used = fem ? usedF : usedM;
+    const arr = pool.filter((n) => !used.has(n));
+    const name = (arr.length ? arr : pool)[Math.floor(Math.random() * (arr.length || pool.length))];
+    used.add(name);
+    return name;
+  };
+  return (text: string): string => (text || '').replace(/\[([^\]]{1,40})\]/g, (_m, inner: string) => {
+    const key = inner.trim().toLowerCase();
+    const looksName = /nome|marido|esposa|mulher|namorad|m[ãa]e|\bpai\b|filh|irm[ãa]|prim[oa]|ti[oa]|sogr|cunhad|vizinh|chefe|patr[ãa]o|amig|menin|garot|fulan|sicran|contato/i.test(key);
+    if (looksName) {
+      if (!cache[key]) cache[key] = pick(inner);
+      return cache[key];
+    }
+    return inner.trim(); // não parece nome → só tira os colchetes
+  });
+}
+
 export function normalizeStory(raw: any = {}, params: any = {}): any {
+  const fill = makeFiller();   // remove placeholders [ ... ] de todos os textos
   const characters = (raw.characters?.length ? raw.characters : [
     { id: 'c1', name: 'Contato', side: 'left', online: true },
     { id: 'c2', name: 'Você', side: 'right', online: true },
   ]).map((c: any, i: number) => ({
     id: c.id || `c${i + 1}`,
-    name: c.name || (i === 0 ? 'Contato' : 'Você'),
+    name: fill(c.name || (i === 0 ? 'Contato' : 'Você')),
     side: c.side || (i === 0 ? 'left' : 'right'),
     online: c.online ?? true,
     avatarColor: c.avatarColor || ['#25D366', '#34B7F1', '#FF7A59', '#A78BFA'][i % 4],
@@ -26,7 +56,7 @@ export function normalizeStory(raw: any = {}, params: any = {}): any {
     const sender = ids.has(m.sender) ? m.sender : characters[i % characters.length].id;
     return {
       id: m.id || `m${i + 1}`,
-      sender, type: m.type || 'text', text: m.text || '',
+      sender, type: m.type || 'text', text: fill(m.text || ''),
       emotion: m.emotion || 'neutro',
       delay: clamp(Number(m.delay) || 1.2, 0.4, 4),
       time: m.time || `${hh}:${mm}`,
@@ -37,15 +67,15 @@ export function normalizeStory(raw: any = {}, params: any = {}): any {
 
   return {
     id: raw.id || uid(),
-    title: raw.title || 'História sem título',
-    hook: raw.hook || '',
+    title: fill(raw.title || 'História sem título'),
+    hook: fill(raw.hook || ''),
     category: params.category || raw.category || 'comédia',
     theme: raw.theme || 'verde',
     characters, messages,
-    narration: raw.narration || '',
+    narration: fill(raw.narration || ''),
     hashtags: raw.hashtags?.length ? raw.hashtags : ['#viral', '#historia', '#fy'],
-    caption: raw.caption || '',
-    part2_hook: raw.part2_hook || '',
+    caption: fill(raw.caption || ''),
+    part2_hook: fill(raw.part2_hook || ''),
     fictionSeal: true,
     viralScore: raw.viralScore || null,
     // duração-alvo (s) escolhida no Criar — guia o tamanho da narração e do vídeo

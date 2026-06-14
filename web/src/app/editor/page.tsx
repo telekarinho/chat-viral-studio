@@ -2,6 +2,7 @@
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useStudio } from '@/store/useStudioStore';
+import { api } from '@/lib/api';
 import { ChatStage } from '@/components/ChatStage';
 import { MessagesEditor } from '@/components/MessagesEditor';
 import { AppearanceEditor } from '@/components/AppearanceEditor';
@@ -16,6 +17,7 @@ export default function EditorPage() {
   const { story, save, dirty } = useStudio();
   const [tab, setTab] = useState<Tab>('msgs');
   const [saving, setSaving] = useState(false);
+  const [continuing, setContinuing] = useState(false);
 
   // autosave (debounced) whenever dirty
   useEffect(() => {
@@ -23,6 +25,24 @@ export default function EditorPage() {
     const t = setTimeout(() => { save().catch(() => {}); }, 1500);
     return () => clearTimeout(t);
   }, [dirty, story, save]);
+
+  // Gera a próxima parte (série) a partir da história aberta e já abre ela aqui.
+  async function makeContinuation() {
+    const cur = useStudio.getState().story;
+    if (!cur || continuing) return;
+    setContinuing(true);
+    try {
+      const r = await api.continueStory(cur, { duration: cur.targetDuration });
+      if (!r?.story) throw new Error('sem resultado');
+      useStudio.getState().setStory(r.story);
+      setTab('msgs');
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    } catch (e: any) {
+      alert('Não consegui criar a continuação: ' + (e.message || e));
+    } finally {
+      setContinuing(false);
+    }
+  }
 
   if (!story) {
     return (
@@ -47,9 +67,14 @@ export default function EditorPage() {
           <span className={dirty ? 'text-amber-300' : 'text-emerald-400'}>
             {saving ? 'salvando…' : dirty ? '● não salvo' : '✓ salvo'}
           </span>
+          <button className="btn-ghost" onClick={makeContinuation} disabled={continuing}
+            title="Gera a próxima parte da série com os mesmos personagens">
+            {continuing ? '⏳ Gerando…' : `🎬 Criar Parte ${(story.part || 1) + 1}`}
+          </button>
           <button className="btn-ghost" onClick={async () => { setSaving(true); await save(); setSaving(false); }}>💾 Salvar</button>
         </div>
       </div>
+      {story.part ? <p className="-mt-2 text-xs text-brand">📺 Você está na Parte {story.part} desta série.</p> : null}
 
       <div className="grid gap-6 lg:grid-cols-[minmax(0,420px)_1fr]">
         {/* preview */}
