@@ -67,7 +67,7 @@ export const api = {
 
   // gera uma foto grátis (IA Pollinations, fallback banco de imagens) → data URL
   genImage: (prompt: string) =>
-    jpost<{ dataUrl: string; source: string }>('/api/image', { prompt }),
+    jpost<{ dataUrl: string | null; source?: string; reason?: string }>('/api/image', { prompt }),
 
   // gera o roteiro da locução do narrador a partir das mensagens da história
   narration: (story: Story) =>
