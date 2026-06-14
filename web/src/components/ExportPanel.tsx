@@ -2,6 +2,7 @@
 import { useState } from 'react';
 import { useStudio } from '@/store/useStudioStore';
 import { exportVideo, downloadBlob } from '@/lib/exporter';
+import { exportMp4 } from '@/lib/ffmpegExporter';
 import { narratorWav } from '@/lib/audio';
 import { buildScript, buildSRT, buildThumbnail, downloadText, downloadDataUrl } from '@/lib/outputs';
 
@@ -9,11 +10,30 @@ export function ExportPanel() {
   const { story, settings, setSettings, audioBuffers, narratorBuffers, save } = useStudio();
   const [busy, setBusy] = useState<string | null>(null);
   const [progress, setProgress] = useState(0);
+  const [stage, setStage] = useState<string | null>(null);
   const [result, setResult] = useState<{ webm: Blob; mp4Url?: string } | null>(null);
   if (!story) return null;
 
   const narratorOn = settings.withNarrator === true;
   const narratorMissing = narratorOn && narratorBuffers.length === 0;
+
+  // Export MP4 robusto (ffmpeg.wasm — sem MediaRecorder, não trava em vídeo longo/aba)
+  async function doExportMp4() {
+    setBusy('mp4'); setProgress(0); setStage('Iniciando…');
+    try {
+      const mp4 = await exportMp4(story!, settings, audioBuffers, {
+        narratorBuffers,
+        onProgress: setProgress,
+        onStage: setStage,
+      });
+      downloadBlob(mp4, `${slug(story!.title)}.mp4`);
+      await useStudio.getState().save().catch(() => {});
+    } catch (e: any) {
+      alert('Falha ao exportar MP4: ' + (e?.message || e));
+    } finally {
+      setBusy(null); setStage(null);
+    }
+  }
 
   async function doExport() {
     setBusy('video'); setProgress(0); setResult(null);
@@ -135,8 +155,13 @@ export function ExportPanel() {
             🎙️ Modo locutor ligado: vá na aba <b>Voz</b> e clique em <b>Gerar locução do narrador</b> antes de exportar (senão o vídeo sai sem narração).
           </p>
         )}
-        <button className="btn-primary w-full text-lg" onClick={doExport} disabled={!!busy}>
-          {busy === 'video' ? `🎬 Renderizando ${Math.round(progress * 100)}%…` : '⬇️ Exportar vídeo'}
+        <button className="btn-primary w-full text-lg" onClick={doExportMp4} disabled={!!busy}>
+          {busy === 'mp4' ? `🎬 ${stage || 'Renderizando'} ${Math.round(progress * 100)}%…` : '⬇️ Exportar MP4 (recomendado)'}
+        </button>
+        {busy === 'mp4' && stage && <p className="text-center text-xs text-white/50">{stage}</p>}
+
+        <button className="btn-ghost w-full" onClick={doExport} disabled={!!busy}>
+          {busy === 'video' ? `Renderizando ${Math.round(progress * 100)}%…` : 'Exportar WebM (modo rápido/antigo)'}
         </button>
         {narratorBuffers.length > 0 && (
           <button className="btn-ghost w-full" onClick={() => {
