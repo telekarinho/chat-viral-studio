@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 
 export const runtime = 'nodejs';
+export const maxDuration = 60;
 
 // Neural2 = vozes muito mais naturais/humanas que as Wavenet (e aceitam pitch/rate
 // p/ dar emoção). pt-BR Neural2: A (fem), B (masc), C (fem). Caráter por pitch/rate.
@@ -47,6 +48,58 @@ const BEEP =
   'gICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgP////////////8AAAA8TEFNRTMuMTAwAm' +
   '4AAAAAAAAAABSAJANIQgAAgAAAAnGMHkfQAAAAAAAAAAAAAAAAAAAA';
 
+// ── TTS GRÁTIS sem chave (Google Translate TTS — o mesmo motor da lib gTTS) ──
+// Voz pt-BR única, mas confiável e sem custo. Limite ~200 chars/req → quebramos
+// o texto em pedaços e concatenamos os MP3 (frames MP3 colam direto).
+function splitForTts(text: string, max = 190): string[] {
+  const clean = text.replace(/\s+/g, ' ').trim();
+  if (clean.length <= max) return clean ? [clean] : [];
+  const out: string[] = [];
+  const sentences = clean.match(/[^.!?…]+[.!?…]*\s*/g) || [clean];
+  let cur = '';
+  for (const piece of sentences) {
+    for (const word of piece.split(' ')) {
+      const w = (cur ? cur + ' ' : '') + word;
+      if (w.length > max) { if (cur) out.push(cur.trim()); cur = word.length > max ? word.slice(0, max) : word; }
+      else cur = w;
+    }
+  }
+  if (cur.trim()) out.push(cur.trim());
+  return out;
+}
+
+async function gTransTtsChunk(chunk: string): Promise<Buffer | null> {
+  const ctrl = new AbortController();
+  const to = setTimeout(() => ctrl.abort(), 12000);
+  try {
+    const url = `https://translate.google.com/translate_tts?ie=UTF-8&client=tw-ob&tl=pt-BR&ttsspeed=1&q=${encodeURIComponent(chunk)}`;
+    const r = await fetch(url, { signal: ctrl.signal, headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)' } });
+    if (!r.ok) return null;
+    const buf = Buffer.from(await r.arrayBuffer());
+    return buf.length > 200 && (r.headers.get('content-type') || '').includes('audio') ? buf : null;
+  } catch { return null; } finally { clearTimeout(to); }
+}
+
+async function freeTts(text: string): Promise<string | null> {
+  const parts = splitForTts(text);
+  if (!parts.length) return null;
+  // busca em paralelo (concorrência limitada) mas reassembla NA ORDEM
+  const results: (Buffer | null)[] = new Array(parts.length).fill(null);
+  let idx = 0;
+  const worker = async () => {
+    while (idx < parts.length) {
+      const i = idx++;
+      let b = await gTransTtsChunk(parts[i]);
+      if (!b) b = await gTransTtsChunk(parts[i]); // 1 retry por pedaço
+      results[i] = b;
+    }
+  };
+  await Promise.all(Array.from({ length: Math.min(4, parts.length) }, worker));
+  const bufs = results.filter((b): b is Buffer => !!b);
+  if (!bufs.length) return null;
+  return Buffer.concat(bufs).toString('base64');
+}
+
 export async function POST(req: Request) {
   const { text = '', voice = 'narradora_fem', emotion = 'neutro', speed = 1, pitch = 0 } = await req.json().catch(() => ({}));
   if (!text.trim()) return NextResponse.json({ error: 'texto vazio' }, { status: 400 });
@@ -59,24 +112,30 @@ export async function POST(req: Request) {
   const finalPitch = clamp(preset.pitch + emo.pitch + Number(pitch || 0), -20, 20);
   const finalRate = clamp(preset.rate + emo.rate + (Number(speed || 1) - 1), 0.25, 4);
 
-  if (!key) return NextResponse.json({ audioContent: BEEP, mime: 'audio/mp3', mock: true });
-
-  try {
-    const r = await fetch(`https://texttospeech.googleapis.com/v1/text:synthesize?key=${key}`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        input: { text },
-        voice: { languageCode: 'pt-BR', name: preset.name },
-        audioConfig: { audioEncoding: 'MP3', pitch: finalPitch, speakingRate: finalRate },
-      }),
-    });
-    if (!r.ok) throw new Error(`TTS ${r.status}`);
-    const data = await r.json();
-    return NextResponse.json({ audioContent: data.audioContent, mime: 'audio/mp3' });
-  } catch {
-    return NextResponse.json({ audioContent: BEEP, mime: 'audio/mp3', mock: true });
+  // 1) Google Cloud TTS (Neural2) quando há chave — melhor qualidade + emoção
+  if (key) {
+    try {
+      const r = await fetch(`https://texttospeech.googleapis.com/v1/text:synthesize?key=${key}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          input: { text },
+          voice: { languageCode: 'pt-BR', name: preset.name },
+          audioConfig: { audioEncoding: 'MP3', pitch: finalPitch, speakingRate: finalRate },
+        }),
+      });
+      if (!r.ok) throw new Error(`TTS ${r.status}`);
+      const data = await r.json();
+      if (data.audioContent) return NextResponse.json({ audioContent: data.audioContent, mime: 'audio/mp3' });
+    } catch { /* cai pro TTS grátis abaixo */ }
   }
+
+  // 2) TTS GRÁTIS sem chave (Google Translate) — voz real, sem custo
+  const free = await freeTts(text).catch(() => null);
+  if (free) return NextResponse.json({ audioContent: free, mime: 'audio/mpeg', source: 'gtrans' });
+
+  // 3) último recurso: placeholder quase mudo (mantém a sincronia)
+  return NextResponse.json({ audioContent: BEEP, mime: 'audio/mp3', mock: true });
 }
 
 export async function GET() {
