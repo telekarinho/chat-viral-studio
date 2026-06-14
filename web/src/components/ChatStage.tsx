@@ -49,7 +49,7 @@ export function ChatStage({ story, settings, className, autoPlay = true }: Props
   const pausedAt = useRef<number>(0);
   const [playing, setPlaying] = useState(autoPlay);
   const [t, setT] = useState(0);
-  const [guide, setGuide] = useState(true);   // guia de zona segura (só no preview)
+  const [guide, setGuide] = useState(false);  // guia de zona segura (só no preview, desligado por padrão)
 
   const W = 540, H = 960; // preview resolution (9:16, half of 1080x1920)
   const timeline = buildTimeline(story, settings);
