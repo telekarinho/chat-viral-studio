@@ -127,11 +127,15 @@ export function drawFrame(ctx: CanvasRenderingContext2D, t: number, d: DrawCtx) 
     ctx.translate(-W / 2, -H / 2);
   }
 
-  const headerH = 150 * s;
+  // Zona segura do TikTok/Reels: o topo (~status bar do telefone + UI do app) e a
+  // base (~barra de ação, legenda, botão "mais") ficam cobertos. Empurramos o
+  // cabeçalho pra baixo da faixa de topo; as legendas vão pro meio (zona segura).
+  const topSafe = 70 * s;
+  const headerH = topSafe + 140 * s;
   const inputH = 110 * s;
   const padX = 28 * s;
   const top = headerH + 24 * s;
-  const bottom = H - inputH - (settings.withCaptions ? 230 * s : 40 * s);
+  const bottom = H - inputH - 40 * s;
   const areaH = bottom - top;
 
   // ── lay out visible messages ──
@@ -188,7 +192,7 @@ export function drawFrame(ctx: CanvasRenderingContext2D, t: number, d: DrawCtx) 
   }
 
   // header (drawn after bubbles so it overlaps cleanly)
-  drawHeader(ctx, story, theme, W, headerH, s);
+  drawHeader(ctx, story, theme, W, headerH, s, topSafe);
   // fake input bar — simula você digitando a próxima mensagem de saída letra por letra
   let typingText: string | null = null;
   const composing = timeline.items.find(
@@ -216,7 +220,8 @@ export function drawFrame(ctx: CanvasRenderingContext2D, t: number, d: DrawCtx) 
   // não fala — não pode aparecer como se fosse narração).
   if (settings.withCaptions) {
     const cur = timeline.items.find((it) => t >= it.speakStart && t < it.speakEnd);
-    if (cur && cur.msg.type === 'text' && cur.msg.text?.trim()) drawCaption(ctx, cur.msg.text, W, bottom + 60 * s, s);
+    // legenda na faixa segura central (~60% da altura) — longe da UI do TikTok
+    if (cur && cur.msg.type === 'text' && cur.msg.text?.trim()) drawCaption(ctx, cur.msg.text, W, H * 0.6, s);
   }
 
   // fiction seal + watermark
@@ -349,12 +354,12 @@ function drawBlock(
   }
 }
 
-function drawHeader(ctx: CanvasRenderingContext2D, story: Story, theme: any, W: number, h: number, s: number) {
+function drawHeader(ctx: CanvasRenderingContext2D, story: Story, theme: any, W: number, h: number, s: number, topSafe = 0) {
   ctx.fillStyle = theme.headerBg;
   ctx.fillRect(0, 0, W, h);
   const contact = story.characters.find((c) => c.side === 'left') || story.characters[0];
-  // avatar
-  const cx = 110 * s, cy = h / 2 + 14 * s, r = 42 * s;
+  // conteúdo do cabeçalho centralizado ABAIXO da faixa de topo (status bar/TikTok)
+  const cx = 110 * s, cy = topSafe + (h - topSafe) / 2 + 6 * s, r = 42 * s;
   ctx.beginPath();
   ctx.arc(cx, cy, r, 0, Math.PI * 2);
   ctx.fillStyle = contact?.avatarColor || theme.accent;
@@ -437,20 +442,23 @@ function drawProgress(ctx: CanvasRenderingContext2D, t: number, dur: number, W: 
   ctx.fillRect(0, 0, W * p, 6 * s);
 }
 
-function drawCaption(ctx: CanvasRenderingContext2D, text: string, W: number, y: number, s: number) {
-  const t = text.length > 90 ? text.slice(0, 88) + '…' : text;
+// Legenda estilo TikTok, centralizada verticalmente em `cy`. Largura reduzida
+// (0,72W) p/ não invadir a coluna de botões da direita; até 3 linhas.
+function drawCaption(ctx: CanvasRenderingContext2D, text: string, W: number, cy: number, s: number) {
+  const t = text.length > 120 ? text.slice(0, 118) + '…' : text;
   ctx.font = `bold ${44 * s}px system-ui`;
   ctx.textAlign = 'center';
-  const lines = wrap(ctx, t.toUpperCase(), W * 0.86);
-  let ly = y;
-  for (const line of lines.slice(0, 2)) {
+  const lines = wrap(ctx, t.toUpperCase(), W * 0.72).slice(0, 3);
+  const lineH = 64 * s;
+  let ly = cy - ((lines.length - 1) * lineH) / 2;
+  for (const line of lines) {
     const w = ctx.measureText(line).width;
-    ctx.fillStyle = 'rgba(0,0,0,0.78)';
+    ctx.fillStyle = 'rgba(0,0,0,0.8)';
     roundRect(ctx, W / 2 - w / 2 - 18 * s, ly - 40 * s, w + 36 * s, 58 * s, 12 * s);
     ctx.fill();
     ctx.fillStyle = '#FFE600';
     ctx.fillText(line, W / 2, ly);
-    ly += 64 * s;
+    ly += lineH;
   }
   ctx.textAlign = 'left';
 }
@@ -474,10 +482,11 @@ function drawSeal(ctx: CanvasRenderingContext2D, W: number, H: number, s: number
 }
 
 function drawWatermark(ctx: CanvasRenderingContext2D, W: number, H: number, s: number, text?: string) {
-  ctx.font = `bold ${26 * s}px system-ui`;
-  ctx.fillStyle = 'rgba(255,255,255,0.7)';
+  // topo-direito (logo abaixo do header): livre da coluna de botões e da UI de baixo do TikTok
+  ctx.font = `bold ${24 * s}px system-ui`;
+  ctx.fillStyle = 'rgba(255,255,255,0.55)';
   ctx.textAlign = 'right';
-  ctx.fillText((text || 'Chat Viral Studio').slice(0, 40), W - 26 * s, H - 200 * s);
+  ctx.fillText((text || 'Chat Viral Studio').slice(0, 40), W - 26 * s, H * 0.135);
   ctx.textAlign = 'left';
 }
 
