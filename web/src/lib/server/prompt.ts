@@ -16,7 +16,8 @@ export const PLATFORM_COMPLIANCE = `REGRAS DE MONETIZAÇÃO (OBRIGATÓRIAS — p
 - SEM dados pessoais reais (telefone, CPF, endereço, placa, rosto identificável).
 - O conflito vem da SITUAÇÃO ABSURDA + diálogo afiado (humor/indignação) — NUNCA da degradação real de uma pessoa.`;
 
-const SCHEMA_HINT = `Responda APENAS com JSON válido (sem markdown), no formato:
+const SCHEMA_HINT = `REGRA CRÍTICA: NUNCA use placeholders entre colchetes (ex: [Nome], [Nome do seu marido], [cidade], [produto]). SEMPRE escreva nomes próprios fictícios CONCRETOS (ex: Cátia, Bruno, Léo) e valores reais. Nenhum colchete "[ ]" pode aparecer no texto final.
+Responda APENAS com JSON válido (sem markdown), no formato:
 {"title":"","hook":"","characters":[{"id":"c1","name":"","side":"left","gender":"f","online":true},{"id":"c2","name":"Você","side":"right","gender":"m","online":true}],
 "messages":[{"sender":"c1","type":"text","text":"","emotion":"neutro","delay":1.2,"time":"21:48","status":"read"}],
 "narration":"","hashtags":["#viral"],"caption":"","part2_hook":""}`;
