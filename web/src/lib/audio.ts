@@ -8,7 +8,9 @@ export async function synthMessage(
   voice: string,
 ): Promise<{ buffer: AudioBuffer; dataUrl: string; duration: number } | null> {
   const text = msg.text?.trim();
-  if (!text || msg.type === 'deleted' || msg.type === 'call_missed') return null;
+  // só mensagens de TEXTO são faladas. Foto (legenda = direção de cena),
+  // figurinha (emoji), áudio fake, apagada e chamada perdida NÃO são lidas.
+  if (!text || msg.type !== 'text') return null;
 
   const { audioContent, mime } = await api.tts(text, voice, msg.emotion);
   if (!audioContent) return null;

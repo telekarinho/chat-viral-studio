@@ -122,9 +122,25 @@ export function buildNarrationLocal(story: any = {}): string {
   const open = story.hook?.trim()
     ? story.hook.trim()
     : 'Rapaz, pensa numa situação dessas. Veja só essa história!';
+  // legenda da foto é DIREÇÃO de cena ("Foto de um desodorante…") — nunca lê
+  // literal. Limpa o prefixo pra virar uma menção natural.
+  const photoDesc = (t: string) => {
+    const d = (t || '').replace(/\s+/g, ' ').trim()
+      .replace(/^(uma?\s+)?(foto|print|imagem|captura(\s+de\s+tela)?|screenshot|selfie|figura)\s*(d[aoe]s?|de|com|mostrando|que mostra)?\s*/i, '')
+      .replace(/^(da|do|de|dos|das)\s+/i, '').trim();
+    return d ? ` de ${d}` : '';
+  };
   const body = msgs.map((m: any, i: number) => {
     const who = chars[m.sender] || 'a pessoa';
-    const what = m.type === 'image' ? `mandou uma foto: ${m.text}` : `mandou: ${m.text}`;
+    let what: string;
+    switch (m.type) {
+      case 'image': what = `mandou uma foto${photoDesc(m.text)}`; break;
+      case 'audio': what = 'mandou um áudio'; break;
+      case 'sticker': what = 'mandou uma figurinha'; break;
+      case 'deleted': what = 'apagou uma mensagem'; break;
+      case 'call_missed': what = 'tentou ligar'; break;
+      default: what = `mandou: ${m.text}`;
+    }
     const mid = i === Math.floor(msgs.length / 2) ? 'Mano, olha a audácia… tu já pensou um negócio desse? ' : '';
     return `${mid}Aí ${who} ${what}`;
   }).join('. ');
