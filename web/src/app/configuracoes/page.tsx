@@ -69,8 +69,8 @@ export default function ConfigPage() {
     try {
       // persist first so the key is sent with the request
       setConfig(cfg);
-      const r = await api.tts('Essa é a voz da sua narração no Chat Viral Studio.', voice, 'alegria');
-      if (r.source === 'google') { setTestMsg('✓ Sua chave Google funciona! Voz Neural2 com emoção será usada na narração.'); }
+      const r = await api.tts('Essa é a voz da sua narração no Chat Viral Studio.', voice, 'alegria', settings.voiceSpeed ?? 1);
+      if (r.source === 'google' || r.source === 'google-chirp') { setTestMsg('✓ Sua chave Google funciona! Voz natural (Chirp3-HD nas femininas, Neural2 na masculina) com emoção será usada.'); }
       else if (r.source === 'gtrans') { setTestMsg('⚠️ Sua chave NÃO funcionou (a API Text-to-Speech não está ativada ou a chave é inválida/restrita). Tocando a voz GRÁTIS de reserva. Clique em "① Ativar Text-to-Speech" e confira a chave.'); }
       else if (r.mock) { setTestMsg('⚠️ Sem chave e sem voz grátis no momento — tocando placeholder.'); }
       else { setTestMsg('✓ Voz gerada!'); }
@@ -146,6 +146,18 @@ export default function ConfigPage() {
               🎙️ {v.label}
             </button>
           ))}
+        </div>
+        <div>
+          <label className="flex items-center justify-between text-sm text-white/70">
+            <span>🏃 Velocidade da leitura</span>
+            <span className="text-white/50">{(settings.voiceSpeed ?? 1).toFixed(2)}×</span>
+          </label>
+          <input type="range" min={0.7} max={1.5} step={0.05} value={settings.voiceSpeed ?? 1}
+            onChange={(e) => setSettings({ voiceSpeed: +e.target.value })}
+            className="w-full accent-[#7C3AED]" />
+          <div className="flex justify-between text-[11px] text-white/35">
+            <span>devagar</span><span>natural</span><span>rápido</span>
+          </div>
         </div>
         <button className="btn-ghost w-full" onClick={testVoice} disabled={testing}>
           {testing ? '🎧 Testando…' : '▶️ Testar voz'}

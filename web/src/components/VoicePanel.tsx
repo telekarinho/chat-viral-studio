@@ -3,6 +3,26 @@ import { useEffect, useRef, useState } from 'react';
 import { useStudio } from '@/store/useStudioStore';
 import { api } from '@/lib/api';
 import { synthStory, synthNarration } from '@/lib/audio';
+import { getTtsUsage, type TtsUsage } from '@/lib/usage';
+
+const fmtChars = (n: number) =>
+  n >= 1e6 ? `${(n / 1e6).toFixed(1)}M` : n >= 1000 ? `${(n / 1000).toFixed(n >= 10000 ? 0 : 1)}k` : `${n}`;
+
+function UsageBar({ label, used, free }: { label: string; used: number; free: number }) {
+  const pct = Math.min(100, (used / free) * 100);
+  const over = used > free;
+  return (
+    <div>
+      <div className="flex justify-between text-[11px]">
+        <span>{label}</span>
+        <span className={over ? 'text-amber-400' : 'text-white/50'}>{fmtChars(used)} / {fmtChars(free)}</span>
+      </div>
+      <div className="h-1.5 overflow-hidden rounded bg-white/10">
+        <div className={`h-full ${over ? 'bg-amber-500' : 'bg-emerald-500'}`} style={{ width: `${pct}%` }} />
+      </div>
+    </div>
+  );
+}
 
 const FALLBACK_VOICES = [
   { id: 'narrador_masc', label: 'Narrador masculino' },
@@ -20,12 +40,15 @@ export function VoicePanel() {
   const [voices, setVoices] = useState(FALLBACK_VOICES);
   const [gen, setGen] = useState<{ done: number; total: number } | null>(null);
   const [previewing, setPreviewing] = useState(false);
+  const [usage, setUsage] = useState<TtsUsage | null>(null);
   const playRef = useRef<{ ctx: AudioContext; srcs: AudioBufferSourceNode[] } | null>(null);
 
   const narratorMode = settings.withNarrator === true;
+  const refreshUsage = () => setUsage(getTtsUsage());
 
   useEffect(() => {
     api.voices().then((r) => r?.voices?.length && setVoices(r.voices)).catch(() => {});
+    refreshUsage();
   }, []);
 
   function stopPlayback() {
@@ -37,13 +60,14 @@ export function VoicePanel() {
   async function preview() {
     setPreviewing(true);
     try {
-      const r = await api.tts('Oi! Essa é a minha voz pra narrar a sua história — com emoção de verdade.', voice, 'alegria');
+      const r = await api.tts('Oi! Essa é a minha voz pra narrar a sua história — com emoção de verdade.', voice, 'alegria', settings.voiceSpeed ?? 1);
       const audio = new Audio(`data:${r.mime};base64,${r.audioContent}`);
       await audio.play().catch(() => {});
     } catch (e: any) {
       alert('Falha ao testar voz: ' + e.message);
     } finally {
       setPreviewing(false);
+      refreshUsage();
     }
   }
 
@@ -75,22 +99,23 @@ export function VoicePanel() {
         } catch { /* usa o roteiro existente */ }
         if (!script.trim()) throw new Error('sem roteiro de narração');
         // 2) sintetiza a voz do locutor
-        const { buffers } = await synthNarration(script, voice, (done, total) => setGen({ done, total }));
+        const { buffers } = await synthNarration(script, voice, (done, total) => setGen({ done, total }), settings.voiceSpeed ?? 1);
         if (!buffers.length) throw new Error('nenhum áudio gerado');
         setNarratorBuffers(buffers);
       } catch (e: any) {
         alert('Falha na narração do locutor: ' + e.message);
-      } finally { setGen(null); }
+      } finally { setGen(null); refreshUsage(); }
       return;
     }
     setGen({ done: 0, total: story.messages.length });
     try {
-      const { messages, buffers } = await synthStory(story, voice, (done, total) => setGen({ done, total }));
+      const { messages, buffers } = await synthStory(story, voice, (done, total) => setGen({ done, total }), settings.voiceSpeed ?? 1);
       setAudioBuffers(buffers, messages);
     } catch (e: any) {
       alert('Falha na narração: ' + e.message);
     } finally {
       setGen(null);
+      refreshUsage();
     }
   }
 
@@ -121,6 +146,20 @@ export function VoicePanel() {
         ))}
       </div>
 
+      <div>
+        <label className="flex items-center justify-between text-sm text-white/70">
+          <span>🏃 Velocidade da leitura</span>
+          <span className="text-white/50">{(settings.voiceSpeed ?? 1).toFixed(2)}×</span>
+        </label>
+        <input type="range" min={0.7} max={1.5} step={0.05} value={settings.voiceSpeed ?? 1}
+          onChange={(e) => setSettings({ voiceSpeed: +e.target.value })}
+          className="w-full accent-[#7C3AED]" />
+        <div className="flex justify-between text-[11px] text-white/35">
+          <span>devagar</span><span>natural</span><span>rápido</span>
+        </div>
+        <p className="text-[11px] text-white/40">Ajuste e gere de novo pra ouvir. Vale pro diálogo e pra locução.</p>
+      </div>
+
       <button className="btn-ghost w-full" onClick={preview} disabled={previewing}>
         {previewing ? '🎧 Tocando amostra…' : '▶️ Ouvir amostra desta voz'}
       </button>
@@ -142,6 +181,20 @@ export function VoicePanel() {
       )}
       {!narratorMode && hasMsgAudio && (
         <p className="text-center text-sm text-emerald-400">✓ {audioBuffers.size} blocos sincronizados com as mensagens.</p>
+      )}
+
+      {usage && (usage.chirp > 0 || usage.neural2 > 0) && (
+        <div className="space-y-1.5 rounded-lg bg-white/5 px-3 py-2 text-xs text-white/70">
+          <div className="flex items-center justify-between">
+            <span>📊 Uso do mês ({usage.month}) — cota grátis Google</span>
+            {usage.estimatedUsd > 0
+              ? <span className="text-amber-400">~US$ {usage.estimatedUsd.toFixed(2)}</span>
+              : <span className="text-emerald-400">grátis</span>}
+          </div>
+          <UsageBar label="Feminina (Chirp)" used={usage.chirp} free={usage.free.chirp} />
+          <UsageBar label="Masculina (Neural2)" used={usage.neural2} free={usage.free.neural2} />
+          <p className="text-[11px] text-white/40">1M de caracteres grátis/mês em cada motor. Acima disso: Chirp US$30 / Neural2 US$16 por 1M.</p>
+        </div>
       )}
 
       <p className="text-xs text-white/40">

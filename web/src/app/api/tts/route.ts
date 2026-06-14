@@ -3,17 +3,24 @@ import { NextResponse } from 'next/server';
 export const runtime = 'nodejs';
 export const maxDuration = 60;
 
-// Neural2 = vozes muito mais naturais/humanas que as Wavenet (e aceitam pitch/rate
-// p/ dar emoção). pt-BR Neural2: A (fem), B (masc), C (fem). Caráter por pitch/rate.
-const VOICES: Record<string, { name: string; pitch: number; rate: number; label: string }> = {
+// Vozes femininas = Chirp3-HD (as mais humanas/naturais do Google, bem melhores
+// que as Neural2 que soavam robóticas). Chirp3-HD NÃO aceita pitch/speakingRate/SSML
+// → mandamos sem esses params e a emoção vem da prosódia natural da própria voz.
+// Cada voz Chirp tem um `fallback` Neural2: se a Chirp falhar, usamos a Neural2 (com
+// pitch/rate) ANTES de cair no TTS grátis — no pior caso fica igual a antes, nunca pior.
+// Vozes masculinas/cômicas seguem em Neural2 (aceitam pitch/rate p/ dar caráter).
+type VoiceDef = { name: string; pitch: number; rate: number; label: string; engine?: 'neural2' | 'chirp'; fallback?: string };
+const VOICES: Record<string, VoiceDef> = {
   narrador_masc: { name: 'pt-BR-Neural2-B', pitch: -1.5, rate: 1.0, label: 'Narrador masculino' },
-  narradora_fem: { name: 'pt-BR-Neural2-A', pitch: 0, rate: 1.0, label: 'Narradora feminina' },
+  // Chirp lê mais "deliberada" que a Neural2 → baseline um pouco mais ágil (1.1+)
+  // pra soar natural, estilo conversa de WhatsApp, e não arrastado.
+  narradora_fem: { name: 'pt-BR-Chirp3-HD-Aoede', pitch: 0, rate: 1.12, label: 'Narradora feminina', engine: 'chirp', fallback: 'pt-BR-Neural2-A' },
   voz_engracada: { name: 'pt-BR-Neural2-C', pitch: 4, rate: 1.12, label: 'Voz engraçada' },
   voz_suspense: { name: 'pt-BR-Neural2-B', pitch: -3, rate: 0.88, label: 'Voz suspense' },
-  voz_drama: { name: 'pt-BR-Neural2-A', pitch: -1, rate: 0.9, label: 'Voz dramática leve' },
+  voz_drama: { name: 'pt-BR-Chirp3-HD-Kore', pitch: -1, rate: 1.0, label: 'Voz dramática leve', engine: 'chirp', fallback: 'pt-BR-Neural2-A' },
   voz_tiktok: { name: 'pt-BR-Neural2-C', pitch: 1.5, rate: 1.28, label: 'Voz acelerada TikTok' },
-  voz_calma: { name: 'pt-BR-Neural2-A', pitch: -1, rate: 0.93, label: 'Voz calma' },
-  voz_jovem: { name: 'pt-BR-Neural2-C', pitch: 2.5, rate: 1.05, label: 'Voz jovem' },
+  voz_calma: { name: 'pt-BR-Chirp3-HD-Kore', pitch: -1, rate: 1.02, label: 'Voz calma', engine: 'chirp', fallback: 'pt-BR-Neural2-A' },
+  voz_jovem: { name: 'pt-BR-Chirp3-HD-Leda', pitch: 2.5, rate: 1.16, label: 'Voz jovem', engine: 'chirp', fallback: 'pt-BR-Neural2-C' },
 };
 // Emoção mais marcada (pitch em semitons, rate como delta) p/ soar humano, não robótico.
 const EMOTION: Record<string, { pitch: number; rate: number }> = {
@@ -120,6 +127,28 @@ async function gTransTtsChunk(chunk: string): Promise<Buffer | null> {
   } catch { return null; } finally { clearTimeout(to); }
 }
 
+// Sintetiza com Google Cloud TTS. Chirp3-HD não aceita pitch/speakingRate → omitidos.
+async function googleTts(
+  key: string,
+  voiceName: string,
+  spoken: string,
+  opts: { pitch: number; rate: number; chirp: boolean },
+): Promise<string | null> {
+  const audioConfig: Record<string, unknown> = { audioEncoding: 'MP3' };
+  // Chirp3-HD aceita speakingRate (controle de ritmo, desde mai/2025) mas NÃO aceita
+  // pitch nem SSML → mandamos só a velocidade (faixa 0.25–2.0) e omitimos o pitch.
+  audioConfig.speakingRate = opts.chirp ? clamp(opts.rate, 0.25, 2.0) : opts.rate;
+  if (!opts.chirp) audioConfig.pitch = opts.pitch;
+  const r = await fetch(`https://texttospeech.googleapis.com/v1/text:synthesize?key=${key}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ input: { text: spoken }, voice: { languageCode: 'pt-BR', name: voiceName }, audioConfig }),
+  });
+  if (!r.ok) return null;
+  const data = await r.json().catch(() => null);
+  return data?.audioContent || null;
+}
+
 async function freeTts(text: string): Promise<string | null> {
   const parts = splitForTts(text);
   if (!parts.length) return null;
@@ -146,7 +175,7 @@ export async function POST(req: Request) {
 
   // texto realmente falado (sem emojis, abreviações por extenso); emoção do original
   const spoken = expandAbbrev(stripForSpeech(text));
-  if (!spoken) return NextResponse.json({ audioContent: BEEP, mime: 'audio/mp3', mock: true });
+  if (!spoken) return NextResponse.json({ audioContent: BEEP, mime: 'audio/mp3', mock: true, engine: 'mock', chars: 0 });
 
   // user's own key (sent from the Settings page) wins, else server env
   const key = req.headers.get('x-google-tts-key')?.trim() || process.env.GOOGLE_TTS_API_KEY;
@@ -156,30 +185,26 @@ export async function POST(req: Request) {
   const finalPitch = clamp(preset.pitch + emo.pitch + Number(pitch || 0), -20, 20);
   const finalRate = clamp(preset.rate + emo.rate + (Number(speed || 1) - 1), 0.25, 4);
 
-  // 1) Google Cloud TTS (Neural2) quando há chave — melhor qualidade + emoção
+  // 1) Google Cloud TTS quando há chave. Femininas em Chirp3-HD (mais humanas);
+  //    se a Chirp falhar, tenta o fallback Neural2 (com pitch/rate) antes do grátis.
+  //    `engine` + `chars` voltam na resposta p/ o contador de uso (free tier separado).
   if (key) {
-    try {
-      const r = await fetch(`https://texttospeech.googleapis.com/v1/text:synthesize?key=${key}`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          input: { text: spoken },
-          voice: { languageCode: 'pt-BR', name: preset.name },
-          audioConfig: { audioEncoding: 'MP3', pitch: finalPitch, speakingRate: finalRate },
-        }),
-      });
-      if (!r.ok) throw new Error(`TTS ${r.status}`);
-      const data = await r.json();
-      if (data.audioContent) return NextResponse.json({ audioContent: data.audioContent, mime: 'audio/mp3', source: 'google' });
-    } catch { /* cai pro TTS grátis abaixo */ }
+    const isChirp = preset.engine === 'chirp';
+    let audio = await googleTts(key, preset.name, spoken, { pitch: finalPitch, rate: finalRate, chirp: isChirp }).catch(() => null);
+    let usedEngine: 'chirp' | 'neural2' = isChirp ? 'chirp' : 'neural2';
+    if (!audio && preset.fallback) {
+      audio = await googleTts(key, preset.fallback, spoken, { pitch: finalPitch, rate: finalRate, chirp: false }).catch(() => null);
+      usedEngine = 'neural2';
+    }
+    if (audio) return NextResponse.json({ audioContent: audio, mime: 'audio/mp3', source: usedEngine === 'chirp' ? 'google-chirp' : 'google', engine: usedEngine, chars: spoken.length });
   }
 
-  // 2) TTS GRÁTIS sem chave (Google Translate) — voz real, sem custo
+  // 2) TTS GRÁTIS sem chave (Google Translate) — voz real, sem custo (não conta no tier)
   const free = await freeTts(spoken).catch(() => null);
-  if (free) return NextResponse.json({ audioContent: free, mime: 'audio/mpeg', source: 'gtrans' });
+  if (free) return NextResponse.json({ audioContent: free, mime: 'audio/mpeg', source: 'gtrans', engine: 'free', chars: spoken.length });
 
   // 3) último recurso: placeholder quase mudo (mantém a sincronia)
-  return NextResponse.json({ audioContent: BEEP, mime: 'audio/mp3', mock: true });
+  return NextResponse.json({ audioContent: BEEP, mime: 'audio/mp3', mock: true, engine: 'mock', chars: 0 });
 }
 
 export async function GET() {
