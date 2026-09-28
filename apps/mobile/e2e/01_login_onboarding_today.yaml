@@ -1,0 +1,42 @@
+appId: me.rodrigoserra.postai
+---
+- launchApp:
+    clearState: true
+    permissions:
+      all: allow
+- extendedWaitUntil:
+    visible:
+      id: login-screen
+    timeout: 60000
+- tapOn:
+    id: login-email
+- inputText: ${EMAIL}
+- tapOn:
+    id: login-password
+- inputText: ${PASSWORD}
+- hideKeyboard
+- tapOn:
+    id: login-submit
+- extendedWaitUntil:
+    visible:
+      id: onboarding-screen
+    timeout: 30000
+- assertVisible: "RodrigoSerra.me"
+- scrollUntilVisible:
+    element:
+      id: onb-finish
+- tapOn:
+    id: onb-finish
+- extendedWaitUntil:
+    visible:
+      id: today-screen
+    timeout: 30000
+- assertVisible:
+    id: hero-now
+- assertVisible:
+    id: hero-record
+- scrollUntilVisible:
+    element:
+      id: progress-card
+- assertVisible: ".*missões feitas.*"
+- takeScreenshot: 01_hoje

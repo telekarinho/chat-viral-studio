@@ -1,0 +1,112 @@
+appId: me.rodrigoserra.postai
+# Online: record the Thought of the Day part by part, then request the automatic final edit.
+---
+- launchApp:
+    stopApp: false
+- repeat:
+    while:
+      notVisible:
+        id: tab-Hoje
+    times: 4
+    commands:
+      - back
+- tapOn:
+    id: tab-Hoje
+- scrollUntilVisible:
+    element:
+      id: open-thought
+- tapOn:
+    id: open-thought
+- extendedWaitUntil:
+    visible:
+      id: record-parts
+    timeout: 20000
+- tapOn:
+    id: record-parts
+- extendedWaitUntil:
+    visible:
+      id: teleprompter-text
+    timeout: 30000
+# part 1 shows only the first piece: the closing line must not be on the teleprompter yet
+- assertNotVisible: "E se der certo!"
+- takeScreenshot: 07c_parte1_teleprompter
+- tapOn:
+    id: countdown-0
+- tapOn:
+    id: record-button
+- extendedWaitUntil:
+    visible: "● REC ([3-9]|[1-9][0-9]+)s"
+    timeout: 20000
+- tapOn:
+    id: record-button
+- extendedWaitUntil:
+    visible: "Parte 1 salva no aparelho ✓"
+    timeout: 60000
+- takeScreenshot: 08_parte1_salva
+- tapOn:
+    id: next-part
+- extendedWaitUntil:
+    visible: "E se der certo!"
+    timeout: 20000
+- tapOn:
+    id: record-button
+- extendedWaitUntil:
+    visible: "● REC ([3-9]|[1-9][0-9]+)s"
+    timeout: 20000
+- tapOn:
+    id: record-button
+- extendedWaitUntil:
+    visible: "Parte 2 salva no aparelho ✓"
+    timeout: 60000
+- tapOn:
+    id: attach-done
+- extendedWaitUntil:
+    visible:
+      id: content-screen
+    timeout: 20000
+- scrollUntilVisible:
+    element:
+      id: edit-plan
+- takeScreenshot: 09_plano_edicao
+# parts may still be syncing: keep asking until the job is accepted
+- repeat:
+    while:
+      notVisible: "Na fila de montagem…|Montando o vídeo…|BAIXAR VÍDEO FINAL"
+    times: 20
+    commands:
+      - scrollUntilVisible:
+          element:
+            id: request-final
+          optional: true
+      - tapOn:
+          id: request-final
+          optional: true
+      - extendedWaitUntil:
+          visible: "Na fila de montagem…|Montando o vídeo…|BAIXAR VÍDEO FINAL"
+          timeout: 8000
+          optional: true
+# the server worker renders; refresh until the download is available
+- repeat:
+    while:
+      notVisible:
+        id: download-final
+    times: 40
+    commands:
+      - tapOn:
+          text: "ATUALIZAR"
+          optional: true
+      - extendedWaitUntil:
+          visible:
+            id: download-final
+          timeout: 5000
+          optional: true
+- tapOn:
+    id: download-final
+- extendedWaitUntil:
+    visible:
+      id: final-screen
+    timeout: 60000
+- scrollUntilVisible:
+    element:
+      id: share-final
+- takeScreenshot: 10_video_final

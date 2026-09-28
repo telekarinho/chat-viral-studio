@@ -1,0 +1,28 @@
+appId: me.rodrigoserra.postai
+# Network restored: the queue must resume by itself and verify remote integrity.
+---
+- launchApp:
+    stopApp: false
+- tapOn:
+    id: tab-Projetos
+- extendedWaitUntil:
+    visible: "SINCRONIZADO"
+    timeout: 240000
+- takeScreenshot: 07_sincronizado
+- tapOn:
+    id: take-row
+- extendedWaitUntil:
+    visible:
+      id: take-info
+    timeout: 30000
+- scrollUntilVisible:
+    element:
+      text: "Integridade na nuvem confirmada.*"
+    timeout: 30000
+- takeScreenshot: 07b_integridade
+- back
+- tapOn:
+    id: tab-Hoje
+- extendedWaitUntil:
+    visible: "Sincronizado ✓"
+    timeout: 120000
