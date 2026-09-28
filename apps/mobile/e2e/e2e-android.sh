@@ -12,7 +12,7 @@ HERE="$(cd "$(dirname "$0")" && pwd)"
 net() { adb shell svc wifi "$1"; adb shell svc data "$1"; }
 flow() {
   # screenshots (takeScreenshot) land in the cwd; debug output keeps hierarchy + screenshot on failure
-  (cd "$OUT" && maestro test --format junit --output "$OUT/$1.xml" --debug-output "$OUT/debug-$1" -e EMAIL="$E2E_EMAIL" -e PASSWORD="$E2E_PASSWORD" -e OUT="$OUT" "$HERE/$1.yaml") || {
+  (cd "$OUT" && maestro test --format junit --output "$OUT/$1.xml" --test-output-dir "$OUT/$1" -e EMAIL="$E2E_EMAIL" -e PASSWORD="$E2E_PASSWORD" "$HERE/$1.yaml") || {
     adb logcat -d -s ReactNativeJS:V AndroidRuntime:E > "$OUT/logcat-$1.txt" || true
     return 1
   }

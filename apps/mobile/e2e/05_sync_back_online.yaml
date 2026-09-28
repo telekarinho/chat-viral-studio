@@ -8,7 +8,7 @@ appId: me.rodrigoserra.postai
 - extendedWaitUntil:
     visible: "SINCRONIZADO"
     timeout: 240000
-- takeScreenshot: ${OUT}/07_sincronizado
+- takeScreenshot: 07_sincronizado
 - tapOn:
     id: take-row
 - extendedWaitUntil:

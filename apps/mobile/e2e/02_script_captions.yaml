@@ -28,7 +28,7 @@ appId: me.rodrigoserra.postai
 - scrollUntilVisible:
     element:
       text: ".*E se der certo!.*"
-- takeScreenshot: ${OUT}/02_roteiro
+- takeScreenshot: 02_roteiro
 - scrollUntilVisible:
     element:
       id: platform-tiktok
@@ -43,7 +43,7 @@ appId: me.rodrigoserra.postai
 - tapOn:
     id: copy-caption
 - assertVisible: "LEGENDA COPIADA ✓"
-- takeScreenshot: ${OUT}/03_legenda
+- takeScreenshot: 03_legenda
 - scrollUntilVisible:
     element:
       id: back-today

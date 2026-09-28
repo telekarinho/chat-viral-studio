@@ -39,4 +39,4 @@ appId: me.rodrigoserra.postai
     element:
       id: progress-card
 - assertVisible: ".*missões feitas.*"
-- takeScreenshot: ${OUT}/01_hoje
+- takeScreenshot: 01_hoje
