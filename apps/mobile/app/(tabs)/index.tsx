@@ -78,7 +78,7 @@ export default function Today() {
           syncLabel={syncLabel(sync, Boolean(workspace?.cloud))}
           generatingId={generatingId}
           onAction={onAction}
-          onRecord={(t) => router.push({ pathname: "/record", params: { taskId: t.id, contentId: t.contentItemId ?? "" } })}
+          onRecord={(t) => router.push({ pathname: "/record", params: { taskId: t.id, contentId: t.contentItemId ?? "", partes: t.contentItemId ? "1" : "0" } })}
           onOpenContent={(id) => router.push(`/content/${id}`)}
           onGenerate={onGenerate}
           onEvent={() => router.push("/event")}
