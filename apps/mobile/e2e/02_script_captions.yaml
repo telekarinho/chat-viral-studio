@@ -28,18 +28,22 @@ appId: me.rodrigoserra.postai
 - scrollUntilVisible:
     element:
       text: ".*E se der certo!.*"
-- takeScreenshot: 02_roteiro
+- takeScreenshot: ${OUT}/02_roteiro
 - scrollUntilVisible:
     element:
       id: platform-tiktok
 - tapOn:
     id: platform-tiktok
+- scrollUntilVisible:
+    element:
+      id: copy-caption
 - assertVisible:
+    id: caption-text
     text: ".*RodrigoSerra.me.*"
 - tapOn:
     id: copy-caption
 - assertVisible: "LEGENDA COPIADA ✓"
-- takeScreenshot: 03_legenda
+- takeScreenshot: ${OUT}/03_legenda
 - scrollUntilVisible:
     element:
       id: back-today

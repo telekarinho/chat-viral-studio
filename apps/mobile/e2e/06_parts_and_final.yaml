@@ -33,7 +33,7 @@ appId: me.rodrigoserra.postai
 - extendedWaitUntil:
     visible: "Parte 1 salva no aparelho ✓"
     timeout: 60000
-- takeScreenshot: 08_parte1_salva
+- takeScreenshot: ${OUT}/08_parte1_salva
 - tapOn:
     id: next-part
 - extendedWaitUntil:
@@ -59,7 +59,7 @@ appId: me.rodrigoserra.postai
 - scrollUntilVisible:
     element:
       id: edit-plan
-- takeScreenshot: 09_plano_edicao
+- takeScreenshot: ${OUT}/09_plano_edicao
 # parts may still be syncing: keep asking until the job is accepted
 - repeat:
     while:
@@ -100,4 +100,4 @@ appId: me.rodrigoserra.postai
     timeout: 60000
 - assertVisible:
     id: share-final
-- takeScreenshot: 10_video_final
+- takeScreenshot: ${OUT}/10_video_final

@@ -40,7 +40,7 @@ appId: me.rodrigoserra.postai
     id: prompter-back
 - tapOn:
     id: countdown-3
-- takeScreenshot: 04_teleprompter
+- takeScreenshot: ${OUT}/04_teleprompter
 - tapOn:
     id: record-button
 - extendedWaitUntil:
@@ -60,7 +60,7 @@ appId: me.rodrigoserra.postai
     visible:
       id: saved-local
     timeout: 60000
-- takeScreenshot: 05_salvo_offline
+- takeScreenshot: ${OUT}/05_salvo_offline
 - tapOn:
     id: attach-done
 - extendedWaitUntil:

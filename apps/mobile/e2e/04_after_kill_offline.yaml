@@ -16,7 +16,7 @@ appId: me.rodrigoserra.postai
       id: take-row
     timeout: 20000
 - assertVisible: "NA FILA PARA ENVIAR"
-- takeScreenshot: 06_apos_kill_offline
+- takeScreenshot: ${OUT}/06_apos_kill_offline
 - tapOn:
     id: take-row
 - extendedWaitUntil:
