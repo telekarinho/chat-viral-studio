@@ -51,7 +51,16 @@ jobs:
         run: |
           v=$(node -p "require('./apps/mobile/package.json').version")
           echo "apk_name=post-ai-beta-v${v}-${GITHUB_SHA::7}.apk" >> "$GITHUB_OUTPUT"
-          if [ -n "$EXPO_PUBLIC_SUPABASE_URL" ]; then echo "mode=nuvem" >> "$GITHUB_OUTPUT"; else echo "mode=local" >> "$GITHUB_OUTPUT"; fi
+          if [ -n "$EXPO_PUBLIC_SUPABASE_URL" ] && [ -n "$EXPO_PUBLIC_SUPABASE_ANON_KEY" ]; then echo "mode=nuvem" >> "$GITHUB_OUTPUT"; else echo "mode=local" >> "$GITHUB_OUTPUT"; fi
+      - name: Production Supabase check (auth reachable, anon blocked by RLS)
+        if: steps.meta.outputs.mode == 'nuvem'
+        run: |
+          code=$(curl -s -o /dev/null -w '%{http_code}' "$EXPO_PUBLIC_SUPABASE_URL/auth/v1/settings" -H "apikey: $EXPO_PUBLIC_SUPABASE_ANON_KEY")
+          echo "auth settings HTTP $code"; test "$code" = "200"
+          body=$(curl -s "$EXPO_PUBLIC_SUPABASE_URL/rest/v1/content_items?select=id&limit=1" -H "apikey: $EXPO_PUBLIC_SUPABASE_ANON_KEY")
+          echo "anon read content_items: $body"
+          case "$body" in "[]"|*permission*|*"42501"*) echo "anon blocked OK" ;; *) echo "anon can read data!"; exit 1 ;; esac
+          echo "Produção: Auth OK e anon bloqueado" >> "$GITHUB_STEP_SUMMARY"
       - name: Prebuild
         working-directory: apps/mobile
         run: npx expo prebuild -p android --no-install --clean
