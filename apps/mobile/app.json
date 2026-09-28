@@ -1,0 +1,17 @@
+{
+  "expo": {
+    "name": "Post.ai",
+    "slug": "post-ai",
+    "scheme": "postai",
+    "version": "0.1.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "light",
+    "plugins": ["expo-router"],
+    "android": {
+      "package": "me.rodrigoserra.postai"
+    },
+    "ios": {
+      "bundleIdentifier": "me.rodrigoserra.postai"
+    }
+  }
+}
