@@ -83,6 +83,7 @@ export default function Today() {
           onGenerate={onGenerate}
           onEvent={() => router.push("/event")}
           onFreeRecord={() => router.push("/record")}
+          pillarNames={Object.fromEntries((workspace?.pillars ?? []).map((pl) => [pl.slug, pl.name]))}
         />
       ) : null}
     </Screen>
