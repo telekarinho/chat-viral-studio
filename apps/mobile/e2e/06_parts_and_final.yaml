@@ -106,6 +106,7 @@ appId: me.rodrigoserra.postai
     visible:
       id: final-screen
     timeout: 60000
-- assertVisible:
-    id: share-final
+- scrollUntilVisible:
+    element:
+      id: share-final
 - takeScreenshot: 10_video_final
