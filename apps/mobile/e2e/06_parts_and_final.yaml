@@ -24,10 +24,9 @@ appId: me.rodrigoserra.postai
 - tapOn:
     id: record-parts
 - extendedWaitUntil:
-    visible:
-      id: part-indicator
+    visible: "Parte 1/2.*"
     timeout: 30000
-- assertVisible: "Parte 1/2.*"
+- takeScreenshot: 07c_parte1_teleprompter
 - tapOn:
     id: countdown-0
 - tapOn:
