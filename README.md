@@ -1,4 +1,14 @@
-# 🎬 Chat Viral Studio
+# 🎬 Chat Viral Studio + Post.ai
+
+> **Post.ai (novo, em beta)** — copiloto diário para creators: `apps/mobile` (React Native/Expo), `apps/api` (NestJS),
+> `packages/domain` e `supabase/`. Comece por [docs/CLOUD_HANDOFF.md](docs/CLOUD_HANDOFF.md), [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md),
+> [docs/HOMOLOGACAO.md](docs/HOMOLOGACAO.md) e [CHANGELOG.md](CHANGELOG.md).
+>
+> ```bash
+> npm ci && npm run lint && npm run typecheck && npm test   # monorepo Post.ai
+> ```
+>
+> O restante deste README descreve o produto legado Chat Viral Studio (`web/`, `backend/`, `android/` Flutter).
 
 Gerador de vídeos verticais virais de histórias fictícias em formato de conversa
 estilo mensageiro (Chat Verde). Crie roteiros com IA (Google Gemini), narre com
