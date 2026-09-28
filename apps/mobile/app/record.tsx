@@ -190,7 +190,7 @@ export default function RecordScreen() {
     const prog = segmentProgress(segments.length, recordedParts);
     return (
       <Screen testID="saved-screen">
-        <Text style={{ fontSize: 26, fontWeight: "900", color: colors.good }} testID="saved-local">Parte {segIndex + 1} salva no aparelho ✓</Text>
+        <Text style={{ fontSize: 26, fontWeight: "900", color: colors.good }} testID="saved-local">{`Parte ${segIndex + 1} salva no aparelho ✓`}</Text>
         <Text style={s.muted}>{prog.recorded.length} de {segments.length} partes gravadas · {(saved.media.sizeBytes / 1_048_576).toFixed(1)} MB</Text>
         {segments.map((seg) => (
           <Text key={seg.index} style={{ color: prog.recorded.includes(seg.index) ? colors.good : colors.muted, fontWeight: "700" }}>
