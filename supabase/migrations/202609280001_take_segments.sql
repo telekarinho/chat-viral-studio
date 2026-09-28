@@ -22,6 +22,7 @@ create table render_jobs (
 create index render_jobs_queue_idx on render_jobs(status, created_at);
 alter table render_jobs enable row level security;
 revoke all on render_jobs from anon;
+revoke all on render_jobs from authenticated; -- Supabase default privileges grant ALL on new tables
 grant select, insert on render_jobs to authenticated;
 create policy render_jobs_select on render_jobs for select to authenticated using (public.is_workspace_member(workspace_id));
 create policy render_jobs_insert on render_jobs for insert to authenticated

@@ -101,9 +101,9 @@ do $$ begin
   insert into render_jobs(workspace_id, content_item_id, plan, status) select v, 'cccccccc-0000-4000-8000-00000000000a', '{}', 'done' from ctx where k='wsA';
   raise exception 'client created a done render job';
 exception when insufficient_privilege or check_violation then null; end $$;
-do $$ begin
-  update render_jobs set status = 'done';
-  raise exception 'client updated render job';
+do $$ declare n int; begin
+  update render_jobs set status = 'done'; get diagnostics n = row_count;
+  if n <> 0 then raise exception 'client updated render job'; end if;
 exception when insufficient_privilege then null; end $$;
 select set_config('request.jwt.claims', '{"sub":"bbbbbbbb-0000-4000-8000-000000000002","role":"authenticated"}', true);
 do $$ declare n int; begin
