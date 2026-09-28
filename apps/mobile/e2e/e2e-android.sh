@@ -3,14 +3,20 @@
 # Needs: APK, maestro on PATH, local Supabase reachable from the host (emulator sees it at 10.0.2.2).
 set -euo pipefail
 APK="$1"
-OUT="${E2E_OUT:-e2e-results}"
+OUT="$(realpath -m "${E2E_OUT:-e2e-results}")"
 mkdir -p "$OUT"
 PKG=me.rodrigoserra.postai
 HERE="$(cd "$(dirname "$0")" && pwd)"
 : "${E2E_EMAIL:?}" "${E2E_PASSWORD:?}" "${SUPABASE_URL:?}" "${SUPABASE_SERVICE_ROLE_KEY:?}" "${DB_URL:?}"
 
 net() { adb shell svc wifi "$1"; adb shell svc data "$1"; }
-flow() { maestro test --format junit --output "$OUT/$1.xml" --debug-output "$OUT/$1" -e EMAIL="$E2E_EMAIL" -e PASSWORD="$E2E_PASSWORD" "$HERE/$1.yaml"; }
+flow() {
+  # screenshots (takeScreenshot) land in the cwd; debug output keeps hierarchy + screenshot on failure
+  (cd "$OUT" && maestro test --format junit --output "$OUT/$1.xml" --debug-output "$OUT/debug-$1" -e EMAIL="$E2E_EMAIL" -e PASSWORD="$E2E_PASSWORD" "$HERE/$1.yaml") || {
+    adb logcat -d -s ReactNativeJS:V AndroidRuntime:E > "$OUT/logcat-$1.txt" || true
+    return 1
+  }
+}
 step() { echo "::group::$1"; }
 endstep() { echo "::endgroup::"; }
 
@@ -45,6 +51,12 @@ endstep
 
 step "6. integridade remota"
 "$HERE/verify-remote.sh" | tee "$OUT/remote-integrity.txt"
+endstep
+
+step "7. gravação por partes + montagem final (worker FFmpeg no host)"
+flow 06_parts_and_final
+psql "$DB_URL" -tAc "select status, output_size from render_jobs" | tee "$OUT/render-jobs.txt"
+grep -q "^done|" "$OUT/render-jobs.txt"
 endstep
 adb logcat -d -s ReactNativeJS:V > "$OUT/logcat-js.txt" || true
 echo "E2E OK"

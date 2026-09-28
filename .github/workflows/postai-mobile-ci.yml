@@ -26,6 +26,8 @@ jobs:
           node-version: '22'
           cache: npm
           cache-dependency-path: package-lock.json
+      - name: FFmpeg (real render test)
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq ffmpeg fonts-dejavu-core > /dev/null
       - run: npm ci
       - name: Expo dependency versions
         working-directory: apps/mobile
@@ -54,6 +56,8 @@ jobs:
       - uses: supabase/setup-cli@v1
         with:
           version: latest
+      - name: FFmpeg (render worker)
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq ffmpeg fonts-dejavu-core > /dev/null
       - name: Start Supabase (db, auth, rest, storage)
         run: supabase start -x studio,imgproxy,mailpit,edge-runtime,logflare,vector,realtime,supavisor,postgres-meta
       - name: SQL RLS cross-tenant test
@@ -63,4 +67,5 @@ jobs:
         run: |
           eval "$(supabase status -o env | sed 's/^/export /')"
           export SUPABASE_URL="$API_URL" SUPABASE_ANON_KEY="$ANON_KEY" SUPABASE_SERVICE_ROLE_KEY="$SERVICE_ROLE_KEY"
-          cd apps/api && npx vitest run test/rls.integration.test.ts --reporter verbose
+          (cd apps/api && npx vitest run test/rls.integration.test.ts --reporter verbose)
+          (cd apps/worker && npx vitest run test/worker.integration.test.ts --reporter verbose)

@@ -41,6 +41,9 @@ export function getDb(): Promise<SQLite.SQLiteDatabase> {
     dbPromise = (async () => {
       const db = await SQLite.openDatabaseAsync("postai.db");
       await db.execAsync(SCHEMA);
+      // v2: gravação por partes
+      const cols = await db.getAllAsync<{ name: string }>("PRAGMA table_info(takes)");
+      if (!cols.some((c) => c.name === "segment_index")) await db.execAsync("ALTER TABLE takes ADD COLUMN segment_index INTEGER");
       return db;
     })();
   }

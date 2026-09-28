@@ -1,0 +1,103 @@
+appId: me.rodrigoserra.postai
+# Online: record the Thought of the Day part by part, then request the automatic final edit.
+---
+- launchApp:
+    stopApp: false
+- tapOn:
+    id: tab-Hoje
+- scrollUntilVisible:
+    element:
+      id: open-thought
+- tapOn:
+    id: open-thought
+- extendedWaitUntil:
+    visible:
+      id: record-parts
+    timeout: 20000
+- tapOn:
+    id: record-parts
+- extendedWaitUntil:
+    visible:
+      id: part-indicator
+    timeout: 30000
+- assertVisible: "Parte 1/2.*"
+- tapOn:
+    id: countdown-0
+- tapOn:
+    id: record-button
+- extendedWaitUntil:
+    visible: "● REC [3-9]s"
+    timeout: 20000
+- tapOn:
+    id: record-button
+- extendedWaitUntil:
+    visible: "Parte 1 salva no aparelho ✓"
+    timeout: 60000
+- takeScreenshot: 08_parte1_salva
+- tapOn:
+    id: next-part
+- extendedWaitUntil:
+    visible: "Parte 2/2.*"
+    timeout: 20000
+- assertVisible: "E se der certo!"
+- tapOn:
+    id: record-button
+- extendedWaitUntil:
+    visible: "● REC [3-9]s"
+    timeout: 20000
+- tapOn:
+    id: record-button
+- extendedWaitUntil:
+    visible: "Parte 2 salva no aparelho ✓"
+    timeout: 60000
+- tapOn:
+    id: attach-done
+- extendedWaitUntil:
+    visible:
+      id: content-screen
+    timeout: 20000
+- scrollUntilVisible:
+    element:
+      id: edit-plan
+- takeScreenshot: 09_plano_edicao
+# parts may still be syncing: keep asking until the job is accepted
+- repeat:
+    while:
+      notVisible: "Na fila de montagem…|Montando o vídeo…|BAIXAR VÍDEO FINAL"
+    times: 20
+    commands:
+      - scrollUntilVisible:
+          element:
+            id: request-final
+          optional: true
+      - tapOn:
+          id: request-final
+          optional: true
+      - extendedWaitUntil:
+          visible: "Na fila de montagem…|Montando o vídeo…|BAIXAR VÍDEO FINAL"
+          timeout: 8000
+          optional: true
+# the server worker renders; refresh until the download is available
+- repeat:
+    while:
+      notVisible:
+        id: download-final
+    times: 40
+    commands:
+      - tapOn:
+          text: "ATUALIZAR"
+          optional: true
+      - extendedWaitUntil:
+          visible:
+            id: download-final
+          timeout: 5000
+          optional: true
+- tapOn:
+    id: download-final
+- extendedWaitUntil:
+    visible:
+      id: final-screen
+    timeout: 60000
+- assertVisible:
+    id: share-final
+- takeScreenshot: 10_video_final

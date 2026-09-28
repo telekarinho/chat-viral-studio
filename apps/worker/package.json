@@ -1,0 +1,23 @@
+{
+  "name": "@postai/worker",
+  "private": true,
+  "version": "0.2.0",
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "lint": "eslint --config ../../eslint.config.mjs src test",
+    "test": "vitest run",
+    "render": "tsx src/cli.ts"
+  },
+  "dependencies": {
+    "@postai/domain": "0.2.0",
+    "@supabase/supabase-js": "^2.117.2"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.0",
+    "eslint": "^9.25.0",
+    "tsx": "^4.20.0",
+    "typescript": "~5.9.2",
+    "typescript-eslint": "^8.40.0",
+    "vitest": "^3.2.4"
+  }
+}

@@ -2,10 +2,11 @@ import { useCallback, useState } from "react";
 import { Text, TextInput, View } from "react-native";
 import * as Clipboard from "expo-clipboard";
 import { router, useFocusEffect, useLocalSearchParams } from "expo-router";
-import { FORMAT_LABEL, PLATFORMS, PLATFORM_LABEL, type Platform } from "@postai/domain";
-import { completeContent, getContent, listTakes, listTasks, selectHook, type ContentItem, type Take } from "../../src/db/repo";
+import { FORMAT_LABEL, PLATFORMS, PLATFORM_LABEL, buildEditPlan, buildSegments, type EditPlan, type Platform, type ScriptSegment } from "@postai/domain";
+import { completeContent, getContent, latestTakesBySegment, listTakes, listTasks, requireWorkspace, selectHook, type ContentItem, type Take } from "../../src/db/repo";
 import { generateForContent, saveUserEdit } from "../../src/generate";
 import { reportError } from "../../src/telemetry";
+import { downloadFinal, latestRenderJob, localFinal, requestFinalRender, type RenderJob } from "../../src/finalRender";
 import { Button, Card, Chip, ErrorBox, Eyebrow, H1, Loading, Screen, Section, colors, s } from "../../src/ui";
 
 export default function ContentScreen() {
@@ -18,12 +19,27 @@ export default function ContentScreen() {
   const [editing, setEditing] = useState<string | null>(null);
   const [platform, setPlatform] = useState<Platform>("instagram");
   const [copied, setCopied] = useState<string | null>(null);
+  const [parts, setParts] = useState<{ segments: ScriptSegment[]; recorded: number[]; plan: EditPlan | null } | null>(null);
+  const [job, setJob] = useState<RenderJob | null>(null);
+  const [finalUri, setFinalUri] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     const item = await getContent(id);
     setC(item);
     setTakes(await listTakes({ contentItemId: id }));
     if (item) setTaskId((await listTasks(item.date)).find((t) => t.contentItemId === id && t.status === "pending")?.id ?? null);
+    if (item?.draft) {
+      const ws = await requireWorkspace();
+      const segments = buildSegments(item.draft, { selectedHook: item.selectedHook ?? 0, userEdited: Boolean(item.meta?.userEdited), closingPhrase: ws.profile.closingPhrase });
+      const chosen = await latestTakesBySegment(item.id);
+      const recorded = segments.filter((sg) => chosen.has(sg.index)).map((sg) => sg.index);
+      const plan = recorded.length === segments.length
+        ? buildEditPlan({ segments, signature: ws.profile.signature, takes: segments.map((sg) => ({ segmentIndex: sg.index, takeId: chosen.get(sg.index)!.id, durationMs: chosen.get(sg.index)!.media.durationMs ?? 0 })) })
+        : null;
+      setParts({ segments, recorded, plan });
+      setFinalUri(await localFinal(item.id));
+      if (plan) setJob(await latestRenderJob(item.id).catch(() => null));
+    }
   }, [id]);
   useFocusEffect(useCallback(() => void load().catch((e) => setError(String(e))), [load]));
 
@@ -43,8 +59,7 @@ export default function ContentScreen() {
 
   async function copy(label: string, text: string) {
     await Clipboard.setStringAsync(text);
-    setCopied(label);
-    setTimeout(() => setCopied(null), 2000);
+    setCopied(label); // stays until another copy / platform change, so it's easy to confirm
   }
 
   if (!c) return <Screen><Loading /></Screen>;
@@ -76,9 +91,10 @@ export default function ContentScreen() {
             {c.meta?.userEdited ? " · editado por você" : ""}
           </Text>
 
+          <Button label={parts && parts.recorded.length > 0 && parts.recorded.length < parts.segments.length ? `CONTINUAR POR PARTES (${parts.recorded.length}/${parts.segments.length})` : "GRAVAR POR PARTES"} onPress={() => router.push({ pathname: "/record", params: { ...recordParams, partes: "1" } })} testID="record-parts" />
           <View style={s.row}>
-            <Button label="TELEPROMPTER + GRAVAR" onPress={() => router.push({ pathname: "/record", params: { ...recordParams, prompter: "1" } })} testID="open-teleprompter" />
-            <Button variant="secondary" label="SÓ GRAVAR" onPress={() => router.push({ pathname: "/record", params: recordParams })} />
+            <Button variant="secondary" label="TELEPROMPTER + GRAVAR TUDO" onPress={() => router.push({ pathname: "/record", params: { ...recordParams, prompter: "1" } })} testID="open-teleprompter" />
+            <Button variant="ghost" label="SÓ GRAVAR" onPress={() => router.push({ pathname: "/record", params: recordParams })} />
           </View>
 
           <Section>3 ganchos — escolha um</Section>
@@ -136,12 +152,52 @@ export default function ContentScreen() {
 
           <Section>Legenda para postar</Section>
           <View style={s.row}>
-            {PLATFORMS.map((p) => <Chip key={p} label={PLATFORM_LABEL[p]} selected={platform === p} onPress={() => setPlatform(p)} testID={`platform-${p}`} />)}
+            {PLATFORMS.map((p) => <Chip key={p} label={PLATFORM_LABEL[p]} selected={platform === p} onPress={() => { setPlatform(p); setCopied(null); }} testID={`platform-${p}`} />)}
           </View>
           <Card style={{ gap: 10 }} testID="caption-card">
             <Text style={s.body} selectable testID="caption-text">{d.caption[platform]}</Text>
             <Button compact label={copied === platform ? "LEGENDA COPIADA ✓" : `COPIAR LEGENDA ${PLATFORM_LABEL[platform].toUpperCase()}`} onPress={() => copy(platform, d.caption[platform])} testID="copy-caption" />
           </Card>
+
+          {parts ? (
+            <>
+              <Section>Partes ({parts.recorded.length}/{parts.segments.length})</Section>
+              <Card testID="parts-card">
+                {parts.segments.map((sg) => (
+                  <Text key={sg.index} style={{ color: parts.recorded.includes(sg.index) ? colors.good : colors.muted, fontWeight: "700" }}>
+                    {parts.recorded.includes(sg.index) ? "✓" : "○"} {sg.index + 1}. {sg.label}
+                  </Text>
+                ))}
+              </Card>
+              {parts.plan ? (
+                <Card testID="edit-plan" style={{ gap: 4 }}>
+                  <Text style={{ fontWeight: "900", color: colors.ink }}>Edição automática pronta para montar · {Math.round(parts.plan.totalMs / 1000)}s</Text>
+                  {parts.plan.clips.map((c) => (
+                    <Text key={c.segmentIndex} style={s.muted}>{c.segmentIndex + 1}. {EFFECT_LABEL[c.effect.kind]} · {(c.durationMs / 1000).toFixed(1)}s · {c.captions.length} legendas</Text>
+                  ))}
+                  <Text style={s.muted}>Legenda estilo Manuscrito + assinatura {parts.plan.signature}. A montagem (juntar + efeitos) roda no servidor de edição.</Text>
+                  {finalUri ? (
+                    <Button compact label="VER VÍDEO FINAL / POSTAR" onPress={() => router.push(`/final/${c.id}`)} testID="open-final" />
+                  ) : job?.status === "done" ? (
+                    <Button compact label="BAIXAR VÍDEO FINAL" onPress={() => run("baixar", async () => { await downloadFinal(c.id, job); router.push(`/final/${c.id}`); })} loading={busy === "baixar"} testID="download-final" />
+                  ) : job && (job.status === "queued" || job.status === "rendering") ? (
+                    <>
+                      <Text style={{ color: colors.info, fontWeight: "800" }}>{job.status === "queued" ? "Na fila de montagem…" : "Montando o vídeo…"}</Text>
+                      <Button compact variant="secondary" label="ATUALIZAR" onPress={() => void load()} />
+                    </>
+                  ) : (
+                    <>
+                      {job?.status === "failed" ? <Text style={{ color: colors.bad }}>A montagem falhou: {job.error}</Text> : null}
+                      <Button compact label="MONTAR VÍDEO FINAL" loading={busy === "montar"} testID="request-final" onPress={() => run("montar", async () => {
+                        const r = await requestFinalRender(c.workspaceId, c.id, parts.plan!);
+                        if (!r.ok) throw new Error(r.reason);
+                      })} />
+                    </>
+                  )}
+                </Card>
+              ) : null}
+            </>
+          ) : null}
 
           <Section>Takes deste conteúdo ({takes.length})</Section>
           {takes.map((t) => (
@@ -167,3 +223,12 @@ export default function ContentScreen() {
     </Screen>
   );
 }
+
+const EFFECT_LABEL: Record<EditPlan["clips"][number]["effect"]["kind"], string> = {
+  punch_in: "zoom rápido (punch-in)",
+  slow_zoom_in: "zoom lento",
+  zoom_out_reveal: "corte + zoom-out na virada",
+  push_in: "aproximação",
+  hold: "enquadramento fixo",
+  zoom_out_end: "zoom-out final + assinatura",
+};

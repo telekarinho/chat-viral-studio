@@ -111,6 +111,10 @@ jobs:
           export EXPO_PUBLIC_SUPABASE_URL=http://10.0.2.2:54321 EXPO_PUBLIC_SUPABASE_ANON_KEY="$SUPABASE_ANON_KEY"
           npx expo prebuild -p android --no-install --clean
           cd android && ./gradlew assembleRelease -PreactNativeArchitectures=x86_64 --no-daemon
+      - name: Start render worker (FFmpeg) on host
+        run: |
+          sudo apt-get update -qq && sudo apt-get install -y -qq ffmpeg fonts-dejavu-core > /dev/null
+          FONT_FILE=/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf nohup npx tsx apps/worker/src/main.ts > worker.log 2>&1 &
       - name: Install Maestro
         run: |
           curl -fsSL "https://get.maestro.mobile.dev" | bash
@@ -132,6 +136,8 @@ jobs:
           disable-animations: true
           emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim -camera-back emulated -camera-front emulated
           script: bash apps/mobile/e2e/e2e-android.sh apps/mobile/android/app/build/outputs/apk/release/app-release.apk
+      - if: always()
+        run: cp worker.log e2e-results/ 2>/dev/null || true
       - uses: actions/upload-artifact@v4
         if: always()
         with:

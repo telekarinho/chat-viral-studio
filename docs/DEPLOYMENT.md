@@ -25,6 +25,15 @@ Variáveis: `SUPABASE_URL`, `SUPABASE_ANON_KEY`, `OPENAI_API_KEY`, `OPENAI_MODEL
 A API usa o JWT do usuário para ler a memória (RLS aplica); **não** usa service role. Health: `GET /health`.
 Sem API configurada o app usa o gerador offline e o modo "meu ChatGPT/Claude".
 
+## 2b. Worker de montagem final (FFmpeg)
+Junta as partes gravadas, aplica zoom por trecho, legendas "Manuscrito" e assinatura, normaliza o áudio e salva o MP4 final 1080×1920 em `takes/<workspace>/finals/`.
+```bash
+docker build -f apps/worker/Dockerfile -t postai-worker .
+docker run -e SUPABASE_URL=... -e SUPABASE_SERVICE_ROLE_KEY=... postai-worker
+```
+Usa **service role** (só neste servidor). Reconstrói o plano de edição a partir dos dados do banco — não confia no plano enviado pelo celular.
+Sem worker rodando, o botão "MONTAR VÍDEO FINAL" fica na fila ("Na fila de montagem…").
+
 ## 3. APK Android
 GitHub → Settings → Secrets and variables → Actions → *New repository secret*:
 

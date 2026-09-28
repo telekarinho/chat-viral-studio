@@ -6,6 +6,7 @@
   "workspaces": [
     "packages/domain",
     "apps/api",
+    "apps/worker",
     "apps/mobile"
   ],
   "scripts": {

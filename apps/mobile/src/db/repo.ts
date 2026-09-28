@@ -58,6 +58,7 @@ export interface Take {
   tags: string[];
   camera: "front" | "back" | null;
   favorite: boolean;
+  segmentIndex: number | null;
   createdAt: string;
   media: MediaRow;
 }
@@ -383,7 +384,7 @@ export const mediaServerRow = (m: MediaRow) => ({
  */
 export async function registerTake(input: {
   mediaId: string; localUri: string; sizeBytes: number; checksum: string; width: number | null; height: number | null; durationMs: number | null;
-  taskId: string | null; contentItemId: string | null; category: string; camera: "front" | "back";
+  taskId: string | null; contentItemId: string | null; category: string; camera: "front" | "back"; segmentIndex?: number | null;
 }): Promise<Take> {
   const ws = await requireWorkspace();
   const db = await getDb();
@@ -396,14 +397,14 @@ export async function registerTake(input: {
       input.mediaId, ws.id, input.localUri, input.sizeBytes, input.checksum, state, createdAt, `${ws.id}/${input.mediaId}.mp4`, input.width, input.height, input.durationMs, createdAt,
     );
     await db.runAsync(
-      "INSERT INTO takes(id, workspace_id, task_id, content_item_id, media_id, category, tags, camera, created_at) VALUES (?,?,?,?,?,?,?,?,?)",
-      takeId, ws.id, input.taskId, input.contentItemId, input.mediaId, input.category, "[]", input.camera, createdAt,
+      "INSERT INTO takes(id, workspace_id, task_id, content_item_id, media_id, category, tags, camera, segment_index, created_at) VALUES (?,?,?,?,?,?,?,?,?,?)",
+      takeId, ws.id, input.taskId, input.contentItemId, input.mediaId, input.category, "[]", input.camera, input.segmentIndex ?? null, createdAt,
     );
   });
   const take = (await getTake(takeId))!;
   await enqueue(ws, "media_files", input.mediaId, { rows: [mediaServerRow(take.media)] });
   await enqueue(ws, "takes", takeId, {
-    rows: [{ id: takeId, workspace_id: ws.id, recording_task_id: input.taskId, content_item_id: input.contentItemId, media_file_id: input.mediaId, category: input.category, tags: [], camera: input.camera }],
+    rows: [{ id: takeId, workspace_id: ws.id, recording_task_id: input.taskId, content_item_id: input.contentItemId, media_file_id: input.mediaId, category: input.category, tags: [], camera: input.camera, segment_index: input.segmentIndex ?? null }],
   });
   if (input.contentItemId) {
     const c = await getContent(input.contentItemId);
@@ -412,7 +413,7 @@ export async function registerTake(input: {
   return take;
 }
 
-type TakeRow = { id: string; workspace_id: string; task_id: string | null; content_item_id: string | null; media_id: string; category: string; tags: string; camera: string | null; favorite: number; created_at: string };
+type TakeRow = { id: string; workspace_id: string; task_id: string | null; content_item_id: string | null; media_id: string; category: string; tags: string; camera: string | null; favorite: number; segment_index: number | null; created_at: string };
 
 async function hydrateTakes(rows: TakeRow[]): Promise<Take[]> {
   const db = await getDb();
@@ -420,7 +421,7 @@ async function hydrateTakes(rows: TakeRow[]): Promise<Take[]> {
   for (const r of rows) {
     const m = await db.getFirstAsync<MediaDbRow>("SELECT * FROM media WHERE id = ?", r.media_id);
     if (!m) continue;
-    out.push({ id: r.id, workspaceId: r.workspace_id, taskId: r.task_id, contentItemId: r.content_item_id, mediaId: r.media_id, category: r.category, tags: JSON.parse(r.tags), camera: r.camera as Take["camera"], favorite: r.favorite === 1, createdAt: r.created_at, media: toMedia(m) });
+    out.push({ id: r.id, workspaceId: r.workspace_id, taskId: r.task_id, contentItemId: r.content_item_id, mediaId: r.media_id, category: r.category, tags: JSON.parse(r.tags), camera: r.camera as Take["camera"], favorite: r.favorite === 1, segmentIndex: r.segment_index, createdAt: r.created_at, media: toMedia(m) });
   }
   return out;
 }
@@ -448,7 +449,7 @@ export async function updateTakeMeta(id: string, patch: { tags?: string[]; favor
   const next = { tags: patch.tags ?? t.tags, favorite: patch.favorite ?? t.favorite, category: patch.category ?? t.category };
   const db = await getDb();
   await db.runAsync("UPDATE takes SET tags = ?, favorite = ?, category = ? WHERE id = ?", JSON.stringify(next.tags), next.favorite ? 1 : 0, next.category, id);
-  await enqueue(ws, "takes", id, { rows: [{ id, workspace_id: ws.id, media_file_id: t.mediaId, recording_task_id: t.taskId, content_item_id: t.contentItemId, category: next.category, tags: next.tags, favorite: next.favorite, camera: t.camera }] });
+  await enqueue(ws, "takes", id, { rows: [{ id, workspace_id: ws.id, media_file_id: t.mediaId, recording_task_id: t.taskId, content_item_id: t.contentItemId, category: next.category, tags: next.tags, favorite: next.favorite, camera: t.camera, segment_index: t.segmentIndex }] });
 }
 
 export async function listMedia(): Promise<MediaRow[]> {
@@ -481,4 +482,12 @@ export async function donePillarSlugs(limit = 60): Promise<string[]> {
   const db = await getDb();
   const rows = await db.getAllAsync<{ pillar_slug: string }>("SELECT pillar_slug FROM content_items WHERE status IN ('recorded','published','done') ORDER BY date DESC LIMIT ?", limit);
   return rows.map((r) => r.pillar_slug);
+}
+
+/** Latest take per part for a content item (a retake replaces the previous choice; originals are kept). */
+export async function latestTakesBySegment(contentItemId: string): Promise<Map<number, Take>> {
+  const takes = await listTakes({ contentItemId });
+  const out = new Map<number, Take>();
+  for (const t of takes) if (t.segmentIndex !== null && !out.has(t.segmentIndex)) out.set(t.segmentIndex, t); // list is newest first
+  return out;
 }

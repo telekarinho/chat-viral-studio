@@ -4,9 +4,10 @@ import { router, useLocalSearchParams } from "expo-router";
 import { useKeepAwake } from "expo-keep-awake";
 import { Camera, useCameraDevice, useCameraPermission, useMicrophonePermission, type VideoFile } from "react-native-vision-camera";
 import {
-  PRESET_LABEL, availablePresets, initialTeleprompter, pickFormat, supportedFps, teleprompterReducer, type ResolutionPreset,
+  PRESET_LABEL, availablePresets, buildSegments, initialTeleprompter, pickFormat, segmentProgress, supportedFps, teleprompterReducer,
+  type ResolutionPreset, type ScriptSegment,
 } from "@postai/domain";
-import { getContent, getTask, registerTake, runTaskAction, requireWorkspace, updateSettings, type Take } from "../src/db/repo";
+import { getContent, getTask, latestTakesBySegment, registerTake, runTaskAction, requireWorkspace, updateSettings, type Take } from "../src/db/repo";
 import { freeDiskBytes, persistRecording } from "../src/media";
 import { newId } from "../src/config";
 import { syncNow } from "../src/sync/engine";
@@ -19,7 +20,7 @@ const LOW_DISK = 500 * 1024 * 1024;
 
 export default function RecordScreen() {
   useKeepAwake();
-  const params = useLocalSearchParams<{ taskId?: string; contentId?: string; prompter?: string }>();
+  const params = useLocalSearchParams<{ taskId?: string; contentId?: string; prompter?: string; partes?: string }>();
   const taskId = params.taskId || null;
   const contentId = params.contentId || null;
   const cam = useCameraPermission();
@@ -28,7 +29,11 @@ export default function RecordScreen() {
   const device = useCameraDevice(position);
   const [preset, setPreset] = useState<ResolutionPreset>("1080p");
   const [fps, setFps] = useState(30);
-  const [prompterOn, setPrompterOn] = useState(params.prompter === "1");
+  const [prompterOn, setPrompterOn] = useState(params.prompter === "1" || params.partes === "1");
+  // gravação por partes: only the current part is on the teleprompter; recorded parts disappear
+  const [segments, setSegments] = useState<ScriptSegment[] | null>(null);
+  const [segIndex, setSegIndex] = useState<number | null>(null);
+  const [recordedParts, setRecordedParts] = useState<number[]>([]);
   const [script, setScript] = useState("");
   const [category, setCategory] = useState("livre");
   const [tp, dispatch] = useReducer(teleprompterReducer, initialTeleprompter);
@@ -52,14 +57,22 @@ export default function RecordScreen() {
       const task = taskId ? await getTask(taskId) : null;
       const content = contentId ? await getContent(contentId) : null;
       setCategory(task?.kind ?? content?.format ?? "livre");
-      if (content?.draft) {
+      if (content?.draft && params.partes === "1") {
+        const segs = buildSegments(content.draft, { selectedHook: content.selectedHook ?? 0, userEdited: Boolean(content.meta?.userEdited), closingPhrase: ws.profile.closingPhrase });
+        const recorded = [...(await latestTakesBySegment(content.id)).keys()];
+        const next = segmentProgress(segs.length, recorded).next ?? 0;
+        setSegments(segs);
+        setRecordedParts(recorded);
+        setSegIndex(next);
+        setScript(segs[next]?.text ?? "");
+      } else if (content?.draft) {
         const hook = content.draft.hook_options[content.selectedHook ?? 0];
         setScript(hook && !content.draft.script.startsWith(hook) ? `${hook}\n\n${content.draft.script}` : content.draft.script);
       } else if (task) {
         setScript(`${task.title}${task.hint ? `\n\n${task.hint}` : ""}`);
       }
     })().catch((e) => reportError(e, "record init"));
-  }, [taskId, contentId]);
+  }, [taskId, contentId, params.partes]);
 
   useEffect(() => {
     if (!cam.hasPermission) void cam.requestPermission();
@@ -86,8 +99,9 @@ export default function RecordScreen() {
       const file = persistRecording(video.path, mediaId);
       const take = await registerTake({
         mediaId, localUri: file.uri, sizeBytes: file.sizeBytes, checksum: file.checksum, width: video.width ?? null, height: video.height ?? null,
-        durationMs: Math.round((video.duration ?? 0) * 1000), taskId, contentItemId: contentId, category, camera: position,
+        durationMs: Math.round((video.duration ?? 0) * 1000), taskId, contentItemId: contentId, category, camera: position, segmentIndex: segIndex,
       });
+      if (segIndex !== null) setRecordedParts((r) => [...new Set([...r, segIndex])]);
       setSaved(take);
       setPhase("saved");
       void syncNow();
@@ -96,7 +110,7 @@ export default function RecordScreen() {
       setMessage(`Não consegui salvar o vídeo: ${e instanceof Error ? e.message : String(e)}`);
       setPhase("error");
     }
-  }, [taskId, contentId, category, position]);
+  }, [taskId, contentId, category, position, segIndex]);
 
   const beginRecording = useCallback(() => {
     if (!camera.current) return;
@@ -162,6 +176,38 @@ export default function RecordScreen() {
   }
   if (!device) return <Screen><Loading label="Abrindo a câmera…" /></Screen>;
 
+  function goToPart(i: number) {
+    if (!segments?.[i]) return;
+    setSegIndex(i);
+    setScript(segments[i].text);
+    setSaved(null);
+    setMessage(null);
+    setPhase("ready");
+    dispatch({ type: "restart" });
+  }
+
+  if (phase === "saved" && saved && segments && segIndex !== null) {
+    const prog = segmentProgress(segments.length, recordedParts);
+    return (
+      <Screen testID="saved-screen">
+        <Text style={{ fontSize: 26, fontWeight: "900", color: colors.good }} testID="saved-local">Parte {segIndex + 1} salva no aparelho ✓</Text>
+        <Text style={s.muted}>{prog.recorded.length} de {segments.length} partes gravadas · {(saved.media.sizeBytes / 1_048_576).toFixed(1)} MB</Text>
+        {segments.map((seg) => (
+          <Text key={seg.index} style={{ color: prog.recorded.includes(seg.index) ? colors.good : colors.muted, fontWeight: "700" }}>
+            {prog.recorded.includes(seg.index) ? "✓" : "○"} Parte {seg.index + 1} · {seg.label}
+          </Text>
+        ))}
+        {prog.next !== null ? (
+          <Button label={`GRAVAR PARTE ${prog.next + 1} — ${segments[prog.next]!.label.toUpperCase()}`} onPress={() => goToPart(prog.next!)} testID="next-part" />
+        ) : (
+          <Button label="TODAS AS PARTES GRAVADAS — CONCLUIR" onPress={attachAndDone} testID="attach-done" />
+        )}
+        <Button variant="secondary" label={`REGRAVAR PARTE ${segIndex + 1}`} onPress={() => goToPart(segIndex)} testID="retake-part" />
+        <Text style={s.muted}>Pode fechar a qualquer momento: as partes ficam salvas e você continua de onde parou.</Text>
+      </Screen>
+    );
+  }
+
   if (phase === "saved" && saved) {
     return (
       <Screen testID="saved-screen">
@@ -202,7 +248,13 @@ export default function RecordScreen() {
 
       <View style={st.top}>
         <Pill label="✕" onPress={() => (phase === "recording" ? undefined : router.back())} hint="Fechar" />
-        {phase === "recording" ? <Text style={st.rec} testID="rec-indicator">● REC {elapsed}s</Text> : <Text style={st.meta}>{PRESET_LABEL[format && presets.includes(preset) ? preset : "1080p"]} · {effectiveFps}fps · 9:16</Text>}
+        {phase === "recording" ? (
+          <Text style={st.rec} testID="rec-indicator">● REC {elapsed}s</Text>
+        ) : segments && segIndex !== null ? (
+          <Text style={st.meta} testID="part-indicator">Parte {segIndex + 1}/{segments.length} · {segments[segIndex]?.label}</Text>
+        ) : (
+          <Text style={st.meta}>{PRESET_LABEL[format && presets.includes(preset) ? preset : "1080p"]} · {effectiveFps}fps · 9:16</Text>
+        )}
         <Pill label="⟲" onPress={() => phase !== "recording" && setPosition(position === "front" ? "back" : "front")} hint="Trocar câmera" testID="flip-camera" />
       </View>
 
