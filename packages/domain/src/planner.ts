@@ -85,9 +85,11 @@ export function buildDayPlan(input: {
   recentPillarSlugs: readonly string[];
   newId: () => string;
   now: string;
+  /** use another weekday's routine (E2E builds on weekends) */
+  weekdayOverride?: number;
 }): DayPlan {
   const dateKey = toLocalDateKey(input.date);
-  const weekday = input.date.getDay();
+  const weekday = input.weekdayOverride ?? input.date.getDay();
   const blocks = input.routine.filter((b) => b.weekday === weekday).sort((a, b) => a.startTime.localeCompare(b.startTime));
   const history = [...input.recentPillarSlugs];
   const contentItems: PlannedContentItem[] = [];

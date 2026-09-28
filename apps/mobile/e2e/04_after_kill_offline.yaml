@@ -1,0 +1,27 @@
+appId: me.rodrigoserra.postai
+# App was force-stopped while offline. Take and state must still be there.
+---
+- launchApp:
+    stopApp: false
+- extendedWaitUntil:
+    visible:
+      id: today-screen
+    timeout: 30000
+- assertVisible:
+    text: "Offline.*"
+- tapOn:
+    id: tab-Projetos
+- extendedWaitUntil:
+    visible:
+      id: take-row
+    timeout: 20000
+- assertVisible: "NA FILA PARA ENVIAR"
+- takeScreenshot: 06_apos_kill_offline
+- tapOn:
+    id: take-row
+- extendedWaitUntil:
+    visible:
+      id: take-info
+    timeout: 20000
+- assertVisible: "Na fila para enviar"
+- back

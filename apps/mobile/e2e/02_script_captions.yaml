@@ -1,0 +1,63 @@
+appId: me.rodrigoserra.postai
+---
+- launchApp:
+    stopApp: false
+- scrollUntilVisible:
+    element:
+      id: generate-main_video
+- tapOn:
+    id: generate-main_video
+- extendedWaitUntil:
+    visible:
+      id: content-screen
+    timeout: 60000
+- scrollUntilVisible:
+    element:
+      id: hook-2
+- assertVisible:
+    id: hook-0
+- assertVisible:
+    id: hook-1
+- scrollUntilVisible:
+    element:
+      id: narrative-POR ISSO
+- assertVisible:
+    id: narrative-E
+- assertVisible:
+    id: narrative-MAS
+- scrollUntilVisible:
+    element:
+      text: ".*E se der certo!.*"
+- takeScreenshot: 02_roteiro
+- scrollUntilVisible:
+    element:
+      id: platform-tiktok
+- tapOn:
+    id: platform-tiktok
+- assertVisible:
+    text: ".*RodrigoSerra.me.*"
+- tapOn:
+    id: copy-caption
+- assertVisible: "LEGENDA COPIADA ✓"
+- takeScreenshot: 03_legenda
+- scrollUntilVisible:
+    element:
+      id: back-today
+- tapOn:
+    id: back-today
+- extendedWaitUntil:
+    visible:
+      id: today-screen
+    timeout: 20000
+# second generation of the same pillar/format must not repeat the first one (memory / anti-repetition)
+- scrollUntilVisible:
+    element:
+      id: generate-thought
+- tapOn:
+    id: generate-thought
+- extendedWaitUntil:
+    visible:
+      id: content-screen
+    timeout: 60000
+- assertVisible:
+    id: hook-0

@@ -188,6 +188,13 @@ describe("fila de sincronização", () => {
     expect(r.state).toBe("dead_letter");
     expect(applySyncEvent(r, { type: "retry" }, now)).toMatchObject({ state: "queued", attempts: 0 });
   });
+  it("queda de rede não consome tentativa e a volta da conexão libera a fila", () => {
+    let r: MediaRecord = { ...base, state: "queued" };
+    for (let i = 0; i < 50; i++) r = applySyncEvent(applySyncEvent(r, { type: "start" }, now), { type: "interrupted", error: "offline" }, now);
+    expect(r).toMatchObject({ state: "queued", attempts: 0 });
+    expect(isDue(r, now)).toBe(false);
+    expect(isDue(applySyncEvent(r, { type: "online" }, now), now)).toBe(true);
+  });
   it("upload interrompido por kill volta à fila; original nunca é apagado antes da verificação", () => {
     expect(recoverAfterRestart({ ...base, state: "uploading" }, now).state).toBe("queued");
     expect(canDeleteLocal({ ...base, state: "queued" }, { allowCleanup: true, keepDays: 0 }, now)).toBe(false);

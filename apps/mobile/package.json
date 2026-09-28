@@ -8,7 +8,8 @@
     "android": "expo run:android",
     "typecheck": "tsc --noEmit",
     "lint": "eslint app src test",
-    "test": "jest --ci"
+    "test": "jest --ci",
+    "ios": "expo run:ios"
   },
   "dependencies": {
     "@postai/domain": "0.2.0",
@@ -48,5 +49,14 @@
     "jest-expo": "~54.0.18",
     "react-test-renderer": "19.1.0",
     "typescript": "~5.9.2"
+  },
+  "jest": {
+    "preset": "jest-expo",
+    "transformIgnorePatterns": [
+      "node_modules/(?!((jest-)?react-native|@react-native(-community)?)|expo(nent)?|@expo(nent)?/.*|@expo-google-fonts/.*|react-navigation|@react-navigation/.*|@sentry/react-native|native-base|react-native-svg|@postai/.*)"
+    ],
+    "testMatch": [
+      "<rootDir>/test/**/*.test.ts?(x)"
+    ]
   }
 }

@@ -1,33 +1,66 @@
-name: Post.ai Mobile CI
+name: Post.ai CI
 
 on:
   pull_request:
-    paths:
-      - 'apps/mobile/**'
-      - '.github/workflows/postai-mobile-ci.yml'
+    paths: ['apps/**', 'packages/**', 'supabase/**', 'package.json', 'package-lock.json', 'eslint.config.mjs', '.github/workflows/postai-*.yml']
   push:
     branches: [main]
-    paths:
-      - 'apps/mobile/**'
-      - '.github/workflows/postai-mobile-ci.yml'
+    paths: ['apps/**', 'packages/**', 'supabase/**', 'package.json', 'package-lock.json', 'eslint.config.mjs', '.github/workflows/postai-*.yml']
   workflow_dispatch:
 
 permissions:
   contents: read
 
+concurrency:
+  group: postai-ci-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
-  typecheck:
+  checks:
+    name: lint · typecheck · unit/component tests
     runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: apps/mobile
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
           cache: npm
-          cache-dependency-path: apps/mobile/package-lock.json
-      - run: npm install --package-lock-only
+          cache-dependency-path: package-lock.json
       - run: npm ci
+      - name: Expo dependency versions
+        working-directory: apps/mobile
+        run: npx expo install --check
+      - run: npm run lint
       - run: npm run typecheck
+      - run: npm test
+      - name: API production bundle
+        run: npm run build -w @postai/api
+      - name: No secrets committed
+        run: |
+          if git grep -nE 'sk-(proj-)?[A-Za-z0-9_-]{20,}|(SUPABASE_SERVICE_ROLE_KEY|OPENAI_API_KEY)=[^$ ]+' -- ':!*.md' ':!.github/workflows/*'; then
+            echo "Possible secret committed"; exit 1
+          fi
+
+  database:
+    name: migrations · RLS · auth integration (Supabase local)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: package-lock.json
+      - uses: supabase/setup-cli@v1
+        with:
+          version: latest
+      - name: Start Supabase (db, auth, rest, storage)
+        run: supabase start -x studio,imgproxy,mailpit,edge-runtime,logflare,vector,realtime,supavisor,postgres-meta
+      - name: SQL RLS cross-tenant test
+        run: psql "postgresql://postgres:postgres@127.0.0.1:54322/postgres" -v ON_ERROR_STOP=1 -f supabase/tests/rls_test.sql
+      - run: npm ci
+      - name: Auth + RLS + Storage integration (supabase-js, real GoTrue)
+        run: |
+          eval "$(supabase status -o env | sed 's/^/export /')"
+          export SUPABASE_URL="$API_URL" SUPABASE_ANON_KEY="$ANON_KEY" SUPABASE_SERVICE_ROLE_KEY="$SERVICE_ROLE_KEY"
+          cd apps/api && npx vitest run test/rls.integration.test.ts --reporter verbose

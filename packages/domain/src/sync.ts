@@ -21,6 +21,10 @@ export type SyncEvent =
   | { type: "start" }
   | { type: "uploaded"; remoteSize: number; remoteChecksum: string | null }
   | { type: "failed"; error: string }
+  /** network dropped: not the file's fault, so it doesn't consume an attempt */
+  | { type: "interrupted"; error: string }
+  /** connectivity is back: queued items become due immediately */
+  | { type: "online" }
   | { type: "retry" };
 
 export const SYNC_POLICY = { baseDelayMs: 5_000, maxDelayMs: 30 * 60_000, maxAttempts: 8 };
@@ -50,6 +54,11 @@ export function applySyncEvent(r: MediaRecord, ev: SyncEvent, now: Date): MediaR
       if (attempts >= SYNC_POLICY.maxAttempts) return { ...r, state: "dead_letter", attempts, lastError: ev.error, nextAttemptAt: null };
       return { ...r, state: "queued", attempts, lastError: ev.error, nextAttemptAt: new Date(now.getTime() + backoffMs(attempts)).toISOString() };
     }
+    case "interrupted":
+      if (r.state !== "uploading" && r.state !== "queued") return r;
+      return { ...r, state: "queued", lastError: ev.error, nextAttemptAt: new Date(now.getTime() + SYNC_POLICY.baseDelayMs).toISOString() };
+    case "online":
+      return r.state === "queued" ? { ...r, nextAttemptAt: iso } : r;
     case "retry":
       return r.state === "dead_letter" || r.state === "queued" ? { ...r, state: "queued", attempts: 0, nextAttemptAt: iso } : r;
   }
