@@ -14,6 +14,9 @@ export interface RenderJobRow {
 
 export const MAX_RENDER_ATTEMPTS = 3;
 
+/** Parts not synced yet: retry later without consuming an attempt. */
+export class NotReadyError extends Error {}
+
 /**
  * Rebuilds the edit plan from server data (never trusts the plan sent by the device), downloads the
  * chosen originals, renders the final 9:16 and uploads it next to the takes.
@@ -44,7 +47,7 @@ export async function buildServerPlan(db: SupabaseClient, job: RenderJobRow): Pr
   }
   const chosen = segments.map((s) => latest.get(s.index));
   const notReady = segments.filter((s, i) => !chosen[i]?.media_files?.storage_key || chosen[i]!.media_files!.state !== "uploaded_original").map((s) => s.index + 1);
-  if (notReady.length) throw new Error(`partes ainda não sincronizadas: ${notReady.join(", ")}`);
+  if (notReady.length) throw new NotReadyError(`partes ainda não sincronizadas: ${notReady.join(", ")}`);
   const plan = buildEditPlan({
     segments,
     signature: profile.data!.signature ?? "",
@@ -77,7 +80,11 @@ export async function processJob(db: SupabaseClient, job: RenderJobRow, fontFile
     return { outputKey, size: bytes.length };
   } catch (e) {
     const error = e instanceof Error ? e.message : String(e);
-    await db.from("render_jobs").update({ status: job.attempts >= MAX_RENDER_ATTEMPTS ? "failed" : "queued", error: error.slice(0, 500), updated_at: new Date().toISOString() }).eq("id", job.id);
+    const notReady = e instanceof NotReadyError;
+    const status = !notReady && job.attempts >= MAX_RENDER_ATTEMPTS ? "failed" : "queued";
+    await db.from("render_jobs")
+      .update({ status, attempts: notReady ? job.attempts - 1 : job.attempts, error: error.slice(0, 500), updated_at: new Date().toISOString() })
+      .eq("id", job.id);
     throw e;
   } finally {
     rmSync(dir, { recursive: true, force: true });
