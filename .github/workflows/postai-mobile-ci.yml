@@ -1,0 +1,33 @@
+name: Post.ai Mobile CI
+
+on:
+  pull_request:
+    paths:
+      - 'apps/mobile/**'
+      - '.github/workflows/postai-mobile-ci.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'apps/mobile/**'
+      - '.github/workflows/postai-mobile-ci.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  typecheck:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: apps/mobile
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: apps/mobile/package-lock.json
+      - run: npm install --package-lock-only
+      - run: npm ci
+      - run: npm run typecheck
