@@ -4,6 +4,11 @@ appId: me.rodrigoserra.postai
     clearState: true
     permissions:
       all: allow
+- runFlow:
+    when:
+      visible: ".*isn't responding"
+    commands:
+      - tapOn: "Wait"
 - extendedWaitUntil:
     visible:
       id: login-screen

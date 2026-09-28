@@ -3,6 +3,11 @@ appId: me.rodrigoserra.postai
 ---
 - launchApp:
     stopApp: false
+- runFlow:
+    when:
+      visible: ".*isn't responding"
+    commands:
+      - tapOn: "Wait"
 # previous flow ends inside a pushed screen (no tab bar): go back to the tabs first
 - repeat:
     while:
