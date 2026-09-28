@@ -3,6 +3,13 @@ appId: me.rodrigoserra.postai
 ---
 - launchApp:
     stopApp: false
+- repeat:
+    while:
+      notVisible:
+        id: tab-Hoje
+    times: 4
+    commands:
+      - back
 - tapOn:
     id: tab-Hoje
 - scrollUntilVisible:

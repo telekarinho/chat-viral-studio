@@ -3,6 +3,14 @@ appId: me.rodrigoserra.postai
 ---
 - launchApp:
     stopApp: false
+# previous flow ends inside a pushed screen (no tab bar): go back to the tabs first
+- repeat:
+    while:
+      notVisible:
+        id: tab-Hoje
+    times: 4
+    commands:
+      - back
 - tapOn:
     id: tab-Hoje
 - extendedWaitUntil:
