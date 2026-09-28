@@ -412,7 +412,7 @@ var json = (status, body) => new Response(JSON.stringify(body), { status, header
 Deno.serve(async (req) => {
   if (req.method !== "POST") return json(405, { code: "method_not_allowed" });
   const url = Deno.env.get("SUPABASE_URL");
-  const anon = Deno.env.get("SUPABASE_ANON_KEY");
+  const anon = Deno.env.get("SUPABASE_ANON_KEY") ?? req.headers.get("apikey") ?? "";
   const key = Deno.env.get("GEMINI_API_KEY");
   const token = /^Bearer (.+)$/.exec(req.headers.get("Authorization") ?? "")?.[1];
   if (!token) return json(401, { code: "unauthorized" });
