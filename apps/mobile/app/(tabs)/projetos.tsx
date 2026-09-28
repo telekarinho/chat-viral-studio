@@ -1,9 +1,10 @@
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { Pressable, Text, View } from "react-native";
 import { router, useFocusEffect } from "expo-router";
 import { FORMAT_LABEL, SYNC_LABEL } from "@postai/domain";
 import { listRecentContent, listTakes, type ContentItem, type Take } from "../../src/db/repo";
 import { Card, Chip, Empty, Eyebrow, H1, Screen, Section, colors, s } from "../../src/ui";
+import { subscribeSync } from "../../src/sync/engine";
 
 const CATEGORIES: { key: string | null; label: string }[] = [
   { key: null, label: "Todos" },
@@ -17,10 +18,13 @@ export default function Projetos() {
   const [cat, setCat] = useState<string | null>(null);
   const [takes, setTakes] = useState<Take[]>([]);
   const [contents, setContents] = useState<ContentItem[]>([]);
-  useFocusEffect(useCallback(() => {
+  const load = useCallback(() => {
     void listTakes(cat ? { category: cat } : undefined).then(setTakes);
     void listRecentContent(30).then((c) => setContents(c.filter((x) => x.draft)));
-  }, [cat]));
+  }, [cat]);
+  useFocusEffect(load);
+  // upload states change in the background: refresh the list live
+  useEffect(() => subscribeSync((st) => { if (!st.running) load(); }), [load]);
 
   return (
     <Screen testID="projetos-screen">
