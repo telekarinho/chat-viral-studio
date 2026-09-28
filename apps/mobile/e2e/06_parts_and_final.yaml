@@ -33,7 +33,7 @@ appId: me.rodrigoserra.postai
 - tapOn:
     id: record-button
 - extendedWaitUntil:
-    visible: "● REC [3-9]s"
+    visible: "● REC ([3-9]|[1-9][0-9]+)s"
     timeout: 20000
 - tapOn:
     id: record-button
@@ -50,7 +50,7 @@ appId: me.rodrigoserra.postai
 - tapOn:
     id: record-button
 - extendedWaitUntil:
-    visible: "● REC [3-9]s"
+    visible: "● REC ([3-9]|[1-9][0-9]+)s"
     timeout: 20000
 - tapOn:
     id: record-button

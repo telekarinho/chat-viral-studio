@@ -60,7 +60,7 @@ appId: me.rodrigoserra.postai
 - tapOn:
     id: prompter-pause
 - extendedWaitUntil:
-    visible: "● REC [5-9]s|● REC 1[0-9]s"
+    visible: "● REC ([5-9]|[1-9][0-9]+)s"
     timeout: 20000
 - tapOn:
     id: record-button
