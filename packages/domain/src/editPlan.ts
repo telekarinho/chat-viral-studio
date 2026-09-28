@@ -40,6 +40,8 @@ export interface EditPlan {
   height: 1920;
   fps: 30;
   captionStyle: CaptionStyle;
+  /** light skin retouch on the final (never on the original): "leve" ≈ TikTok/WhatsApp beauty, subtle */
+  retouch: "off" | "leve";
   signature: string;
   clips: EditClip[];
   totalMs: number;
@@ -50,6 +52,7 @@ export interface PlanInput {
   /** chosen (latest) take per segment index */
   takes: ReadonlyArray<{ segmentIndex: number; takeId: string; durationMs: number }>;
   captionStyle?: CaptionStyle;
+  retouch?: "off" | "leve";
   signature: string;
 }
 
@@ -142,5 +145,5 @@ export function buildEditPlan(input: PlanInput): EditPlan {
       captions: buildCaptions(seg.text, durationMs, style),
     };
   });
-  return { version: "edit-v1", width: 1080, height: 1920, fps: 30, captionStyle: style, signature: input.signature, clips, totalMs: clips.reduce((a, c) => a + c.durationMs, 0) };
+  return { version: "edit-v1", width: 1080, height: 1920, fps: 30, captionStyle: style, retouch: input.retouch ?? "leve", signature: input.signature, clips, totalMs: clips.reduce((a, c) => a + c.durationMs, 0) };
 }

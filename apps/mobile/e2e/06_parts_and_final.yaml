@@ -76,7 +76,7 @@ appId: me.rodrigoserra.postai
 # parts may still be syncing: keep asking until the job is accepted
 - repeat:
     while:
-      notVisible: "Na fila de montagem…|Montando o vídeo…|BAIXAR VÍDEO FINAL"
+      notVisible: "Na fila de montagem….*|Montando o vídeo…|BAIXAR VÍDEO FINAL"
     times: 20
     commands:
       - scrollUntilVisible:
@@ -87,7 +87,7 @@ appId: me.rodrigoserra.postai
           id: request-final
           optional: true
       - extendedWaitUntil:
-          visible: "Na fila de montagem…|Montando o vídeo…|BAIXAR VÍDEO FINAL"
+          visible: "Na fila de montagem….*|Montando o vídeo…|BAIXAR VÍDEO FINAL"
           timeout: 8000
           optional: true
 # the server worker renders; refresh until the download is available

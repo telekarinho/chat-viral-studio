@@ -1,21 +1,28 @@
-import OpenAI from "openai";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import { RODRIGO_PROFILE, summarizeForMemory, type CreatorProfile, type Fingerprint, type FingerprintType } from "@postai/domain";
 import type { LlmClient, MemoryStore } from "./generation.service";
 
-export function openAiClient(apiKey: string, model: string): LlmClient {
-  const client = new OpenAI({ apiKey, timeout: 60_000, maxRetries: 1 });
+/**
+ * Google Gemini (free tier available via Google AI Studio). Structured output through responseJsonSchema;
+ * if the schema dialect is rejected, retries with JSON mode only — Zod validates the result either way.
+ */
+export function geminiClient(apiKey: string, model: string, fetchImpl: typeof fetch = fetch): LlmClient {
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`;
+  async function call(body: Record<string, unknown>) {
+    const res = await fetchImpl(url, { method: "POST", headers: { "Content-Type": "application/json", "x-goog-api-key": apiKey }, body: JSON.stringify(body) });
+    return { res, json: (await res.json().catch(() => ({}))) as { candidates?: { content?: { parts?: { text?: string }[] } }[]; error?: { message?: string } } };
+  }
   return {
     model,
+    source: "gemini",
     async complete({ system, user, schema }) {
-      const res = await client.chat.completions.create({
-        model,
-        messages: [{ role: "system", content: system }, { role: "user", content: user }],
-        response_format: { type: "json_schema", json_schema: { name: "content_draft", strict: true, schema } },
-      });
-      const content = res.choices[0]?.message?.content;
-      if (!content) throw new Error("empty completion");
-      return JSON.parse(content);
+      const base = { systemInstruction: { parts: [{ text: system }] }, contents: [{ role: "user", parts: [{ text: user }] }] };
+      let r = await call({ ...base, generationConfig: { temperature: 0.9, responseMimeType: "application/json", responseJsonSchema: schema } });
+      if (r.res.status === 400) r = await call({ ...base, generationConfig: { temperature: 0.9, responseMimeType: "application/json" } });
+      if (!r.res.ok) throw new Error(`gemini HTTP ${r.res.status}: ${r.json.error?.message ?? ""}`.slice(0, 200));
+      const text = r.json.candidates?.[0]?.content?.parts?.map((p) => p.text ?? "").join("") ?? "";
+      if (!text) throw new Error("empty gemini response");
+      return JSON.parse(text.replace(/^```(?:json)?\s*|\s*```$/g, ""));
     },
   };
 }
@@ -69,7 +76,7 @@ export function supabaseMemory(db: SupabaseClient, userId: string): MemoryStore 
     },
     async saveRun(run) {
       const { error } = await db.from("generation_runs").insert({
-        workspace_id: run.workspaceId, content_item_id: null, source: "openai", model: run.model, prompt_version: run.promptVersion,
+        workspace_id: run.workspaceId, content_item_id: null, source: run.model.startsWith("gemini") ? "gemini" : "openai", model: run.model, prompt_version: run.promptVersion,
         request: run.request, response: run.response, accepted: run.accepted, rejection_reason: run.rejectionReason,
         repetition: run.repetition ?? {}, latency_ms: run.latencyMs, created_by: userId,
       });

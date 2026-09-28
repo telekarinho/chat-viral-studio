@@ -59,7 +59,7 @@ jobs:
       - name: FFmpeg (render worker)
         run: sudo apt-get update -qq && sudo apt-get install -y -qq ffmpeg fonts-dejavu-core > /dev/null
       - name: Start Supabase (db, auth, rest, storage)
-        run: supabase start -x studio,imgproxy,mailpit,edge-runtime,logflare,vector,realtime,supavisor,postgres-meta
+        run: supabase start -x studio,imgproxy,mailpit,logflare,vector,realtime,supavisor,postgres-meta
       - name: SQL RLS cross-tenant test
         run: psql "postgresql://postgres:postgres@127.0.0.1:54322/postgres" -v ON_ERROR_STOP=1 -f supabase/tests/rls_test.sql
       - run: npm ci
@@ -69,3 +69,15 @@ jobs:
           export SUPABASE_URL="$API_URL" SUPABASE_ANON_KEY="$ANON_KEY" SUPABASE_SERVICE_ROLE_KEY="$SERVICE_ROLE_KEY"
           (cd apps/api && npx vitest run test/rls.integration.test.ts --reporter verbose)
           (cd apps/worker && npx vitest run test/worker.integration.test.ts --reporter verbose)
+      - name: Edge Function `generate` boots in Deno (auth + config guards)
+        run: |
+          eval "$(supabase status -o env | sed 's/^/export /')"
+          F="$API_URL/functions/v1/generate"
+          test "$(curl -s -o /dev/null -w '%{http_code}' -X POST "$F" -H "apikey: $ANON_KEY")" = "401"
+          curl -sf -X POST "$API_URL/auth/v1/admin/users" -H "apikey: $SERVICE_ROLE_KEY" -H "Authorization: Bearer $SERVICE_ROLE_KEY" -H 'Content-Type: application/json' -d '{"email":"edge@test.local","password":"edge-pass-123","email_confirm":true}' >/dev/null
+          T=$(curl -sf -X POST "$API_URL/auth/v1/token?grant_type=password" -H "apikey: $ANON_KEY" -H 'Content-Type: application/json' -d '{"email":"edge@test.local","password":"edge-pass-123"}' | node -p "JSON.parse(require('fs').readFileSync(0,'utf8')).access_token")
+          body='{"workspace_id":"11111111-1111-4111-8111-111111111111","content_item_id":null,"format":"thought","pillar_slug":"reflexao","event_text":null}'
+          r=$(curl -s -X POST "$F" -H "apikey: $ANON_KEY" -H "Authorization: Bearer $T" -H 'Content-Type: application/json' -d "$body")
+          echo "$r"; echo "$r" | grep -q llm_not_configured
+      - name: Edge bundle is up to date
+        run: npm run build:edge -w @postai/api && git diff --exit-code supabase/functions

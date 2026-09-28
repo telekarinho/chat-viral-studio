@@ -49,6 +49,14 @@ export function buildPrompt(input: PromptInput): { system: string; user: string;
     `As legendas terminam com a assinatura ${input.profile.signature}.`,
     "Nunca prometa viralização, resultado garantido ou números de alcance.",
     "Dê 3 ganchos diferentes entre si (formas diferentes: pergunta, confissão, contraste...).",
+    "Regras de retenção para vídeo curto (Reels/TikTok/Shorts):",
+    "- o gancho prende nos 2 primeiros segundos: até 12 palavras, concreto, abre uma lacuna de curiosidade ou quebra uma expectativa;",
+    "- uma única ideia por vídeo, com um detalhe específico e real (lugar, hora, objeto, frase ouvida) em vez de abstração;",
+    "- tensão no MAS: algo que o espectador também vive e não admite;",
+    "- o POR ISSO entrega uma virada prática que dá vontade de salvar ou mandar para alguém;",
+    "- o CTA pede uma resposta simples nos comentários ligada ao tema (nada de 'curte e compartilha');",
+    "- screen_text: 2 a 5 palavras que resumem o vídeo sem repetir o gancho;",
+    "- legendas por plataforma adaptadas (TikTok curta e direta; Instagram com respiro; YouTube Shorts com título forte);",
     "Responda somente no JSON do schema.",
   ].join("\n");
   const user = [

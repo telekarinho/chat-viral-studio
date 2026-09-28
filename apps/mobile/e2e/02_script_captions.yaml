@@ -7,11 +7,13 @@ appId: me.rodrigoserra.postai
       visible: ".*isn't responding"
     commands:
       - tapOn: "Wait"
+# scripts are generated automatically when Hoje opens
 - scrollUntilVisible:
     element:
-      id: generate-main_video
+      id: open-main_video
+    timeout: 60000
 - tapOn:
-    id: generate-main_video
+    id: open-main_video
 - extendedWaitUntil:
     visible:
       id: content-screen
@@ -61,9 +63,10 @@ appId: me.rodrigoserra.postai
 # second generation of the same pillar/format must not repeat the first one (memory / anti-repetition)
 - scrollUntilVisible:
     element:
-      id: generate-thought
+      id: open-thought
+    timeout: 60000
 - tapOn:
-    id: generate-thought
+    id: open-thought
 - extendedWaitUntil:
     visible:
       id: content-screen

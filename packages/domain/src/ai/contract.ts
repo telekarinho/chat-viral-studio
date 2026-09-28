@@ -1,6 +1,6 @@
 import { z } from "zod";
 
-export const PROMPT_VERSION = "content-v1.0.0";
+export const PROMPT_VERSION = "content-v1.1.0";
 
 export const NARRATIVE_STRUCTURES = ["confissao", "pergunta", "contraste", "historia", "conselho", "observacao"] as const;
 export type NarrativeStructure = (typeof NARRATIVE_STRUCTURES)[number];
@@ -58,7 +58,7 @@ export const GenerateRequestSchema = z.object({
 export type GenerateRequest = z.infer<typeof GenerateRequestSchema>;
 
 export interface GenerationMeta {
-  source: "openai" | "local";
+  source: "openai" | "gemini" | "local";
   model: string;
   prompt_version: string;
   attempts: number;

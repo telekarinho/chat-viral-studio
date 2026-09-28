@@ -14,7 +14,7 @@ const config: ExpoConfig = {
   android: {
     package: "me.rodrigoserra.postai",
     versionCode: Number(env.POSTAI_VERSION_CODE ?? 2),
-    permissions: ["android.permission.CAMERA", "android.permission.RECORD_AUDIO", "android.permission.POST_NOTIFICATIONS"],
+    permissions: ["android.permission.CAMERA", "android.permission.RECORD_AUDIO", "android.permission.POST_NOTIFICATIONS", "android.permission.REQUEST_INSTALL_PACKAGES"],
     blockedPermissions: ["android.permission.ACCESS_FINE_LOCATION", "android.permission.ACCESS_COARSE_LOCATION"],
   },
   ios: { bundleIdentifier: "me.rodrigoserra.postai" },

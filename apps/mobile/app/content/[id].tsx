@@ -1,4 +1,4 @@
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { Text, TextInput, View } from "react-native";
 import * as Clipboard from "expo-clipboard";
 import { router, useFocusEffect, useLocalSearchParams } from "expo-router";
@@ -42,6 +42,14 @@ export default function ContentScreen() {
     }
   }, [id]);
   useFocusEffect(useCallback(() => void load().catch((e) => setError(String(e))), [load]));
+
+  // montagem na fila: acompanha sozinho até ficar pronta
+  const pendingJob = job?.status === "queued" || job?.status === "rendering";
+  useEffect(() => {
+    if (!pendingJob || !c) return;
+    const t = setInterval(() => void latestRenderJob(c.id).then(setJob).catch(() => undefined), 20_000);
+    return () => clearInterval(t);
+  }, [pendingJob, c]);
 
   async function run(label: string, fn: () => Promise<unknown>) {
     setBusy(label);
@@ -87,7 +95,7 @@ export default function ContentScreen() {
             </Card>
           ) : null}
           <Text style={s.muted}>
-            {c.meta?.source === "openai" ? `IA · ${c.meta.model}` : c.meta?.model === "manual-assistant" ? "Do seu ChatGPT/Claude" : "Gerador offline"} · {c.meta?.prompt_version}
+            {c.meta?.source === "openai" || c.meta?.source === "gemini" ? `IA · ${c.meta.model}` : c.meta?.model === "manual-assistant" ? "Do seu ChatGPT/Claude" : "Gerador offline"} · {c.meta?.prompt_version}
             {c.meta?.userEdited ? " · editado por você" : ""}
           </Text>
 
@@ -182,7 +190,7 @@ export default function ContentScreen() {
                     <Button compact label="BAIXAR VÍDEO FINAL" onPress={() => run("baixar", async () => { await downloadFinal(c.id, job); router.push(`/final/${c.id}`); })} loading={busy === "baixar"} testID="download-final" />
                   ) : job && (job.status === "queued" || job.status === "rendering") ? (
                     <>
-                      <Text style={{ color: colors.info, fontWeight: "800" }}>{job.status === "queued" ? "Na fila de montagem…" : "Montando o vídeo…"}</Text>
+                      <Text style={{ color: colors.info, fontWeight: "800" }}>{job.status === "queued" ? "Na fila de montagem… (fica pronto em até ~10 min, pode sair desta tela)" : "Montando o vídeo…"}</Text>
                       <Button compact variant="secondary" label="ATUALIZAR" onPress={() => void load()} />
                     </>
                   ) : (

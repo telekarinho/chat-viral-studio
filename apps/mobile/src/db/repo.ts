@@ -316,7 +316,7 @@ export async function saveDraft(contentId: string, draft: ContentDraft, gen: Gen
   await enqueue(ws, "content_items", contentId, { rows: [contentServerRow(updated)] });
   await enqueue(ws, "scripts", scriptId, {
     rows: [{
-      id: scriptId, workspace_id: ws.id, content_item_id: contentId, prompt_version: gen.prompt_version, model: gen.model, source: gen.source === "openai" ? "openai" : gen.model.includes("manual") ? "manual" : "local",
+      id: scriptId, workspace_id: ws.id, content_item_id: contentId, prompt_version: gen.prompt_version, model: gen.model, source: gen.source !== "local" ? gen.source : gen.model.includes("manual") ? "manual" : "local",
       hook_options: draft.hook_options, selected_hook: updated.selectedHook, script: draft.script, narrative: draft.narrative, screen_text: draft.screen_text, cta: draft.cta,
       draft, user_edited: userEdited, updated_at: nowIso(),
     }],
