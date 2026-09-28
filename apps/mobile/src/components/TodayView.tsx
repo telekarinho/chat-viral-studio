@@ -16,6 +16,7 @@ export interface TodayViewProps {
   onGenerate: (contentId: string) => void;
   onEvent: () => void;
   onFreeRecord: () => void;
+  pillarNames?: Record<string, string>;
 }
 
 const CONTENT_STATUS: Record<ContentItem["status"], { label: string; color: string }> = {
@@ -94,7 +95,7 @@ export function TodayView(p: TodayViewProps) {
               <Text style={{ fontSize: 16, fontWeight: "800", color: colors.ink }}>{FORMAT_LABEL[c.format]}</Text>
               <Text style={{ fontSize: 11, fontWeight: "900", color: st.color }}>{st.label}</Text>
             </View>
-            <Text style={s.muted} numberOfLines={2}>{c.draft ? c.draft.title : `Pilar: ${c.pillarSlug}`}</Text>
+            <Text style={s.muted} numberOfLines={2}>{c.draft ? c.draft.title : `Pilar: ${p.pillarNames?.[c.pillarSlug] ?? c.pillarSlug}`}</Text>
             <View style={[s.row, { marginTop: 6 }]}>
               {c.draft ? (
                 <Button compact label="VER ROTEIRO" onPress={() => p.onOpenContent(c.id)} testID={`open-${c.format}`} />

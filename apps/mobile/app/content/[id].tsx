@@ -69,7 +69,7 @@ export default function ContentScreen() {
   return (
     <Screen testID="content-screen">
       <Button variant="ghost" compact label="← Voltar" onPress={() => router.back()} />
-      <Eyebrow>{FORMAT_LABEL[c.format]} · {c.pillarSlug}</Eyebrow>
+      <Eyebrow>{`${FORMAT_LABEL[c.format]} · ${c.draft?.pillar ?? c.pillarSlug}`}</Eyebrow>
       <H1>{d?.title ?? "Sem roteiro ainda"}</H1>
       {error ? <ErrorBox message={error} /> : null}
 
@@ -173,7 +173,7 @@ export default function ContentScreen() {
                 <Card testID="edit-plan" style={{ gap: 4 }}>
                   <Text style={{ fontWeight: "900", color: colors.ink }}>Edição automática pronta para montar · {Math.round(parts.plan.totalMs / 1000)}s</Text>
                   {parts.plan.clips.map((c) => (
-                    <Text key={c.segmentIndex} style={s.muted}>{c.segmentIndex + 1}. {EFFECT_LABEL[c.effect.kind]} · {(c.durationMs / 1000).toFixed(1)}s · {c.captions.length} legendas</Text>
+                    <Text key={c.segmentIndex} style={s.muted}>{c.segmentIndex + 1}. {EFFECT_LABEL[c.effect.kind]} · {(c.durationMs / 1000).toFixed(1)}s · {c.captions.length} {c.captions.length === 1 ? "legenda" : "legendas"}</Text>
                   ))}
                   <Text style={s.muted}>Legenda estilo Manuscrito + assinatura {parts.plan.signature}. A montagem (juntar + efeitos) roda no servidor de edição.</Text>
                   {finalUri ? (
