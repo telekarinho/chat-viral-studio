@@ -106,7 +106,7 @@ describe("contrato de IA", () => {
     expect(parseDraft(gen.draft).ok).toBe(true);
     expect(gen.draft.hook_options).toHaveLength(3);
     expect(gen.draft.narrative.e && gen.draft.narrative.mas && gen.draft.narrative.por_isso).toBeTruthy();
-    expect(gen.meta).toMatchObject({ source: "local", prompt_version: "content-v1.0.0" });
+    expect(gen.meta).toMatchObject({ source: "local", prompt_version: "content-v1.1.0" });
   });
   it("fechamento 'E se der certo!' é exato e a assinatura aparece nas legendas", () => {
     expect(gen.draft.script.endsWith("E se der certo!")).toBe(true);

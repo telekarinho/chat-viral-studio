@@ -1,10 +1,11 @@
 import {
-  avoidanceInstructions, buildPrompt, checkRepetition, contentDraftJsonSchema, describeAvoidance, finalizeDraft, fingerprintsFor, parseDraft,
+  PROMPT_VERSION, avoidanceInstructions, buildPrompt, checkRepetition, contentDraftJsonSchema, describeAvoidance, finalizeDraft, fingerprintsFor, parseDraft,
   type ContentDraft, type CreatorProfile, type Fingerprint, type GenerateRequest, type GenerationMeta, type RepetitionReport,
 } from "@postai/domain";
 
 export interface LlmClient {
   readonly model: string;
+  readonly source?: "openai" | "gemini";
   complete(input: { system: string; user: string; schema: Record<string, unknown> }): Promise<unknown>;
 }
 
@@ -70,20 +71,21 @@ export async function generateContent(req: GenerateRequest, llm: LlmClient, memo
       continue;
     }
     await memory.saveRun({ ...base, accepted: true, rejectionReason: null, repetition: report });
-    return respond(draft, llm.model, attempt, avoided, []);
+    return respond(draft, llm, attempt, avoided, []);
   }
   if (fallback) {
-    return respond(fallback.draft, llm.model, MAX_ATTEMPTS, avoided, ["Não consegui um ângulo 100% inédito; revise o texto antes de gravar."]);
+    return respond(fallback.draft, llm, MAX_ATTEMPTS, avoided, ["Não consegui um ângulo 100% inédito; revise o texto antes de gravar."]);
   }
   throw new LlmUnavailableError("A IA não retornou um roteiro válido.");
 }
 
-function respond(draft: ContentDraft, model: string, attempts: number, avoided: string[], extra: string[]): GenerateResponse {
+function respond(draft: ContentDraft, llm: LlmClient, attempts: number, avoided: string[], extra: string[]): GenerateResponse {
+  const model = llm.model;
   const unique = [...new Set(avoided)];
   return {
     draft,
     fingerprints: fingerprintsFor(draft),
-    meta: { source: "openai", model, prompt_version: "content-v1.0.0", attempts, avoided: unique },
+    meta: { source: llm.source ?? "openai", model, prompt_version: PROMPT_VERSION, attempts, avoided: unique },
     notices: [...unique, ...extra],
   };
 }

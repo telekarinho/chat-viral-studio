@@ -1,6 +1,7 @@
 import { createClient } from "@supabase/supabase-js";
 import { createApp } from "./app";
-import { openAiClient, supabaseMemory, userSupabase } from "./adapters";
+import { supabaseMemory, userSupabase } from "./adapters";
+import { openAiClient } from "./openai";
 
 function required(name: string): string {
   const v = process.env[name];

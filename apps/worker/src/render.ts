@@ -25,6 +25,15 @@ export function escapeDrawtext(s: string): string {
 
 const sec = (ms: number) => (ms / 1000).toFixed(3);
 
+/**
+ * "Retoque leve": edge-preserving skin smoothing (softens pores/fine lines, keeps eyes/beard sharp),
+ * light denoise and a small lift in light/color. Deliberately subtle — no face reshaping.
+ */
+export function retouchFilters(mode: EditPlan["retouch"] | undefined): string[] {
+  if (mode === "off") return [];
+  return ["hqdn3d=1.5:1.5:4:4", "bilateral=sigmaS=3:sigmaR=0.06:planes=1", "eq=brightness=0.02:contrast=1.03:saturation=1.06", "unsharp=5:5:0.3:5:5:0"];
+}
+
 /** zoompan expression: moves from→to over moveMs (0 = whole clip), then holds. */
 export function zoomExpr(clip: EditClip, fps: number): string {
   const { fromScale: a, toScale: b, moveMs } = clip.effect;
@@ -62,6 +71,7 @@ export function ffmpegArgs(r: RenderInput): string[] {
       `scale=${W}:${H}:force_original_aspect_ratio=increase`,
       `crop=${W}:${H}`,
       `fps=${plan.fps}`,
+      ...retouchFilters(plan.retouch),
       `zoompan=z='${zoomExpr(clip, plan.fps)}':x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':d=1:s=${W}x${H}:fps=${plan.fps}`,
       ...captionFilters(clip, font, plan.captionStyle),
       "setsar=1",

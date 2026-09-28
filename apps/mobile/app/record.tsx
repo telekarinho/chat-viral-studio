@@ -2,6 +2,7 @@ import { useCallback, useEffect, useReducer, useRef, useState } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import { router, useLocalSearchParams } from "expo-router";
 import { useKeepAwake } from "expo-keep-awake";
+import * as Brightness from "expo-brightness";
 import { Camera, useCameraDevice, useCameraPermission, useMicrophonePermission, type VideoFile } from "react-native-vision-camera";
 import {
   PRESET_LABEL, availablePresets, buildSegments, initialTeleprompter, pickFormat, segmentProgress, supportedFps, teleprompterReducer,
@@ -31,6 +32,8 @@ export default function RecordScreen() {
   const device = useCameraDevice(position);
   const [preset, setPreset] = useState<ResolutionPreset>("1080p");
   const [fps, setFps] = useState(30);
+  // "Luz": front = screen ring light (bright frame + max brightness), back = torch
+  const [light, setLight] = useState<LightMode>("off");
   const [prompterOn, setPrompterOn] = useState(params.prompter === "1" || params.partes === "1");
   // gravação por partes: only the current part is on the teleprompter; recorded parts disappear
   const [segments, setSegments] = useState<ScriptSegment[] | null>(null);
@@ -75,6 +78,20 @@ export default function RecordScreen() {
       }
     })().catch((e) => reportError(e, "record init"));
   }, [taskId, contentId, params.partes]);
+
+  useEffect(() => {
+    if (light === "off" || position !== "front") return;
+    let previous: number | null = null;
+    Brightness.getBrightnessAsync()
+      .then((b) => {
+        previous = b;
+        return Brightness.setBrightnessAsync(1);
+      })
+      .catch((e) => reportError(e, "brightness"));
+    return () => {
+      if (previous !== null) void Brightness.setBrightnessAsync(previous).catch(() => undefined);
+    };
+  }, [light, position]);
 
   useEffect(() => {
     if (!cam.hasPermission) void cam.requestPermission();
@@ -226,8 +243,9 @@ export default function RecordScreen() {
   }
 
   const busy = phase === "saving";
+  const ringLight = light !== "off" && position === "front";
   return (
-    <View style={st.root} testID="record-screen">
+    <View style={[st.root, ringLight && { backgroundColor: RING_COLOR[light] }]} testID="record-screen">
       <View style={st.frame}>
         <Camera
           ref={camera}
@@ -239,9 +257,11 @@ export default function RecordScreen() {
           isActive={phase !== "saving"}
           video
           audio={mic.hasPermission}
+          torch={position === "back" && light !== "off" ? "on" : "off"}
           resizeMode="cover"
         />
       </View>
+      {ringLight ? <View pointerEvents="none" style={[st.ring, { borderColor: RING_COLOR[light] }]} testID="ring-light" /> : null}
       <Teleprompter text={script || "Sem roteiro — fale livremente."} state={tp} dispatch={dispatch} visible={prompterOn} />
       {tp.phase === "countdown" ? (
         <View style={st.countdown} pointerEvents="none" testID="countdown">
@@ -272,6 +292,7 @@ export default function RecordScreen() {
               {fpsOptions.map((f) => <Pill key={f} label={`${f}fps`} selected={f === effectiveFps} onPress={() => { setFps(f); savePrefs({ fps: f }); }} />)}
             </View>
             <View style={st.row}>
+              <Pill label={LIGHT_LABEL[light]} selected={light !== "off"} onPress={() => setLight(NEXT_LIGHT[light])} hint="Luz para gravar" testID="toggle-light" />
               <Pill label={prompterOn ? "Prompter ON" : "Prompter OFF"} selected={prompterOn} onPress={() => setPrompterOn(!prompterOn)} testID="toggle-prompter" />
               {[0, 3, 5].map((c) => <Pill key={c} label={c ? `${c}s` : "sem contagem"} selected={tp.countdownSeconds === c} onPress={() => dispatch({ type: "setCountdown", seconds: c })} testID={`countdown-${c}`} />)}
             </View>
@@ -314,9 +335,15 @@ function Pill({ label, onPress, selected, hint, testID }: { label: string; onPre
   );
 }
 
+type LightMode = "off" | "warm" | "neutral";
+const NEXT_LIGHT: Record<LightMode, LightMode> = { off: "warm", warm: "neutral", neutral: "off" };
+const LIGHT_LABEL: Record<LightMode, string> = { off: "💡 Luz", warm: "💡 Quente", neutral: "💡 Neutra" };
+const RING_COLOR: Record<LightMode, string> = { off: "#000000", warm: "#FFE9CC", neutral: "#FFFFFF" };
+
 const st = StyleSheet.create({
   root: { flex: 1, backgroundColor: "#000000", justifyContent: "center" },
   frame: { width: "100%", aspectRatio: 9 / 16, alignSelf: "center", overflow: "hidden" },
+  ring: { ...StyleSheet.absoluteFillObject, borderWidth: 34, borderRadius: 28 },
   top: { position: "absolute", top: 18, left: 12, right: 12, flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
   bottom: { position: "absolute", bottom: 24, left: 12, right: 12, alignItems: "center", gap: 10 },
   row: { flexDirection: "row", flexWrap: "wrap", gap: 8, justifyContent: "center", alignItems: "center" },

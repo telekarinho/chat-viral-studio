@@ -39,6 +39,9 @@ describe("renderizador (comando)", () => {
     expect(graph).toContain("loudnorm");
     expect(graph).toContain("RodrigoSerra.me");
     expect(args).toContain("[vout]");
+    expect(graph).toContain("bilateral="); // retoque leve on by default
+    const off = ffmpegArgs({ plan: { ...plan, retouch: "off" }, inputs: ["a.mp4", "b.mp4", "c.mp4"], hasAudio: [true, true, true], fontFile: "f.ttf", output: "o.mp4" });
+    expect(off[off.indexOf("-filter_complex") + 1]).not.toContain("bilateral=");
   });
 });
 

@@ -17,5 +17,15 @@ export const config = {
 /** Without Supabase configured the app runs in "modo local": everything works on-device, no sync. */
 export const cloudEnabled = Boolean(config.supabaseUrl && config.supabaseAnonKey);
 
+/**
+ * Script generation endpoint: a dedicated API when configured, otherwise the `generate` Edge Function
+ * of the same Supabase project (AI keys live only there).
+ */
+export const generateEndpoint = config.apiUrl
+  ? `${config.apiUrl}/v1/content/generate`
+  : cloudEnabled
+    ? `${config.supabaseUrl.replace(/\/$/, "")}/functions/v1/generate`
+    : "";
+
 export const newId = (): string => Crypto.randomUUID();
 export const nowIso = (): string => new Date().toISOString();
