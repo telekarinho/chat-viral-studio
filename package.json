@@ -1,0 +1,19 @@
+{
+  "name": "postai-monorepo",
+  "private": true,
+  "version": "0.2.0",
+  "description": "Post.ai — creator copilot (mobile + api + domain). Legacy Chat Viral Studio lives in web/, backend/ and android/ with their own lockfiles.",
+  "workspaces": [
+    "packages/domain",
+    "apps/api",
+    "apps/mobile"
+  ],
+  "scripts": {
+    "typecheck": "npm run typecheck --workspaces --if-present",
+    "lint": "npm run lint --workspaces --if-present",
+    "test": "npm run test --workspaces --if-present"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}
