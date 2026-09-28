@@ -12,8 +12,14 @@ appId: me.rodrigoserra.postai
 - tapOn:
     id: take-row
 - extendedWaitUntil:
-    visible: "Integridade na nuvem confirmada.*"
+    visible:
+      id: take-info
     timeout: 30000
+- scrollUntilVisible:
+    element:
+      text: "Integridade na nuvem confirmada.*"
+    timeout: 30000
+- takeScreenshot: 07b_integridade
 - back
 - tapOn:
     id: tab-Hoje
