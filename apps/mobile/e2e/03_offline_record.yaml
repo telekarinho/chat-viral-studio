@@ -69,7 +69,7 @@ appId: me.rodrigoserra.postai
     timeout: 20000
 - scrollUntilVisible:
     element:
-      text: "Takes deste conteúdo \(1\)"
+      text: 'Takes deste conteúdo .1.'
 - scrollUntilVisible:
     element:
       id: complete-content
