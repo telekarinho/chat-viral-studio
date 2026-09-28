@@ -35,7 +35,11 @@ export default function Settings() {
     }
     const file = new File(Paths.cache, `postai-export-${Date.now()}.json`);
     file.write(JSON.stringify(payload, null, 2));
-    await Sharing.shareAsync(file.uri, { mimeType: "application/json" });
+    try {
+      await Sharing.shareAsync(file.uri, { mimeType: "application/json" });
+    } finally {
+      if (file.exists) file.delete(); // don't leave a full copy of personal data in cache
+    }
   }
 
   function confirmDelete() {

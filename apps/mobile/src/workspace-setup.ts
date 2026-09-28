@@ -51,6 +51,8 @@ export async function pullWorkspace(wsId: string): Promise<Workspace> {
 /** After login on a device that has no local data yet. */
 export async function findRemoteWorkspace(): Promise<string | null> {
   if (!supabase) return null;
-  const { data } = await supabase.from("workspace_members").select("workspace_id").limit(1);
+  const { data: auth } = await supabase.auth.getUser();
+  if (!auth.user) return null;
+  const { data } = await supabase.from("workspace_members").select("workspace_id").eq("user_id", auth.user.id).eq("role", "owner").order("created_at").limit(1);
   return data?.[0]?.workspace_id ?? null;
 }

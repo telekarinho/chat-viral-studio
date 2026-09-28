@@ -56,7 +56,9 @@ create policy workspaces_update on workspaces for update to authenticated using 
 -- no insert/delete policy: creation goes through bootstrap_workspace(), deletion through privacy workflow
 
 create policy members_select on workspace_members for select to authenticated using (user_id = auth.uid() or public.is_workspace_member(workspace_id));
-create policy members_owner_write on workspace_members for all to authenticated using (public.is_workspace_owner(workspace_id)) with check (public.is_workspace_owner(workspace_id));
+-- no insert policy: adding someone else requires a consent-based invite flow (post-MVP); owners may only manage existing rows
+create policy members_owner_update on workspace_members for update to authenticated using (public.is_workspace_owner(workspace_id)) with check (public.is_workspace_owner(workspace_id));
+create policy members_owner_delete on workspace_members for delete to authenticated using (public.is_workspace_owner(workspace_id));
 
 create policy audit_select on audit_logs for select to authenticated using (actor = auth.uid() or (workspace_id is not null and public.is_workspace_owner(workspace_id)));
 
@@ -75,7 +77,7 @@ declare
   rt uuid;
 begin
   if uid is null then raise exception 'not authenticated' using errcode = '42501'; end if;
-  select m.workspace_id into ws from workspace_members m where m.user_id = uid and m.role = 'owner' order by m.created_at limit 1;
+  select w.id into ws from workspaces w where w.created_by = uid and w.deleted_at is null order by w.created_at limit 1;
   if ws is not null then return ws; end if; -- idempotent: onboarding retried after network loss
 
   insert into workspaces(name, slug, created_by) values (p_name, 'ws-' || replace(gen_random_uuid()::text, '-', ''), uid) returning id into ws;
@@ -110,16 +112,25 @@ begin
     'recording_tasks', (select coalesce(jsonb_agg(t), '[]') from recording_tasks t),
     'task_events', (select coalesce(jsonb_agg(e), '[]') from task_events e),
     'takes', (select coalesce(jsonb_agg(t), '[]') from takes t),
-    'media_files', (select coalesce(jsonb_agg(m), '[]') from media_files m)
+    'media_files', (select coalesce(jsonb_agg(m), '[]') from media_files m),
+    'content_fingerprints', (select coalesce(jsonb_agg(f), '[]') from content_fingerprints f),
+    'ai_memories', (select coalesce(jsonb_agg(a), '[]') from ai_memories a),
+    'generation_runs', (select coalesce(jsonb_agg(g), '[]') from generation_runs g),
+    'audit_logs', (select coalesce(jsonb_agg(l), '[]') from audit_logs l),
+    'privacy_requests', (select coalesce(jsonb_agg(r), '[]') from privacy_requests r)
   ) into result;
   perform public.write_audit(null, 'privacy.export', null);
   return result;
 end $$;
 
 create function public.write_audit(p_ws uuid, p_action text, p_target text) returns void
-language sql security definer set search_path = public as $$
-  insert into audit_logs(workspace_id, actor, action, target) values (p_ws, auth.uid(), p_action, p_target);
-$$;
+language plpgsql security definer set search_path = public as $$
+begin
+  if auth.uid() is null or (p_ws is not null and not public.is_workspace_member(p_ws)) then
+    raise exception 'not allowed' using errcode = '42501';
+  end if;
+  insert into audit_logs(workspace_id, actor, action, target) values (p_ws, auth.uid(), left(p_action, 80), left(p_target, 200));
+end $$;
 revoke all on function public.write_audit(uuid, text, text) from public;
 grant execute on function public.write_audit(uuid, text, text) to authenticated;
 grant execute on function public.export_my_data() to authenticated;
@@ -150,8 +161,10 @@ create policy takes_objects_select on storage.objects for select to authenticate
   using (bucket_id = 'takes' and public.is_workspace_member(public.path_workspace(name)));
 create policy takes_objects_insert on storage.objects for insert to authenticated
   with check (bucket_id = 'takes' and public.can_write_workspace(public.path_workspace(name)));
-create policy takes_objects_update on storage.objects for update to authenticated
-  using (bucket_id = 'takes' and public.can_write_workspace(public.path_workspace(name)))
-  with check (bucket_id = 'takes' and public.can_write_workspace(public.path_workspace(name)));
+-- no update policy: verified originals are immutable in Storage too (upload uses upsert=false)
 create policy takes_objects_delete on storage.objects for delete to authenticated
   using (bucket_id = 'takes' and public.is_workspace_owner(public.path_workspace(name)));
+
+-- Supabase grants EXECUTE to anon by default; none of these are for anonymous callers
+revoke execute on function public.bootstrap_workspace(text, jsonb, jsonb, jsonb), public.export_my_data(), public.write_audit(uuid, text, text),
+  public.request_account_deletion(), public.is_workspace_member(uuid), public.can_write_workspace(uuid), public.is_workspace_owner(uuid) from anon;

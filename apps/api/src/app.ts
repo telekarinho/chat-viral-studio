@@ -71,8 +71,10 @@ class ContentController {
         log("warn", "generate.llm_unavailable", { user: user.id, error: e.message });
         throw new HttpException({ code: "llm_unavailable" }, HttpStatus.BAD_GATEWAY);
       }
-      const status = (e as { status?: number }).status === 404 ? HttpStatus.NOT_FOUND : HttpStatus.INTERNAL_SERVER_ERROR;
-      log("error", "generate.failed", { user: user.id, status, error: e instanceof Error ? e.message : String(e) });
+      const code = (e as { status?: number }).status;
+      const status = code === 404 || code === 403 ? HttpStatus.NOT_FOUND : HttpStatus.INTERNAL_SERVER_ERROR;
+      log(status === 404 ? "warn" : "error", "generate.failed", { user: user.id, status, error: e instanceof Error ? e.message : String(e) });
+      // 403 is reported as 404 so the API doesn't confirm which workspaces exist
       throw new HttpException({ code: status === 404 ? "workspace_not_found" : "internal_error" }, status);
     }
   }

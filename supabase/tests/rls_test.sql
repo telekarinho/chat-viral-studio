@@ -56,6 +56,10 @@ begin
     raise exception 'B joined A workspace';
   exception when insufficient_privilege then null; end;
   if (public.export_my_data()->'content_items') <> '[]'::jsonb then raise exception 'export leaked A data'; end if;
+  begin
+    perform public.write_audit(wsA, 'forged', null);
+    raise exception 'B forged audit in A workspace';
+  exception when insufficient_privilege then null; end;
 end $$;
 
 -- anon sees nothing
@@ -81,5 +85,15 @@ do $$ begin
   raise exception 'pillar sum not enforced';
 exception when check_violation then null; end $$;
 rollback to savepoint s1;
+-- owner A cannot force-add B into A's workspace (would hijack B's onboarding)
+do $$ begin
+  insert into workspace_members(workspace_id, user_id, role) select v, 'bbbbbbbb-0000-4000-8000-000000000002', 'owner' from ctx where k='wsA';
+  raise exception 'owner added another user without consent';
+exception when insufficient_privilege then null; end $$;
+-- A cannot overwrite an existing original object
+do $$ declare n int; begin
+  update storage.objects set name = name where bucket_id = 'takes'; get diagnostics n = row_count;
+  if n <> 0 then raise exception 'storage original overwritable'; end if;
+end $$;
 select 'RLS OK: user B cannot read/write user A data, anon blocked, pillar sum enforced' as result;
 rollback;

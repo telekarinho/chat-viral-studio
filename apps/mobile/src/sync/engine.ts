@@ -90,12 +90,12 @@ async function uploadOne(m: MediaRow): Promise<MediaRow> {
     // idempotent: if a previous attempt already uploaded the same bytes, just verify
     let info = await remoteObjectInfo(m.workspaceId, name);
     if (!info || info.size !== m.sizeBytes) {
-      const signed = await supabase!.storage.from("takes").createSignedUploadUrl(key, { upsert: true });
+      const signed = await supabase!.storage.from("takes").createSignedUploadUrl(key);
       if (signed.error) throw signed.error;
       const res = await LegacyFS.uploadAsync(signed.data.signedUrl, m.localUri, {
         httpMethod: "PUT",
         uploadType: LegacyFS.FileSystemUploadType.BINARY_CONTENT,
-        headers: { "Content-Type": "video/mp4", "x-upsert": "true" },
+        headers: { "Content-Type": "video/mp4" },
       });
       if (res.status < 200 || res.status >= 300) throw new Error(`upload HTTP ${res.status}`);
       info = await remoteObjectInfo(m.workspaceId, name);

@@ -31,6 +31,11 @@ const MEMORY_WINDOW = 120; // fingerprints (≈ last 15–20 contents)
 
 export function supabaseMemory(db: SupabaseClient, userId: string): MemoryStore {
   return {
+    async canWrite(ws) {
+      const { data, error } = await db.rpc("can_write_workspace", { ws });
+      if (error) throw error;
+      return data === true;
+    },
     async profile(ws) {
       const { data, error } = await db.from("creator_profiles").select("*").eq("workspace_id", ws).maybeSingle();
       if (error) throw error;

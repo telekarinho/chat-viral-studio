@@ -105,10 +105,10 @@ run("Auth + RLS cross-tenant (Supabase real)", () => {
     expect(createHash("md5").update(bytes).digest("hex")).toBe(createHash("md5").update(video).digest("hex"));
   });
 
-  it("memória da IA de B não enxerga A (gerar para workspace alheio = 404)", async () => {
+  it("memória da IA de B não enxerga A (gerar para workspace alheio é negado)", async () => {
     const memB = supabaseMemory(userSupabase(url!, anon!, B.token), B.id);
     const llm = { model: "fake", complete: async () => ({}) };
-    await expect(generateContent({ workspace_id: wsA, content_item_id: null, format: "thought", pillar_slug: "reflexao", event_text: null }, llm, memB)).rejects.toMatchObject({ status: 404 });
+    await expect(generateContent({ workspace_id: wsA, content_item_id: null, format: "thought", pillar_slug: "reflexao", event_text: null }, llm, memB)).rejects.toMatchObject({ status: 403 });
   });
 
   it("anon não lê nada; exportação LGPD só traz dados próprios", async () => {

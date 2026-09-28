@@ -12,6 +12,7 @@ const sample = (pillarSlug: string, recent: Fingerprint[] = []) =>
 function fakeMemory(recent: Fingerprint[] = []) {
   const runs: { accepted: boolean; rejectionReason: string | null }[] = [];
   const mem: MemoryStore = {
+    canWrite: async () => true,
     profile: async () => RODRIGO_PROFILE,
     pillarName: async (_ws, slug) => slug,
     recentFingerprints: async () => recent,
@@ -66,6 +67,13 @@ describe("generateContent (IA estruturada)", () => {
     expect(llm.prompts[1]).toMatch(/OUTRO ângulo/);
     expect(res.notices.join(" ")).toMatch(/Evitei repetir/);
     expect(res.draft.topic).not.toBe(used.topic);
+  });
+
+  it("quem não pode escrever no workspace não dispara geração", async () => {
+    const { mem } = fakeMemory();
+    const llm = scriptedLlm([sample("humor")]);
+    await expect(generateContent(body as never, llm, { ...mem, canWrite: async () => false })).rejects.toMatchObject({ status: 403 });
+    expect(llm.prompts).toHaveLength(0);
   });
 
   it("LLM fora do ar vira erro tratável (app cai para o gerador offline)", async () => {

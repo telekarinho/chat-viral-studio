@@ -10,6 +10,7 @@ export interface LlmClient {
 
 /** Workspace-scoped memory. The Supabase implementation uses the caller's JWT, so RLS applies. */
 export interface MemoryStore {
+  canWrite(workspaceId: string): Promise<boolean>;
   profile(workspaceId: string): Promise<CreatorProfile>;
   pillarName(workspaceId: string, slug: string): Promise<string>;
   recentFingerprints(workspaceId: string): Promise<Fingerprint[]>;
@@ -32,6 +33,7 @@ export class LlmUnavailableError extends Error {}
 export const MAX_ATTEMPTS = 3;
 
 export async function generateContent(req: GenerateRequest, llm: LlmClient, memory: MemoryStore): Promise<GenerateResponse> {
+  if (!(await memory.canWrite(req.workspace_id))) throw Object.assign(new Error("forbidden"), { status: 403 });
   const [profile, pillarName, recent, summaries] = await Promise.all([
     memory.profile(req.workspace_id),
     memory.pillarName(req.workspace_id, req.pillar_slug),
