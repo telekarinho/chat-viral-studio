@@ -21,6 +21,11 @@ step() { echo "::group::$1"; }
 endstep() { echo "::endgroup::"; }
 
 adb install -r "$APK"
+# emulator hygiene: let the launcher settle and keep system ANR dialogs from covering the app
+adb shell settings put global hide_error_dialogs 1 || true
+adb shell settings put secure anr_show_background 0 || true
+sleep 20
+adb shell am broadcast -a android.intent.action.CLOSE_SYSTEM_DIALOGS >/dev/null || true
 net enable
 
 step "1. login + onboarding + Hoje"; flow 01_login_onboarding_today; endstep

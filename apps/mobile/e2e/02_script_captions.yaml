@@ -2,6 +2,11 @@ appId: me.rodrigoserra.postai
 ---
 - launchApp:
     stopApp: false
+- runFlow:
+    when:
+      visible: ".*isn't responding"
+    commands:
+      - tapOn: "Wait"
 - scrollUntilVisible:
     element:
       id: generate-main_video
