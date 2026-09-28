@@ -249,9 +249,11 @@ export default function RecordScreen() {
       <View style={st.top}>
         <Pill label="✕" onPress={() => (phase === "recording" ? undefined : router.back())} hint="Fechar" />
         {phase === "recording" ? (
-          <Text style={st.rec} testID="rec-indicator">● REC {elapsed}s</Text>
+          <Text style={st.rec} testID="rec-indicator">{`● REC ${elapsed}s`}</Text>
         ) : segments && segIndex !== null ? (
-          <Text style={st.meta} testID="part-indicator">Parte {segIndex + 1}/{segments.length} · {segments[segIndex]?.label}</Text>
+          <Text style={st.meta} testID="part-indicator" accessible accessibilityRole="header" accessibilityLabel={`Parte ${segIndex + 1} de ${segments.length}, ${segments[segIndex]?.label ?? ""}`}>
+            {`Parte ${segIndex + 1}/${segments.length} · ${segments[segIndex]?.label ?? ""}`}
+          </Text>
         ) : (
           <Text style={st.meta}>{PRESET_LABEL[format && presets.includes(preset) ? preset : "1080p"]} · {effectiveFps}fps · 9:16</Text>
         )}

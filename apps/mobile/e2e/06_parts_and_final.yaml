@@ -24,8 +24,11 @@ appId: me.rodrigoserra.postai
 - tapOn:
     id: record-parts
 - extendedWaitUntil:
-    visible: "Parte 1/2.*"
+    visible:
+      id: teleprompter-text
     timeout: 30000
+# part 1 shows only the first piece: the closing line must not be on the teleprompter yet
+- assertNotVisible: "E se der certo!"
 - takeScreenshot: 07c_parte1_teleprompter
 - tapOn:
     id: countdown-0
@@ -43,9 +46,8 @@ appId: me.rodrigoserra.postai
 - tapOn:
     id: next-part
 - extendedWaitUntil:
-    visible: "Parte 2/2.*"
+    visible: "E se der certo!"
     timeout: 20000
-- assertVisible: "E se der certo!"
 - tapOn:
     id: record-button
 - extendedWaitUntil:
