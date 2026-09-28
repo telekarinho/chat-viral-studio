@@ -1,6 +1,9 @@
 # Post.ai — Beta Android: instalação, teste e homologação
 
-O relatório de homologação com os resultados de cada verificação fica no PR #53 (comentário "Relatório de homologação").
+Status: **BLOQUEADO PARA HOMOLOGAÇÃO** (dependências externas) — relatório completo:
+https://github.com/telekarinho/chat-viral-studio/pull/53#issuecomment-5866226914
+
+APK atual: https://github.com/telekarinho/chat-viral-studio/releases/tag/postai-beta-7e5d876 (`post-ai-beta-v0.2.0-7e5d876.apk`, modo local).
 
 ## Instalar o APK (Rodrigo)
 1. No celular Android, abra o link do GitHub Actions → run **Post.ai Android APK** → seção *Artifacts* → baixe `post-ai-android-beta`
