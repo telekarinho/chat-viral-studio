@@ -17,6 +17,8 @@ import { Button, Loading, Screen, colors, s } from "../src/ui";
 
 type Phase = "ready" | "recording" | "saving" | "saved" | "error";
 const LOW_DISK = 500 * 1024 * 1024;
+// Mbps. 1080p@5 ≈ 37 MB/min: fits Supabase Free's 50 MB/file for takes up to ~1 min; parts are shorter.
+const VIDEO_MBPS: Record<ResolutionPreset, number> = { "1080p": 5, "2k": 9, "4k": 16 };
 
 export default function RecordScreen() {
   useKeepAwake();
@@ -233,6 +235,7 @@ export default function RecordScreen() {
           device={device}
           format={format ?? undefined}
           fps={effectiveFps}
+          videoBitRate={VIDEO_MBPS[presets.includes(preset) ? preset : "1080p"]}
           isActive={phase !== "saving"}
           video
           audio={mic.hasPermission}

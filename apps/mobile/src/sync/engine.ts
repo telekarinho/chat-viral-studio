@@ -97,6 +97,7 @@ async function uploadOne(m: MediaRow): Promise<MediaRow> {
         uploadType: LegacyFS.FileSystemUploadType.BINARY_CONTENT,
         headers: { "Content-Type": "video/mp4" },
       });
+      if (res.status === 413) throw new Error("vídeo maior que o limite por arquivo do armazenamento (plano Free: 50 MB) — grave por partes ou em 1080p");
       if (res.status < 200 || res.status >= 300) throw new Error(`upload HTTP ${res.status}`);
       info = await remoteObjectInfo(m.workspaceId, name);
     }
