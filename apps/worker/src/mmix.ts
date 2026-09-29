@@ -6,7 +6,9 @@ import type { SupabaseClient } from "@supabase/supabase-js";
  */
 export interface MmixConfig {
   baseUrl: string; // e.g. https://mmix.com.br/api-fabrica.php
+  /** MMIX_ADMIN_TOKEN (sent as Bearer) or the MMIX API key CP_KEY (sent in the POST body, never in the URL). */
   token: string;
+  kind: "bearer" | "key";
   workspaceId: string; // the Post.ai workspace (business profile) linked to MMIX
   fetch?: typeof fetch;
 }
@@ -17,11 +19,20 @@ const TIMEOUT_MS = 120_000;
 
 interface OrdemResumo { id: number; codigo: string; produto_id: number | null; produto_nome: string; titulo: string | null; objetivo: string | null; prioridade: string | null; status: string }
 
-async function call(cfg: MmixConfig, query: string, init?: RequestInit): Promise<Record<string, unknown>> {
+/** Every call is a POST (api-fabrica reads $_REQUEST), so a key never ends up in a URL or access log. */
+async function call(cfg: MmixConfig, acao: string, fields: Record<string, string | Blob> = {}, filename?: string): Promise<Record<string, unknown>> {
   const ctrl = new AbortController();
   const timer = setTimeout(() => ctrl.abort(), TIMEOUT_MS);
+  const form = new FormData();
+  for (const [k, v] of Object.entries(fields)) {
+    if (v instanceof Blob) form.set(k, v, filename);
+    else form.set(k, v);
+  }
+  if (cfg.kind === "key") form.set("key", cfg.token);
+  const headers: Record<string, string> = { Accept: "application/json" };
+  if (cfg.kind === "bearer") headers.Authorization = `Bearer ${cfg.token}`;
   try {
-    const res = await (cfg.fetch ?? fetch)(`${cfg.baseUrl}?${query}`, { ...init, signal: ctrl.signal, headers: { Authorization: `Bearer ${cfg.token}`, Accept: "application/json" } });
+    const res = await (cfg.fetch ?? fetch)(`${cfg.baseUrl}?acao=${encodeURIComponent(acao)}`, { method: "POST", body: form, signal: ctrl.signal, headers });
     const text = await res.text();
     let body: Record<string, unknown>;
     try {
@@ -38,12 +49,12 @@ async function call(cfg: MmixConfig, query: string, init?: RequestInit): Promise
 
 /** Mirrors the open recording orders (with clip plan and per-clip status) into the linked workspace. */
 export async function syncOrders(db: SupabaseClient, cfg: MmixConfig): Promise<number> {
-  const list = await call(cfg, "acao=gravacao_solicitacoes_listar&limit=100");
+  const list = await call(cfg, "gravacao_solicitacoes_listar", { limit: "100" });
   if (list.ok !== true) throw new Error(`listar ordens: ${String(list.erro ?? "falhou")}`);
   const open = ((list.solicitacoes ?? []) as OrdemResumo[]).filter((o) => ACTIVE.has(o.status));
   const rows = [];
   for (const o of open) {
-    const d = await call(cfg, `acao=gravacao_solicitacao_detalhe&id=${o.id}`);
+    const d = await call(cfg, "gravacao_solicitacao_detalhe", { id: String(o.id) });
     if (d.ok !== true) continue;
     const detalhe = { ...d, tentativas_historico: undefined }; // history can be large and is not needed on the phone
     rows.push({
@@ -97,12 +108,10 @@ export async function forwardOne(db: SupabaseClient, cfg: MmixConfig): Promise<b
     }
     const dl = await db.storage.from("takes").download(t.media_files.storage_key);
     if (dl.error) throw new Error(`download: ${dl.error.message}`);
-    const form = new FormData();
-    form.set("id", String(job.ordem_id));
-    form.set("clipe_num", String(job.clipe_num));
-    form.set("autor", `postai:${job.requested_by ?? "app"}`);
-    form.set("video", new Blob([await dl.data.arrayBuffer()], { type: "video/mp4" }), `postai-${job.take_id}.mp4`);
-    const res = await call(cfg, "acao=gravacao_solicitacao_upload", { method: "POST", body: form });
+    const res = await call(cfg, "gravacao_solicitacao_upload", {
+      id: String(job.ordem_id), clipe_num: String(job.clipe_num), autor: `postai:${job.requested_by ?? "app"}`,
+      video: new Blob([await dl.data.arrayBuffer()], { type: "video/mp4" }),
+    }, `postai-${job.take_id}.mp4`);
     if (res.ok === true) await finish(db, job.id, { status: "aprovado", resultado: res, error: null });
     else if (res.qa_status === "reprovado") await finish(db, job.id, { status: "reprovado", resultado: res, error: String(res.motivo ?? "reprovado no QA") });
     else throw new Error(String(res.erro ?? "falha no envio"));
@@ -114,6 +123,7 @@ export async function forwardOne(db: SupabaseClient, cfg: MmixConfig): Promise<b
 }
 
 export function mmixConfigFromEnv(env: NodeJS.ProcessEnv): MmixConfig | null {
-  if (!env.MMIX_ADMIN_TOKEN || !env.POSTAI_MMIX_WORKSPACE_ID) return null;
-  return { baseUrl: env.MMIX_API_URL || "https://mmix.com.br/api-fabrica.php", token: env.MMIX_ADMIN_TOKEN, workspaceId: env.POSTAI_MMIX_WORKSPACE_ID };
+  const token = env.MMIX_ADMIN_TOKEN || env.MMIX_API_KEY;
+  if (!token || !env.POSTAI_MMIX_WORKSPACE_ID) return null;
+  return { baseUrl: env.MMIX_API_URL || "https://mmix.com.br/api-fabrica.php", token, kind: env.MMIX_ADMIN_TOKEN ? "bearer" : "key", workspaceId: env.POSTAI_MMIX_WORKSPACE_ID };
 }

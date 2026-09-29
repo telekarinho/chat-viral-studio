@@ -22,9 +22,11 @@ async function signUp(admin: SupabaseClient, tag: string) {
 }
 
 function fakeMmix() {
-  const uploads: { id: string; clipe: string; autor: string; size: number; auth: string | null }[] = [];
+  const uploads: { id: string; clipe: string; autor: string; size: number; key: string }[] = [];
   const f = (async (input: string, init?: RequestInit) => {
     const q = new URL(input).searchParams;
+    const form = init!.body as FormData;
+    if (q.has("key") || form.get("key") !== "test-key") return new Response(JSON.stringify({ ok: false, erro: "auth" }), { status: 401 });
     const json = (b: unknown) => new Response(JSON.stringify(b), { status: 200, headers: { "Content-Type": "application/json" } });
     if (q.get("acao") === "gravacao_solicitacoes_listar") {
       return json({ ok: true, solicitacoes: [
@@ -36,9 +38,8 @@ function fakeMmix() {
       return json({ ok: true, id: 42, clipes: [{ clipe: 1, titulo: "Copo inclinado", duracao_min: 3, duracao_max: 6, enquadramento: "Close", instrucao: "incline o copo", status: "pendente" }], checklist: ["Vertical 9:16"], tentativas_historico: [{ big: true }] });
     }
     if (q.get("acao") === "gravacao_solicitacao_upload") {
-      const form = init!.body as FormData;
       const video = form.get("video") as Blob;
-      uploads.push({ id: String(form.get("id")), clipe: String(form.get("clipe_num")), autor: String(form.get("autor")), size: video.size, auth: new Headers(init!.headers).get("Authorization") });
+      uploads.push({ id: String(form.get("id")), clipe: String(form.get("clipe_num")), autor: String(form.get("autor")), size: video.size, key: String(form.get("key")) });
       return json({ ok: true, qa_status: "aprovado", asset_id: 900, clipe_num: 1, mensagem: "Clipe #1 aprovado" });
     }
     return json({ ok: false, erro: "acao desconhecida" });
@@ -52,7 +53,7 @@ describe.skipIf(!(url && anon && service))("ponte MMIX — gravar patrimônio", 
     const a = await signUp(admin, "mmix-a");
     const b = await signUp(admin, "mmix-b");
     const mmix = fakeMmix();
-    const cfg: MmixConfig = { baseUrl: "https://mmix.test/api-fabrica.php", token: "test-token", workspaceId: a.ws, fetch: mmix.f };
+    const cfg: MmixConfig = { baseUrl: "https://mmix.test/api-fabrica.php", token: "test-key", kind: "key", workspaceId: a.ws, fetch: mmix.f };
 
     expect(await syncOrders(admin, cfg)).toBe(1); // only the open order
     const mine = await a.c.from("mmix_gravacao_ordens").select("id, status, detalhe");
@@ -82,7 +83,7 @@ describe.skipIf(!(url && anon && service))("ponte MMIX — gravar patrimônio", 
     expect(await forwardOne(admin, cfg)).toBe(true);
     const done = await a.c.from("patrimonio_envios").select("status, resultado").eq("id", env.data!.id).single();
     expect(done.data).toMatchObject({ status: "aprovado", resultado: { asset_id: 900 } });
-    expect(mmix.uploads).toEqual([{ id: "42", clipe: "1", autor: `postai:${a.uid}`, size: bytes.length, auth: "Bearer test-token" }]);
+    expect(mmix.uploads).toEqual([{ id: "42", clipe: "1", autor: `postai:${a.uid}`, size: bytes.length, key: "test-key" }]);
     expect(await forwardOne(admin, cfg)).toBe(false); // queue empty
   }, 120_000);
 });
