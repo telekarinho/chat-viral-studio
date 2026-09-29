@@ -79,10 +79,10 @@ appId: me.rodrigoserra.postai
     element:
       id: edit-plan
 - takeScreenshot: 09_plano_edicao
-# parts may still be syncing: keep asking until the job is accepted
+# the final is requested AUTOMATICALLY when all parts are in the cloud (the button stays as a fallback)
 - repeat:
     while:
-      notVisible: "Na fila de montagem….*|Montando o vídeo…|BAIXAR VÍDEO FINAL"
+      notVisible: "Na fila de montagem….*|Montando o vídeo…|BAIXAR VÍDEO FINAL|VER VÍDEO FINAL / POSTAR"
     times: 20
     commands:
       - scrollUntilVisible:
@@ -93,26 +93,29 @@ appId: me.rodrigoserra.postai
           id: request-final
           optional: true
       - extendedWaitUntil:
-          visible: "Na fila de montagem….*|Montando o vídeo…|BAIXAR VÍDEO FINAL"
+          visible: "Na fila de montagem….*|Montando o vídeo…|BAIXAR VÍDEO FINAL|VER VÍDEO FINAL / POSTAR"
           timeout: 8000
           optional: true
-# the server worker renders; refresh until the download is available
+# the server worker renders; the app downloads the final by itself when it's ready
 - repeat:
     while:
       notVisible:
-        id: download-final
+        id: open-final
     times: 40
     commands:
       - tapOn:
           text: "ATUALIZAR"
           optional: true
+      - tapOn:
+          id: download-final
+          optional: true
       - extendedWaitUntil:
           visible:
-            id: download-final
+            id: open-final
           timeout: 5000
           optional: true
 - tapOn:
-    id: download-final
+    id: open-final
 - extendedWaitUntil:
     visible:
       id: final-screen

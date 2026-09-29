@@ -65,6 +65,29 @@ export default function ContentScreen() {
     return () => clearInterval(t);
   }, [pendingJob, c]);
 
+  // tudo automático: quando todas as partes estão gravadas e na nuvem, a montagem começa sozinha
+  const [autoMsg, setAutoMsg] = useState<string | null>(null);
+  const readyToAuto = Boolean(c && parts?.plan && !finalUri && !job);
+  useEffect(() => {
+    if (!readyToAuto || !c || !parts?.plan) return;
+    const plan = parts.plan;
+    const attempt = () => void requestFinalRender(c.workspaceId, c.id, plan).then((r) => {
+      if (r.ok) {
+        setAutoMsg(null);
+        void latestRenderJob(c.id).then(setJob);
+      } else setAutoMsg(r.reason);
+    }).catch(() => undefined);
+    attempt();
+    const t = setInterval(attempt, 20_000);
+    return () => clearInterval(t);
+  }, [readyToAuto, c, parts]);
+
+  // ...e quando fica pronta, baixa sozinha para o aparelho
+  useEffect(() => {
+    if (!c || job?.status !== "done" || finalUri) return;
+    void downloadFinal(c.id, job).then(setFinalUri).catch(() => undefined);
+  }, [c, job, finalUri]);
+
   async function run(label: string, fn: () => Promise<unknown>) {
     setBusy(label);
     setError(null);
@@ -219,6 +242,7 @@ export default function ContentScreen() {
                   ) : (
                     <>
                       {job?.status === "failed" ? <Text style={{ color: colors.bad }}>A montagem falhou: {job.error}</Text> : null}
+                      {!job && autoMsg ? <Text style={{ color: colors.info, fontWeight: "700" }} testID="auto-render-status">{`Montagem automática: ${autoMsg}`}</Text> : null}
                       <Button compact label="MELHORAR E FINALIZAR (retoque + legenda + música)" loading={busy === "montar"} testID="request-final" onPress={() => run("montar", async () => {
                         const r = await requestFinalRender(c.workspaceId, c.id, parts.plan!);
                         if (!r.ok) throw new Error(r.reason);

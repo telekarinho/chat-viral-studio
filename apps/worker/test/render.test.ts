@@ -37,7 +37,11 @@ describe("renderizador (comando)", () => {
     const args = ffmpegArgs({ plan, inputs: ["a.mp4", "b.mp4", "c.mp4"], hasAudio: [true, false, true], fontFile: "f.ttf", output: "out.mp4" });
     const graph = args[args.indexOf("-filter_complex") + 1]!;
     expect(graph).toContain("anullsrc");
-    expect(graph).toContain("concat=n=3:v=1:a=1");
+    // transições automáticas entre as partes (imagem e som)
+    expect(graph).toMatch(/\[v0\]\[v1\]xfade=transition=\w+:duration=0\.\d+:offset=/);
+    expect(graph).toContain("acrossfade=");
+    const cut = ffmpegArgs({ plan: { ...plan, transitions: [] }, inputs: ["a.mp4", "b.mp4", "c.mp4"], hasAudio: [true, false, true], fontFile: "f.ttf", output: "o.mp4" });
+    expect(cut[cut.indexOf("-filter_complex") + 1]).toContain("concat=n=3:v=1:a=1");
     expect(graph).toContain("loudnorm");
     expect(graph).toContain("RodrigoSerra.me");
     expect(args).toContain("[vout]");

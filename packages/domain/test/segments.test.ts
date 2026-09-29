@@ -38,7 +38,11 @@ describe("plano de edição automático", () => {
   it("junta as partes na ordem, apara o toque do botão e soma a duração", () => {
     expect(plan.clips.map((c) => c.takeId)).toEqual(["t0", "t1", "t2", "t3", "t4", "t5"]);
     expect(plan.clips[0]).toMatchObject({ trimStartMs: 250, trimEndMs: 200, durationMs: 3550 });
-    expect(plan.totalMs).toBe(plan.clips.reduce((a, c) => a + c.durationMs, 0));
+    // transições automáticas entre as partes: a sobreposição encurta o total
+    expect(plan.transitions).toHaveLength(plan.clips.length - 1);
+    expect(plan.transitions!.every((t) => t.durationMs > 0 && t.durationMs <= 300)).toBe(true);
+    expect(plan.transitions!.find((_, k) => plan.clips[k + 1]!.role === "mas")?.kind).toBe("zoomin");
+    expect(plan.totalMs).toBe(plan.clips.reduce((a, c) => a + c.durationMs, 0) - plan.transitions!.reduce((a, t) => a + t.durationMs, 0));
   });
   it("efeito escolhido pelo papel do trecho", () => {
     expect(plan.clips.map((c) => c.effect.kind)).toEqual(["punch_in", "slow_zoom_in", "zoom_out_reveal", "push_in", "hold", "zoom_out_end"]);

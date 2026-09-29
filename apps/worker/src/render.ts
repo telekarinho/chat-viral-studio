@@ -96,7 +96,7 @@ export function ffmpegArgs(r: RenderInput): string[] {
     ];
     parts.push(`[${i}:v]${pre.join(",")}[p${i}]`);
     parts.push(...beautyGraph(`p${i}`, `b${i}`, plan.retouch));
-    parts.push(`[b${i}]zoompan=z='${zoomExpr(clip, plan.fps)}':x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':d=1:s=${W}x${H}:fps=${plan.fps},setsar=1[v${i}]`);
+    parts.push(`[b${i}]zoompan=z='${zoomExpr(clip, plan.fps)}':x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':d=1:s=${W}x${H}:fps=${plan.fps},setsar=1,format=yuv420p[v${i}]`);
     if (r.hasAudio[i]) {
       parts.push(`[${i}:a]atrim=start=${start}:end=${end},asetpts=PTS-STARTPTS,aresample=48000,aformat=channel_layouts=stereo[a${i}]`);
     } else {
@@ -106,7 +106,26 @@ export function ffmpegArgs(r: RenderInput): string[] {
   });
 
   const total = plan.totalMs;
-  parts.push(`${concatIn.join("")}concat=n=${plan.clips.length}:v=1:a=1[vcat][ac]`);
+  const trans = plan.transitions ?? [];
+  if (plan.clips.length > 1 && trans.length === plan.clips.length - 1 && trans.every((t) => t.durationMs > 0)) {
+    // transições automáticas: xfade (imagem) + acrossfade (som), encadeadas parte a parte
+    let vPrev = "v0";
+    let aPrev = "a0";
+    let elapsed = plan.clips[0]!.durationMs;
+    trans.forEach((t, k) => {
+      const i = k + 1;
+      const last = i === plan.clips.length - 1;
+      const vOut = last ? "vcat" : `vx${i}`;
+      const aOut = last ? "ac" : `ax${i}`;
+      parts.push(`[${vPrev}][v${i}]xfade=transition=${t.kind}:duration=${sec(t.durationMs)}:offset=${sec(elapsed - t.durationMs)}[${vOut}]`);
+      parts.push(`[${aPrev}][a${i}]acrossfade=d=${sec(t.durationMs)}:c1=tri:c2=tri[${aOut}]`);
+      elapsed += plan.clips[i]!.durationMs - t.durationMs;
+      vPrev = vOut;
+      aPrev = aOut;
+    });
+  } else {
+    parts.push(`${concatIn.join("")}concat=n=${plan.clips.length}:v=1:a=1[vcat][ac]`);
+  }
   // legendas sincronizadas com a fala (ASS/libass) sobre o vídeo já montado — tempos globais
   if (r.assFile && plan.captionStyle !== "nenhuma") {
     parts.push(`[vcat]subtitles=filename='${filterPath(r.assFile)}'${r.fontsDir ? `:fontsdir='${filterPath(r.fontsDir)}'` : ""}[vc]`);

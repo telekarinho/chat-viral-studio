@@ -35,6 +35,18 @@ export interface EditClip {
   captions: CaptionCue[]; // relative to clip start (after trim)
 }
 
+/** Transição entre partes (FFmpeg xfade), escolhida sozinha pelo papel da parte seguinte. */
+export type TransitionKind = "fade" | "fadefast" | "smoothleft" | "smoothup" | "zoomin";
+export interface Transition { kind: TransitionKind; durationMs: number }
+export const TRANSITION_MS = 300;
+
+export function chooseTransition(to: SegmentRole, index: number): TransitionKind {
+  if (to === "mas") return "zoomin"; // a virada ganha um "empurrão"
+  if (to === "closing") return "fade"; // fechamento respira
+  if (to === "cta") return "smoothup";
+  return index % 2 === 0 ? "smoothleft" : "fadefast";
+}
+
 export type Retouch = "off" | "leve" | "forte";
 export const RETOUCH_LEVELS: readonly Retouch[] = ["forte", "leve", "off"];
 
@@ -64,7 +76,20 @@ export interface EditPlan {
   accentColor?: string;
   music?: PlanMusic | null;
   clips: EditClip[];
+  /** transitions[k] liga clips[k] → clips[k+1] (a sobreposição encurta o total) */
+  transitions?: Transition[];
   totalMs: number;
+}
+
+/** Início de cada parte na linha do tempo final (descontando as sobreposições das transições). */
+export function clipStartsMs(plan: Pick<EditPlan, "clips" | "transitions">): number[] {
+  const out: number[] = [];
+  let t = 0;
+  plan.clips.forEach((c, k) => {
+    out.push(t);
+    t += c.durationMs - (plan.transitions?.[k]?.durationMs ?? 0);
+  });
+  return out;
 }
 
 export interface PlanInput {
@@ -168,9 +193,15 @@ export function buildEditPlan(input: PlanInput): EditPlan {
       captions: buildCaptions(seg.text, durationMs, style),
     };
   });
+  // transições automáticas entre as partes (curtas o bastante para nunca comer a fala)
+  const transitions: Transition[] = clips.slice(1).map((c, k) => ({
+    kind: chooseTransition(c.role, k),
+    durationMs: Math.max(0, Math.min(TRANSITION_MS, Math.floor(Math.min(clips[k]!.durationMs, c.durationMs) / 4))),
+  }));
   return {
     version: "edit-v1", width: 1080, height: 1920, fps: 30, captionStyle: style, retouch: input.retouch ?? "leve", stabilize: input.stabilize ?? false, signature: input.signature,
-    ...(input.accentColor ? { accentColor: input.accentColor } : {}), music: input.music ?? null, clips, totalMs: clips.reduce((a, c) => a + c.durationMs, 0),
+    ...(input.accentColor ? { accentColor: input.accentColor } : {}), music: input.music ?? null, clips, transitions,
+    totalMs: clips.reduce((a, c) => a + c.durationMs, 0) - transitions.reduce((a, t) => a + t.durationMs, 0),
   };
 }
 

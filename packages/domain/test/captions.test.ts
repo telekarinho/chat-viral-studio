@@ -46,6 +46,9 @@ describe("arquivo ASS", () => {
     expect(ass).toMatch(/Dialogue: 0,0:00:00\.20,[^,]+,manuscrito,,0,0,0,,\{\\fad\(90,70\)\}PORQUE EU SOU CONTIGO/);
     // 2ª parte começa em 3.000s + 0.100s
     expect(ass).toMatch(/Dialogue: 0,0:00:03\.10,/);
+    // com transição de 300ms, a 2ª parte entra 0.3s antes — a legenda acompanha
+    const withT = buildAss({ clips: [clip(c1, 3000), clip(c2, 2000)], transitions: [{ kind: "fade", durationMs: 300 }], captionStyle: "manuscrito", width: 1080, height: 1920 });
+    expect(withT).toMatch(/Dialogue: 0,0:00:02\.80,/);
   });
 
   it("destaque: uma linha por palavra, a falada acende na cor do tema", () => {

@@ -1,4 +1,4 @@
-import type { CaptionCue, CaptionStyle, EditPlan } from "./editPlan";
+import { clipStartsMs, type CaptionCue, type CaptionStyle, type EditPlan } from "./editPlan";
 
 /**
  * Legendas sincronizadas com a FALA REAL (palavra a palavra, vindas da transcrição do take) e renderizadas
@@ -79,7 +79,7 @@ export function assText(s: string): string {
 }
 
 /** Arquivo .ass do vídeo inteiro (tempos globais, depois de juntar as partes). */
-export function buildAss(plan: Pick<EditPlan, "clips" | "captionStyle" | "width" | "height"> & { accentColor?: string }): string {
+export function buildAss(plan: Pick<EditPlan, "clips" | "captionStyle" | "width" | "height" | "transitions"> & { accentColor?: string }): string {
   const style = plan.captionStyle;
   const accent = assColor(plan.accentColor ?? DEFAULT_ACCENT);
   const white = assColor("#FFFFFF");
@@ -96,8 +96,9 @@ export function buildAss(plan: Pick<EditPlan, "clips" | "captionStyle" | "width"
   ];
   if (style === "nenhuma") return header.join("\n") + "\n";
   const events: string[] = [];
-  let offset = 0;
-  for (const clip of plan.clips) {
+  const starts = clipStartsMs(plan);
+  for (const [k, clip] of plan.clips.entries()) {
+    const offset = starts[k]!;
     for (const cue of clip.captions) {
       const s = offset + cue.startMs;
       const e = offset + cue.endMs;
@@ -114,7 +115,6 @@ export function buildAss(plan: Pick<EditPlan, "clips" | "captionStyle" | "width"
         events.push(`Dialogue: 0,${assTime(s)},${assTime(e)},${style},,0,0,0,,{\\fad(90,70)}${assText(cue.text)}`);
       }
     }
-    offset += clip.durationMs;
   }
   return [...header, ...events].join("\n") + "\n";
 }
