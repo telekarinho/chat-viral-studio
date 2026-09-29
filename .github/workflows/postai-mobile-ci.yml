@@ -35,6 +35,9 @@ jobs:
       - run: npm run lint
       - run: npm run typecheck
       - run: npm test
+      - name: Android JS bundle (Metro + Babel)
+        working-directory: apps/mobile
+        run: npx expo export --platform android --output-dir /tmp/postai-export
       - name: API production bundle
         run: npm run build -w @postai/api
       - name: No secrets committed
