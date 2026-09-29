@@ -31,7 +31,11 @@ Deno.serve(async (req) => {
   } catch (e) {
     const status = (e as { status?: number }).status;
     if (status === 403 || status === 404) return json(404, { code: "workspace_not_found" });
-    if (e instanceof LlmUnavailableError) return json(502, { code: "llm_unavailable" });
+    if (e instanceof LlmUnavailableError) {
+      // provider message only (never the key or user content)
+      console.error(JSON.stringify({ msg: "generate.llm_unavailable", error: e.message.replaceAll(key, "***") }));
+      return json(502, { code: "llm_unavailable" });
+    }
     console.error(JSON.stringify({ msg: "generate.failed", error: e instanceof Error ? e.message : String(e) }));
     return json(500, { code: "internal_error" });
   }

@@ -8,9 +8,22 @@ import type { LlmClient, MemoryStore } from "./generation.service";
  */
 export function geminiClient(apiKey: string, model: string, fetchImpl: typeof fetch = fetch): LlmClient {
   const url = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`;
+  type GeminiJson = { candidates?: { content?: { parts?: { text?: string }[] } }[]; error?: { message?: string; status?: string } };
+  let keyInQuery = false; // some newer key formats are only accepted as ?key=
+  async function send(body: Record<string, unknown>) {
+    const target = keyInQuery ? `${url}?key=${encodeURIComponent(apiKey)}` : url;
+    const headers: Record<string, string> = { "Content-Type": "application/json" };
+    if (!keyInQuery) headers["x-goog-api-key"] = apiKey;
+    const res = await fetchImpl(target, { method: "POST", headers, body: JSON.stringify(body) });
+    return { res, json: (await res.json().catch(() => ({}))) as GeminiJson };
+  }
   async function call(body: Record<string, unknown>) {
-    const res = await fetchImpl(url, { method: "POST", headers: { "Content-Type": "application/json", "x-goog-api-key": apiKey }, body: JSON.stringify(body) });
-    return { res, json: (await res.json().catch(() => ({}))) as { candidates?: { content?: { parts?: { text?: string }[] } }[]; error?: { message?: string } } };
+    let r = await send(body);
+    if ((r.res.status === 401 || r.res.status === 403) && !keyInQuery) {
+      keyInQuery = true;
+      r = await send(body);
+    }
+    return r;
   }
   return {
     model,
@@ -19,7 +32,7 @@ export function geminiClient(apiKey: string, model: string, fetchImpl: typeof fe
       const base = { systemInstruction: { parts: [{ text: system }] }, contents: [{ role: "user", parts: [{ text: user }] }] };
       let r = await call({ ...base, generationConfig: { temperature: 0.9, responseMimeType: "application/json", responseJsonSchema: schema } });
       if (r.res.status === 400) r = await call({ ...base, generationConfig: { temperature: 0.9, responseMimeType: "application/json" } });
-      if (!r.res.ok) throw new Error(`gemini HTTP ${r.res.status}: ${r.json.error?.message ?? ""}`.slice(0, 200));
+      if (!r.res.ok) throw new Error(`gemini HTTP ${r.res.status} ${r.json.error?.status ?? ""}: ${r.json.error?.message ?? ""}`.slice(0, 300));
       const text = r.json.candidates?.[0]?.content?.parts?.map((p) => p.text ?? "").join("") ?? "";
       if (!text) throw new Error("empty gemini response");
       return JSON.parse(text.replace(/^```(?:json)?\s*|\s*```$/g, ""));

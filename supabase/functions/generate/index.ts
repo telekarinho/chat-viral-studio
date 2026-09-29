@@ -270,9 +270,21 @@ import { createClient as createClient2 } from "npm:@supabase/supabase-js@2";
 import { createClient } from "npm:@supabase/supabase-js@2";
 function geminiClient(apiKey, model, fetchImpl = fetch) {
   const url = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`;
-  async function call(body) {
-    const res = await fetchImpl(url, { method: "POST", headers: { "Content-Type": "application/json", "x-goog-api-key": apiKey }, body: JSON.stringify(body) });
+  let keyInQuery = false;
+  async function send(body) {
+    const target = keyInQuery ? `${url}?key=${encodeURIComponent(apiKey)}` : url;
+    const headers = { "Content-Type": "application/json" };
+    if (!keyInQuery) headers["x-goog-api-key"] = apiKey;
+    const res = await fetchImpl(target, { method: "POST", headers, body: JSON.stringify(body) });
     return { res, json: await res.json().catch(() => ({})) };
+  }
+  async function call(body) {
+    let r = await send(body);
+    if ((r.res.status === 401 || r.res.status === 403) && !keyInQuery) {
+      keyInQuery = true;
+      r = await send(body);
+    }
+    return r;
   }
   return {
     model,
@@ -281,7 +293,7 @@ function geminiClient(apiKey, model, fetchImpl = fetch) {
       const base = { systemInstruction: { parts: [{ text: system }] }, contents: [{ role: "user", parts: [{ text: user }] }] };
       let r = await call({ ...base, generationConfig: { temperature: 0.9, responseMimeType: "application/json", responseJsonSchema: schema } });
       if (r.res.status === 400) r = await call({ ...base, generationConfig: { temperature: 0.9, responseMimeType: "application/json" } });
-      if (!r.res.ok) throw new Error(`gemini HTTP ${r.res.status}: ${r.json.error?.message ?? ""}`.slice(0, 200));
+      if (!r.res.ok) throw new Error(`gemini HTTP ${r.res.status} ${r.json.error?.status ?? ""}: ${r.json.error?.message ?? ""}`.slice(0, 300));
       const text2 = r.json.candidates?.[0]?.content?.parts?.map((p) => p.text ?? "").join("") ?? "";
       if (!text2) throw new Error("empty gemini response");
       return JSON.parse(text2.replace(/^```(?:json)?\s*|\s*```$/g, ""));
@@ -427,7 +439,10 @@ Deno.serve(async (req) => {
   } catch (e) {
     const status = e.status;
     if (status === 403 || status === 404) return json(404, { code: "workspace_not_found" });
-    if (e instanceof LlmUnavailableError) return json(502, { code: "llm_unavailable" });
+    if (e instanceof LlmUnavailableError) {
+      console.error(JSON.stringify({ msg: "generate.llm_unavailable", error: e.message.replaceAll(key, "***") }));
+      return json(502, { code: "llm_unavailable" });
+    }
     console.error(JSON.stringify({ msg: "generate.failed", error: e instanceof Error ? e.message : String(e) }));
     return json(500, { code: "internal_error" });
   }
