@@ -1,0 +1,42 @@
+import { Text, View } from "react-native";
+import { DEFAULT_EDIT_CHOICES, MOOD_LABEL, moodForPillar, type CaptionStyle, type EditChoices, type MusicMood } from "@postai/domain";
+import { Chip, s } from "../ui";
+
+const CAPTION_LABEL: Record<CaptionStyle, string> = {
+  manuscrito: "✍️ Manuscrito (creme, pincel)", destaque: "🔆 Destaque (palavra acende)", limpo: "Limpo", nenhuma: "Sem legenda",
+};
+
+/** Legenda e música da montagem final. "Automática" escolhe o clima pelo pilar do vídeo. */
+export function FinishOptions({ value, onChange, pillarSlug, business }: {
+  value: EditChoices | null | undefined; onChange: (v: EditChoices) => void; pillarSlug: string; business: boolean;
+}) {
+  const v = value ?? DEFAULT_EDIT_CHOICES;
+  const auto = moodForPillar(pillarSlug, business);
+  const set = (patch: Partial<EditChoices>) => onChange({ ...v, ...patch });
+  return (
+    <View style={{ gap: 8 }} testID="finish-options">
+      <Text style={s.label}>Legenda (sincronizada com a sua fala)</Text>
+      <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8 }}>
+        {(Object.keys(CAPTION_LABEL) as CaptionStyle[]).map((k) => (
+          <Chip key={k} label={CAPTION_LABEL[k]} selected={v.captionStyle === k} onPress={() => set({ captionStyle: k })} testID={`caption-${k}`} />
+        ))}
+      </View>
+      <Text style={s.label}>Música de fundo (abaixa sozinha quando você fala)</Text>
+      <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8 }}>
+        <Chip label={`🎵 Automática: ${MOOD_LABEL[auto]}`} selected={v.music === "auto"} onPress={() => set({ music: "auto" })} testID="music-auto" />
+        {(Object.keys(MOOD_LABEL) as MusicMood[]).filter((m) => m !== auto).map((m) => (
+          <Chip key={m} label={MOOD_LABEL[m]} selected={v.music === m} onPress={() => set({ music: m })} testID={`music-${m}`} />
+        ))}
+        <Chip label="Sem música" selected={v.music === "none"} onPress={() => set({ music: "none" })} testID="music-none" />
+      </View>
+      {v.music !== "none" ? (
+        <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8 }}>
+          {([["Baixinha", 0.12], ["Normal", 0.22], ["Mais alta", 0.35]] as const).map(([l, vol]) => (
+            <Chip key={l} label={`Volume: ${l}`} selected={Math.abs((v.musicVolume ?? 0.22) - vol) < 0.01} onPress={() => set({ musicVolume: vol })} />
+          ))}
+        </View>
+      ) : null}
+      <Text style={s.muted}>Músicas com licença para vídeo nas redes (Mixkit). Quer usar um áudio em alta do TikTok/Instagram? Escolha “Sem música” e adicione o áudio no app da rede ao postar.</Text>
+    </View>
+  );
+}

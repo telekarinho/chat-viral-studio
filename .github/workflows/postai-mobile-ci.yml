@@ -26,8 +26,18 @@ jobs:
           node-version: '22'
           cache: npm
           cache-dependency-path: package-lock.json
-      - name: FFmpeg (real render test)
-        run: sudo apt-get update -qq && sudo apt-get install -y -qq ffmpeg fonts-dejavu-core > /dev/null
+      - name: FFmpeg (real render test) + voz sintética para testar a legenda da fala
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq ffmpeg fonts-dejavu-core espeak-ng > /dev/null
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: pip
+          cache-dependency-path: apps/worker/scripts/requirements.txt
+      - uses: actions/cache@v4
+        with:
+          path: ~/.cache/huggingface
+          key: postai-whisper-small-v1
+      - run: pip install -q -r apps/worker/scripts/requirements.txt
       - run: npm ci
       - name: Expo dependency versions
         working-directory: apps/mobile
@@ -35,6 +45,9 @@ jobs:
       - run: npm run lint
       - run: npm run typecheck
       - run: npm test
+        env:
+          WHISPER_PYTHON: python
+          WHISPER_MODEL: small
       - name: Android JS bundle (Metro + Babel)
         working-directory: apps/mobile
         run: npx expo export --platform android --output-dir /tmp/postai-export

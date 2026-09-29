@@ -8,10 +8,21 @@ export interface RenderInput {
   hasAudio: boolean[];
   fontFile: string;
   output: string;
+  /** legendas do vídeo inteiro (buildAss) + pasta das fontes (Caveat Brush, Anton) */
+  assFile?: string | null;
+  fontsDir?: string | null;
+  /** faixa de música já baixada e conferida (sha256) */
+  musicFile?: string | null;
 }
 
-const CAPTION_COLOR = "0xF3E6CF"; // creme, preset "Manuscrito" (docs/CAPTION_STYLES.md)
 const SIGNATURE_MS = 2000;
+const MUSIC_FADE_IN_S = 0.8;
+const MUSIC_FADE_OUT_S = 1.5;
+
+/** Caminho dentro de um valor de filtro entre aspas simples (dois-pontos do Windows escapados). */
+export function filterPath(p: string): string {
+  return p.replace(/\\/g, "/").replace(/:/g, "\\:").replace(/'/g, "\\'");
+}
 
 /** drawtext text escaping inside a single-quoted filtergraph value. */
 export function escapeDrawtext(s: string): string {
@@ -42,16 +53,6 @@ export function zoomExpr(clip: EditClip, fps: number): string {
   return `${a.toFixed(4)}+(${(b - a).toFixed(4)})*min(on/${frames}\\,1)`;
 }
 
-function captionFilters(clip: EditClip, font: string, style: EditPlan["captionStyle"]): string[] {
-  if (style === "nenhuma") return [];
-  const size = style === "manuscrito" ? 64 : 54;
-  return clip.captions.map(
-    (c) =>
-      `drawtext=fontfile='${font}':text='${escapeDrawtext(c.text)}':fontsize=${size}:fontcolor=${CAPTION_COLOR}:shadowcolor=0x000000@0.55:shadowx=2:shadowy=2` +
-      `:x=(w-text_w)/2:y=h*0.62:enable='between(t\\,${sec(c.startMs)}\\,${sec(c.endMs)})'`,
-  );
-}
-
 /** Builds the full ffmpeg argv for one final 9:16 export. Deterministic: same plan + inputs = same command. */
 export function ffmpegArgs(r: RenderInput): string[] {
   const { plan } = r;
@@ -73,7 +74,6 @@ export function ffmpegArgs(r: RenderInput): string[] {
       `fps=${plan.fps}`,
       ...retouchFilters(plan.retouch),
       `zoompan=z='${zoomExpr(clip, plan.fps)}':x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':d=1:s=${W}x${H}:fps=${plan.fps}`,
-      ...captionFilters(clip, font, plan.captionStyle),
       "setsar=1",
     ];
     parts.push(`[${i}:v]${v.join(",")}[v${i}]`);
@@ -86,16 +86,37 @@ export function ffmpegArgs(r: RenderInput): string[] {
   });
 
   const total = plan.totalMs;
-  parts.push(`${concatIn.join("")}concat=n=${plan.clips.length}:v=1:a=1[vc][ac]`);
+  parts.push(`${concatIn.join("")}concat=n=${plan.clips.length}:v=1:a=1[vcat][ac]`);
+  // legendas sincronizadas com a fala (ASS/libass) sobre o vídeo já montado — tempos globais
+  if (r.assFile && plan.captionStyle !== "nenhuma") {
+    parts.push(`[vcat]subtitles=filename='${filterPath(r.assFile)}'${r.fontsDir ? `:fontsdir='${filterPath(r.fontsDir)}'` : ""}[vc]`);
+  } else {
+    parts.push("[vcat]null[vc]");
+  }
   parts.push(
     `[vc]drawtext=fontfile='${font}':text='${escapeDrawtext(plan.signature)}':fontsize=44:fontcolor=white@0.9:shadowcolor=0x000000@0.6:shadowx=2:shadowy=2` +
       `:x=(w-text_w)/2:y=h*0.86:enable='gte(t\\,${sec(Math.max(0, total - SIGNATURE_MS))})'[vout]`,
   );
-  parts.push("[ac]loudnorm=I=-14:TP=-1.5:LRA=11,aresample=48000[aout]");
+  const withMusic = Boolean(r.musicFile && plan.music);
+  if (withMusic) {
+    // música por baixo da voz: abaixa sozinha quando há fala (sidechain), entra e sai suave
+    const T = total / 1000;
+    const vol = Math.min(0.6, Math.max(0.05, plan.music!.volume));
+    parts.push(
+      `[${r.inputs.length}:a]aresample=48000,aformat=channel_layouts=stereo,atrim=duration=${T.toFixed(3)},asetpts=PTS-STARTPTS,volume=${vol.toFixed(2)},` +
+        `afade=t=in:d=${MUSIC_FADE_IN_S},afade=t=out:st=${Math.max(0, T - MUSIC_FADE_OUT_S).toFixed(3)}:d=${MUSIC_FADE_OUT_S}[mus]`,
+    );
+    parts.push("[ac]asplit=2[voice][key]");
+    parts.push("[mus][key]sidechaincompress=threshold=0.02:ratio=12:attack=10:release=450[duck]");
+    parts.push("[voice][duck]amix=inputs=2:duration=first:normalize=0,loudnorm=I=-14:TP=-1.5:LRA=11,aresample=48000[aout]");
+  } else {
+    parts.push("[ac]loudnorm=I=-14:TP=-1.5:LRA=11,aresample=48000[aout]");
+  }
 
   return [
     "-y", "-hide_banner", "-loglevel", "error",
     ...r.inputs.flatMap((p) => ["-i", p]),
+    ...(withMusic ? ["-stream_loop", "-1", "-i", r.musicFile!] : []),
     "-filter_complex", parts.join(";"),
     "-map", "[vout]", "-map", "[aout]",
     "-c:v", "libx264", "-preset", "veryfast", "-crf", "20", "-pix_fmt", "yuv420p", "-r", String(plan.fps),

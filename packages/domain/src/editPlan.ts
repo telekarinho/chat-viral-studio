@@ -1,3 +1,4 @@
+import type { MusicMood } from "./music";
 import type { ScriptSegment, SegmentRole } from "./segments";
 
 /**
@@ -18,6 +19,8 @@ export interface CaptionCue {
   startMs: number;
   endMs: number;
   text: string;
+  /** palavras com o tempo REAL da fala (transcrição) — ativa o destaque palavra a palavra */
+  words?: { text: string; startMs: number; endMs: number }[];
 }
 
 export interface EditClip {
@@ -32,7 +35,16 @@ export interface EditClip {
   captions: CaptionCue[]; // relative to clip start (after trim)
 }
 
-export type CaptionStyle = "manuscrito" | "limpo" | "nenhuma";
+export type CaptionStyle = "manuscrito" | "destaque" | "limpo" | "nenhuma";
+export const CAPTION_STYLES: readonly CaptionStyle[] = ["manuscrito", "destaque", "limpo", "nenhuma"];
+
+/** Música de fundo: faixa da biblioteca (music.ts), abaixa sozinha quando há fala. */
+export interface PlanMusic {
+  trackId: string;
+  mood: MusicMood;
+  /** volume da música sob a voz, 0–1 (padrão 0.22) */
+  volume: number;
+}
 
 export interface EditPlan {
   version: "edit-v1";
@@ -43,6 +55,9 @@ export interface EditPlan {
   /** light skin retouch on the final (never on the original): "leve" ≈ TikTok/WhatsApp beauty, subtle */
   retouch: "off" | "leve";
   signature: string;
+  /** cor do destaque da legenda (#RRGGBB) */
+  accentColor?: string;
+  music?: PlanMusic | null;
   clips: EditClip[];
   totalMs: number;
 }
@@ -54,6 +69,8 @@ export interface PlanInput {
   captionStyle?: CaptionStyle;
   retouch?: "off" | "leve";
   signature: string;
+  accentColor?: string;
+  music?: PlanMusic | null;
 }
 
 // tap on the record button is audible/visible at both ends of each part
@@ -116,7 +133,7 @@ export function buildCaptions(text: string, durationMs: number, style: CaptionSt
   let t = 0;
   return chunks.map((c, i) => {
     const len = i === chunks.length - 1 ? durationMs - t : Math.round((c.length / total) * durationMs);
-    const cue = { startMs: t, endMs: t + len, text: style === "manuscrito" ? c.toUpperCase() : c };
+    const cue = { startMs: t, endMs: t + len, text: style === "limpo" ? c : c.toLocaleUpperCase("pt-BR") };
     t += len;
     return cue;
   });
@@ -145,5 +162,18 @@ export function buildEditPlan(input: PlanInput): EditPlan {
       captions: buildCaptions(seg.text, durationMs, style),
     };
   });
-  return { version: "edit-v1", width: 1080, height: 1920, fps: 30, captionStyle: style, retouch: input.retouch ?? "leve", signature: input.signature, clips, totalMs: clips.reduce((a, c) => a + c.durationMs, 0) };
+  return {
+    version: "edit-v1", width: 1080, height: 1920, fps: 30, captionStyle: style, retouch: input.retouch ?? "leve", signature: input.signature,
+    ...(input.accentColor ? { accentColor: input.accentColor } : {}), music: input.music ?? null, clips, totalMs: clips.reduce((a, c) => a + c.durationMs, 0),
+  };
 }
+
+/** Escolhas do criador para a montagem final (vão em content_items.structured_payload.edit; validadas no servidor). */
+export interface EditChoices {
+  captionStyle: CaptionStyle;
+  /** "auto" = clima do pilar · "none" = sem música · um clima (MusicMood) · ou o id de uma faixa */
+  music: string;
+  musicVolume?: number;
+}
+
+export const DEFAULT_EDIT_CHOICES: EditChoices = { captionStyle: "manuscrito", music: "auto", musicVolume: 0.22 };

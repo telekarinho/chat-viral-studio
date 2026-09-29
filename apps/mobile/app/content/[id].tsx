@@ -3,8 +3,9 @@ import { Text, TextInput, View } from "react-native";
 import * as Clipboard from "expo-clipboard";
 import { router, useFocusEffect, useLocalSearchParams } from "expo-router";
 import { FORMAT_LABEL, PLATFORMS, PLATFORM_LABEL, buildEditPlan, buildSegments, isBusiness, wholeTakeSegment, type EditPlan, type Platform, type ScriptSegment } from "@postai/domain";
-import { completeContent, getContent, latestTakesBySegment, listTakes, listTasks, workspaceById, selectHook, type ContentItem, type Take, type Workspace } from "../../src/db/repo";
+import { completeContent, getContent, latestTakesBySegment, listTakes, listTasks, setEditChoices, workspaceById, selectHook, type ContentItem, type Take, type Workspace } from "../../src/db/repo";
 import { ProjectPanel } from "../../src/components/ProjectPanel";
+import { FinishOptions } from "../../src/components/FinishOptions";
 import { generateForContent, saveUserEdit } from "../../src/generate";
 import { reportError } from "../../src/telemetry";
 import { downloadFinal, latestRenderJob, localFinal, requestFinalRender, type RenderJob } from "../../src/finalRender";
@@ -24,6 +25,7 @@ export default function ContentScreen() {
   const [job, setJob] = useState<RenderJob | null>(null);
   const [finalUri, setFinalUri] = useState<string | null>(null);
   const [owner, setOwner] = useState<{ ws: Workspace; takes: Take[] } | null>(null);
+  const [business, setBusiness] = useState(false);
 
   const load = useCallback(async () => {
     const item = await getContent(id);
@@ -38,6 +40,7 @@ export default function ContentScreen() {
     if (item) setTaskId((await listTasks(item.date)).find((t) => t.contentItemId === id && t.status === "pending")?.id ?? null);
     if (item?.draft) {
       const ws = await workspaceById(item.workspaceId);
+      setBusiness(isBusiness(ws.profile));
       const segments = buildSegments(item.draft, { selectedHook: item.selectedHook ?? 0, userEdited: Boolean(item.meta?.userEdited), closingPhrase: ws.profile.closingPhrase, business: isBusiness(ws.profile) });
       const chosen = await latestTakesBySegment(item.id);
       const recorded = segments.filter((sg) => chosen.has(sg.index)).map((sg) => sg.index);
@@ -195,9 +198,17 @@ export default function ContentScreen() {
                   {parts.plan.clips.map((c) => (
                     <Text key={c.segmentIndex} style={s.muted}>{c.segmentIndex + 1}. {EFFECT_LABEL[c.effect.kind]} · {(c.durationMs / 1000).toFixed(1)}s · {c.captions.length} {c.captions.length === 1 ? "legenda" : "legendas"}</Text>
                   ))}
-                  <Text style={s.muted}>Legenda estilo Manuscrito + assinatura {parts.plan.signature}. A montagem (juntar + efeitos) roda no servidor de edição.</Text>
+                  <Text style={s.muted}>{`Assinatura ${parts.plan.signature}. A montagem (juntar, efeitos, legenda da sua fala e música) roda no servidor de edição.`}</Text>
+                  <FinishOptions value={c.edit} pillarSlug={c.pillarSlug} business={business} onChange={(v) => void setEditChoices(c.id, v).then(setC)} />
                   {finalUri ? (
-                    <Button compact label="VER VÍDEO FINAL / POSTAR" onPress={() => router.push(`/final/${c.id}`)} testID="open-final" />
+                    <>
+                      <Button compact label="VER VÍDEO FINAL / POSTAR" onPress={() => router.push(`/final/${c.id}`)} testID="open-final" />
+                      <Button compact variant="secondary" label="REFAZER COM ESTA LEGENDA / MÚSICA" loading={busy === "montar"} onPress={() => run("montar", async () => {
+                        const r = await requestFinalRender(c.workspaceId, c.id, parts.plan!);
+                        if (!r.ok) throw new Error(r.reason);
+                        setFinalUri(null);
+                      })} />
+                    </>
                   ) : job?.status === "done" ? (
                     <Button compact label="BAIXAR VÍDEO FINAL" onPress={() => run("baixar", async () => { await downloadFinal(c.id, job); router.push(`/final/${c.id}`); })} loading={busy === "baixar"} testID="download-final" />
                   ) : job && (job.status === "queued" || job.status === "rendering") ? (
@@ -208,7 +219,7 @@ export default function ContentScreen() {
                   ) : (
                     <>
                       {job?.status === "failed" ? <Text style={{ color: colors.bad }}>A montagem falhou: {job.error}</Text> : null}
-                      <Button compact label="MELHORAR E FINALIZAR (retoque leve + legenda)" loading={busy === "montar"} testID="request-final" onPress={() => run("montar", async () => {
+                      <Button compact label="MELHORAR E FINALIZAR (retoque + legenda + música)" loading={busy === "montar"} testID="request-final" onPress={() => run("montar", async () => {
                         const r = await requestFinalRender(c.workspaceId, c.id, parts.plan!);
                         if (!r.ok) throw new Error(r.reason);
                       })} />

@@ -1,7 +1,7 @@
 import { Directory, File, Paths } from "expo-file-system";
 import type { EditPlan } from "@postai/domain";
 import { getDb } from "./db/database";
-import { latestTakesBySegment, listTakes } from "./db/repo";
+import { contentRowForServer, latestTakesBySegment, listTakes } from "./db/repo";
 import { newId } from "./config";
 import { supabase } from "./supabase";
 
@@ -14,8 +14,17 @@ export async function requestFinalRender(workspaceId: string, contentId: string,
   const takes = parts.length ? parts : (await listTakes({ contentItemId: contentId })).filter((t) => !t.tags.includes("descartado")).slice(0, 1);
   const pending = takes.filter((t) => t.media.state !== "uploaded_original").length;
   if (pending) return { ok: false, reason: `Aguardando ${pending} vídeo(s) terminarem de sincronizar. Conecte na internet e tente de novo.` };
+  // a legenda/música escolhidas precisam estar no servidor ANTES da montagem (a fila de sync é assíncrona)
+  const row = await contentRowForServer(contentId);
+  if (row) {
+    const up = await supabase.from("content_items").update({ structured_payload: row.structured_payload, updated_at: row.updated_at }).eq("id", contentId);
+    if (up.error) return { ok: false, reason: `Não consegui salvar a legenda/música escolhidas: ${up.error.message}` };
+  }
   const { error } = await supabase.from("render_jobs").insert({ id: newId(), workspace_id: workspaceId, content_item_id: contentId, plan });
   if (error) return { ok: false, reason: `Não consegui pedir a montagem: ${error.message}` };
+  // nova montagem pedida: o final antigo deixa de ser "o final" (o arquivo continua no aparelho até baixar o novo)
+  const db = await getDb();
+  await db.runAsync("DELETE FROM kv WHERE key = ?", `final:${contentId}`);
   return { ok: true };
 }
 

@@ -1,3 +1,19 @@
+# Legendas e música — implementado em 29/09/2026
+
+- **Legenda da fala real**: o servidor transcreve cada parte com Whisper (local, grátis, modelo `small`, tempo por palavra);
+  o roteiro entra só como dica de grafia. Sem Whisper disponível, cai para a legenda estimada pelo roteiro.
+- **Estilos** (ASS/libass, `packages/domain/src/captions.ts`):
+  - **Manuscrito** (padrão, o do print): Caveat Brush, creme `#F3E6CF`, caixa alta, contorno fino + sombra, ~63% da altura.
+  - **Destaque**: Anton, branco com contorno; a palavra falada acende na cor do tema (`#FFD23F`) com leve “pop”.
+  - **Limpo**: DejaVu Sans Bold, branco discreto. **Sem legenda**.
+- **Música de fundo** (`packages/domain/src/music.ts`): 19 faixas Mixkit (licença de uso em vídeo, sem crédito obrigatório;
+  não redistribuímos — o servidor baixa da origem e confere sha256). Clima automático pelo pilar (reflexão→piano,
+  academia→treino, família→acústico, humor, empresa→corporativo) ou escolhido; volume baixinha/normal/mais alta;
+  **ducking**: abaixa sozinha quando há fala; fade in/out.
+- Escolhas ficam em `content_items.structured_payload.edit` e são **validadas no servidor** (`editChoices`).
+
+---
+
 # Legendas estilizadas, embelezamento e edição automática — especificação M3
 
 Pedido do Rodrigo durante o beta (28/09/2026). **Fora do MVP** para não atrasar o beta diário; entra no M3 (Post-ready).

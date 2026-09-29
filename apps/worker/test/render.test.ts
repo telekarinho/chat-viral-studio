@@ -4,8 +4,10 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
 import { describe, expect, it } from "vitest";
-import { RODRIGO_PROFILE, buildEditPlan, buildSegments, generateLocal } from "@postai/domain";
-import { escapeDrawtext, ffmpegArgs, zoomExpr } from "../src/render";
+import { RODRIGO_PROFILE, buildAss, buildEditPlan, buildSegments, generateLocal } from "@postai/domain";
+import { writeFileSync } from "node:fs";
+import { escapeDrawtext, ffmpegArgs, filterPath, zoomExpr } from "../src/render";
+import { editChoices } from "../src/job";
 import { probe, render } from "../src/ffmpeg";
 
 const run = promisify(execFile);
@@ -43,6 +45,25 @@ describe("renderizador (comando)", () => {
     const off = ffmpegArgs({ plan: { ...plan, retouch: "off" }, inputs: ["a.mp4", "b.mp4", "c.mp4"], hasAudio: [true, true, true], fontFile: "f.ttf", output: "o.mp4" });
     expect(off[off.indexOf("-filter_complex") + 1]).not.toContain("bilateral=");
   });
+  it("legenda ASS sobre o vídeo montado e música com ducking sob a voz", () => {
+    const withMusic = { ...plan, music: { trackId: "mixkit-32", mood: "motivacional" as const, volume: 0.22 } };
+    const args = ffmpegArgs({ plan: withMusic, inputs: ["a.mp4", "b.mp4", "c.mp4"], hasAudio: [true, true, true], fontFile: "f.ttf", output: "o.mp4", assFile: String.raw`C:\tmp\leg.ass`, fontsDir: String.raw`C:\fonts`, musicFile: "m.mp3" });
+    const graph = args[args.indexOf("-filter_complex") + 1]!;
+    expect(graph).toContain(String.raw`subtitles=filename='C\:/tmp/leg.ass':fontsdir='C\:/fonts'`);
+    expect(graph).toContain("sidechaincompress");
+    expect(graph).toContain("afade=t=in");
+    expect(args.slice(args.indexOf("-stream_loop"), args.indexOf("-stream_loop") + 4)).toEqual(["-stream_loop", "-1", "-i", "m.mp3"]);
+    const none = ffmpegArgs({ plan: { ...plan, captionStyle: "nenhuma" }, inputs: ["a.mp4", "b.mp4", "c.mp4"], hasAudio: [true, true, true], fontFile: "f.ttf", output: "o.mp4", assFile: "x.ass" });
+    expect(none[none.indexOf("-filter_complex") + 1]).not.toContain("subtitles=");
+    expect(none).not.toContain("-stream_loop");
+    expect(filterPath(String.raw`D:\a b\c's.ass`)).toBe(String.raw`D\:/a b/c\'s.ass`);
+  });
+  it("escolhas do criador validadas no servidor (legenda, música auto pelo pilar, sem música)", () => {
+    expect(editChoices(null, "academia", false, "c1")).toMatchObject({ captionStyle: "manuscrito", music: { mood: "treino", volume: 0.22 } });
+    expect(editChoices({ edit: { captionStyle: "destaque", music: "none" } }, "academia", false, "c1")).toEqual({ captionStyle: "destaque", music: null, accentColor: undefined });
+    expect(editChoices({ edit: { captionStyle: "<script>", music: "mixkit-22", musicVolume: 9 } }, "x", false, "c1")).toMatchObject({ captionStyle: "manuscrito", music: { trackId: "mixkit-22", mood: "reflexao", volume: 0.22 } });
+    expect(editChoices({ edit: { music: "empresa" } }, "educacao", true, "c1").music?.mood).toBe("empresa");
+  });
 });
 
 describe.skipIf(!hasFfmpeg || !FONT)("renderizador (FFmpeg real)", () => {
@@ -57,9 +78,13 @@ describe.skipIf(!hasFfmpeg || !FONT)("renderizador (FFmpeg real)", () => {
       inputs.push(f);
     }
     const takes = await Promise.all(inputs.map(async (f, i) => ({ segmentIndex: segments[i]!.index, takeId: `t${i}`, durationMs: (await probe(f)).durationMs })));
-    const plan = buildEditPlan({ segments, takes, signature: "RodrigoSerra.me" });
+    const music = join(dir, "music.mp3");
+    await run("ffmpeg", ["-y", "-loglevel", "error", "-f", "lavfi", "-i", "sine=frequency=220:duration=4", "-c:a", "libmp3lame", music]);
+    const plan = buildEditPlan({ segments, takes, signature: "RodrigoSerra.me", captionStyle: "destaque", music: { trackId: "mixkit-32", mood: "motivacional", volume: 0.22 } });
+    const assFile = join(dir, "legendas.ass");
+    writeFileSync(assFile, buildAss(plan), "utf8");
     const out = join(dir, "final.mp4");
-    const res = await render({ plan, inputs, fontFile: FONT, output: out });
+    const res = await render({ plan, inputs, fontFile: FONT, output: out, assFile, musicFile: music });
     expect(res.width).toBe(1080);
     expect(res.height).toBe(1920);
     expect(res.hasAudio).toBe(true);
