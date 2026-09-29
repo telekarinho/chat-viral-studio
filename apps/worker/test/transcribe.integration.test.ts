@@ -31,7 +31,7 @@ describe.skipIf(!ready)("transcrição da fala (Whisper)", () => {
     const text = words!.map((w) => w.text.toLowerCase()).join(" ");
     expect(text).toMatch(/contigo/);
     expect(text).toMatch(/desistir/);
-    expect(words![0]!.startMs).toBeGreaterThan(700);
+    expect(words![0]!.startMs).toBeGreaterThan(400); // 1s de silêncio antes; o Whisper arredonda o início
     for (let i = 1; i < words!.length; i++) expect(words![i]!.startMs).toBeGreaterThanOrEqual(words![i - 1]!.startMs);
 
     const cues = cuesFromWords(words!, "manuscrito", 5500);
