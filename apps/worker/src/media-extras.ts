@@ -23,7 +23,8 @@ export async function transcribeClip(input: string, startMs: number, durationMs:
     const raw = JSON.parse(stdout) as { text: string; start: number; end: number }[];
     return raw.map((w) => ({ text: w.text, startMs: Math.round(w.start * 1000), endMs: Math.round(w.end * 1000) })).filter((w) => w.endMs > w.startMs);
   } catch (e) {
-    process.stdout.write(JSON.stringify({ level: "warn", msg: "transcribe.failed", error: e instanceof Error ? e.message.slice(0, 200) : String(e) }) + "\n");
+    const stderr = String((e as { stderr?: unknown }).stderr ?? "");
+    process.stdout.write(JSON.stringify({ level: "warn", msg: "transcribe.failed", error: e instanceof Error ? e.message.slice(0, 200) : String(e), stderr: stderr.slice(-1500) }) + "\n");
     return null;
   }
 }

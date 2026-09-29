@@ -25,6 +25,7 @@ appId: me.rodrigoserra.postai
 - scrollUntilVisible:
     element:
       id: open-main_video
+    timeout: 60000
 - tapOn:
     id: open-main_video
 - extendedWaitUntil:
@@ -77,6 +78,7 @@ appId: me.rodrigoserra.postai
 - scrollUntilVisible:
     element:
       id: attach-done
+    timeout: 60000
 - tapOn:
     id: attach-done
 - extendedWaitUntil:
@@ -86,9 +88,11 @@ appId: me.rodrigoserra.postai
 - scrollUntilVisible:
     element:
       text: 'Takes deste conteúdo .1.'
+    timeout: 60000
 - scrollUntilVisible:
     element:
       id: complete-content
+    timeout: 60000
 - tapOn:
     id: complete-content
 - extendedWaitUntil:

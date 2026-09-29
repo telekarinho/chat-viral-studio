@@ -30,6 +30,7 @@ appId: me.rodrigoserra.postai
 - scrollUntilVisible:
     element:
       id: onb-finish
+    timeout: 60000
 - tapOn:
     id: onb-finish
 - extendedWaitUntil:
@@ -43,5 +44,6 @@ appId: me.rodrigoserra.postai
 - scrollUntilVisible:
     element:
       id: progress-card
+    timeout: 60000
 - assertVisible: ".*missões feitas.*"
 - takeScreenshot: 01_hoje

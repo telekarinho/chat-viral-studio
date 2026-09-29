@@ -20,6 +20,7 @@ appId: me.rodrigoserra.postai
 - scrollUntilVisible:
     element:
       id: open-thought
+    timeout: 60000
 - tapOn:
     id: open-thought
 - extendedWaitUntil:
@@ -51,6 +52,7 @@ appId: me.rodrigoserra.postai
 - scrollUntilVisible:
     element:
       id: next-part
+    timeout: 60000
 - tapOn:
     id: next-part
 - extendedWaitUntil:
@@ -69,6 +71,7 @@ appId: me.rodrigoserra.postai
 - scrollUntilVisible:
     element:
       id: attach-done
+    timeout: 60000
 - tapOn:
     id: attach-done
 - extendedWaitUntil:
@@ -78,6 +81,7 @@ appId: me.rodrigoserra.postai
 - scrollUntilVisible:
     element:
       id: edit-plan
+    timeout: 60000
 - takeScreenshot: 09_plano_edicao
 # the final is requested AUTOMATICALLY when all parts are in the cloud (the button stays as a fallback)
 - repeat:
@@ -89,6 +93,7 @@ appId: me.rodrigoserra.postai
           element:
             id: request-final
           optional: true
+          timeout: 60000
       - tapOn:
           id: request-final
           optional: true
@@ -123,4 +128,5 @@ appId: me.rodrigoserra.postai
 - scrollUntilVisible:
     element:
       id: share-final
+    timeout: 60000
 - takeScreenshot: 10_video_final

@@ -254,7 +254,7 @@ export default function ContentScreen() {
             </>
           ) : null}
 
-          <Section>Takes deste conteúdo ({takes.length})</Section>
+          <Section>{`Takes deste conteúdo (${takes.length})`}</Section>
           {takes.map((t) => (
             <Card key={t.id}>
               <Text style={{ fontWeight: "700", color: colors.ink }} onPress={() => router.push(`/take/${t.id}`)} accessibilityRole="link">
