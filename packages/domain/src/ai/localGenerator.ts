@@ -1,6 +1,8 @@
 import { PROMPT_VERSION, parseDraft, type ContentDraft, type GenerationMeta } from "./contract";
 import { finalizeDraft, type CreatorProfile } from "./prompt";
 import { LOCAL_BANK, LOCAL_CTAS, PILLAR_HASHTAGS, type BankSeed } from "./localBank";
+import { businessDraft, businessVariants } from "./businessLocal";
+import { isBusiness } from "../profiles";
 import { checkRepetition, describeAvoidance, fingerprintsFor, type Fingerprint, type RepetitionReport } from "../repetition";
 
 export interface LocalGenerateInput {
@@ -21,6 +23,7 @@ export interface GenerationResult {
 
 /** Offline generator: same contract and repetition guard as the API path. */
 export function generateLocal(input: LocalGenerateInput): GenerationResult {
+  if (isBusiness(input.profile)) return generateBusinessLocal(input, input.profile.business);
   const seeds = LOCAL_BANK.filter((s) => s.pillar === input.pillarSlug);
   const pool = seeds.length > 0 ? seeds : LOCAL_BANK;
   const ctas = rotateCtas(input.recent);
@@ -40,6 +43,26 @@ export function generateLocal(input: LocalGenerateInput): GenerationResult {
   const best = candidates.sort((a, b) => a.report.hits.length - b.report.hits.length)[0]!;
   const res = done(best.draft, best.report, candidates.length, firstRejected);
   res.notices.push("Todo o banco offline deste pilar foi usado recentemente; revise o texto antes de gravar.");
+  return res;
+}
+
+function generateBusinessLocal(input: LocalGenerateInput, strategy: NonNullable<LocalGenerateInput["profile"]["business"]>): GenerationResult {
+  const candidates: { draft: ContentDraft; report: RepetitionReport }[] = [];
+  const rejected: RepetitionReport[] = [];
+  const total = businessVariants(strategy);
+  const start = input.recent.length; // rotate the starting combination as history grows
+  for (let i = 0; i < total; i++) {
+    const parsed = parseDraft(businessDraft(strategy, input.pillarSlug, input.pillarName, input.format, start + i, input.eventText));
+    if (!parsed.ok) throw new Error(`Estratégia do perfil gerou roteiro inválido: ${parsed.errors.join("; ")}`);
+    const draft = finalizeDraft(parsed.draft, input.profile);
+    const report = checkRepetition(fingerprintsFor(draft), input.recent);
+    if (!report.repeated) return done(draft, report, i + 1, rejected);
+    candidates.push({ draft, report });
+    if (rejected.length === 0) rejected.push(report);
+  }
+  const best = candidates.sort((a, b) => a.report.hits.length - b.report.hits.length)[0]!;
+  const res = done(best.draft, best.report, candidates.length, rejected);
+  res.notices.push("Todas as combinações de dor e objeção deste perfil foram usadas recentemente; cadastre novas dores/objeções.");
   return res;
 }
 

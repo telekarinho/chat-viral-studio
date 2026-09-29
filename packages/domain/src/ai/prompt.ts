@@ -1,4 +1,5 @@
 import { PLATFORMS, PROMPT_VERSION, type ContentDraft, type Platform } from "./contract";
+import type { BusinessStrategy, ProfileKind } from "../profiles";
 
 export interface CreatorProfile {
   displayName: string;
@@ -7,6 +8,8 @@ export interface CreatorProfile {
   signature: string;
   closingPhrase: string;
   voiceRules: string[];
+  kind?: ProfileKind;
+  business?: BusinessStrategy;
 }
 
 export const RODRIGO_PROFILE: CreatorProfile = {
@@ -29,6 +32,9 @@ export const DURATION_RANGE: Record<"thought" | "main_video", [number, number]> 
   main_video: [45, 120],
 };
 
+/** Sales videos are shorter than personal reflections (VSL curta). */
+export const BUSINESS_MAIN_RANGE: [number, number] = [30, 90];
+
 export interface PromptInput {
   profile: CreatorProfile;
   pillarName: string;
@@ -39,8 +45,9 @@ export interface PromptInput {
 }
 
 export function buildPrompt(input: PromptInput): { system: string; user: string; promptVersion: string } {
-  const [min, max] = DURATION_RANGE[input.format];
-  const system = [
+  const b = input.profile.kind === "empresa" ? input.profile.business : undefined;
+  const [min, max] = b && input.format === "main_video" ? BUSINESS_MAIN_RANGE : DURATION_RANGE[input.format];
+  const system = b ? businessSystem(input.profile, b) : [
     `Você é o roteirista pessoal de ${input.profile.displayName} (${input.profile.handle}). Posicionamento: ${input.profile.positioning}`,
     `Voz: ${input.profile.voiceRules.join("; ")}.`,
     "Escreva em português do Brasil, como fala, frases curtas, sem emojis no roteiro.",
@@ -60,9 +67,10 @@ export function buildPrompt(input: PromptInput): { system: string; user: string;
     "Responda somente no JSON do schema.",
   ].join("\n");
   const user = [
+    b ? `Pilar de venda: ${input.pillarName}. Antes de escrever, decida (coerentes entre si): público, nível de consciência, UMA dor, UMA objeção, UM desejo, UMA prova visual, UMA emoção e a ação esperada. Sem isso, não escreva.` : "",
     `Formato: ${input.format === "thought" ? "Pensamento do Dia" : "Vídeo principal"} (${min}–${max}s).`,
-    `Pilar editorial: ${input.pillarName}.`,
-    input.eventText ? `Acontecimento real de hoje contado pelo criador (transforme em conteúdo, preserve os fatos): "${input.eventText}"` : "Sem acontecimento específico: parta de uma situação comum e concreta do dia dele.",
+    b ? "" : `Pilar editorial: ${input.pillarName}.`,
+    input.eventText ? `${b ? "Situação real da empresa hoje" : "Acontecimento real de hoje contado pelo criador"} (transforme em conteúdo, preserve os fatos): "${input.eventText}"` : b ? "Sem acontecimento específico: parta de uma dor real do cliente." : "Sem acontecimento específico: parta de uma situação comum e concreta do dia dele.",
     input.format === "main_video" ? "Inclua em 'versions' variações de 15s, 30s e 60s quando fizer sentido." : "Em 'versions' inclua no máximo uma variação de até 15s.",
     input.recentSummaries.length ? `Conteúdos recentes (não repita assunto, frase, metáfora, gancho, CTA nem estrutura):\n${input.recentSummaries.map((s) => `- ${s}`).join("\n")}` : "",
     input.avoid,
@@ -70,6 +78,30 @@ export function buildPrompt(input: PromptInput): { system: string; user: string;
     .filter(Boolean)
     .join("\n\n");
   return { system, user, promptVersion: PROMPT_VERSION };
+}
+
+function businessSystem(profile: CreatorProfile, b: BusinessStrategy): string {
+  const list = (xs: readonly string[]) => xs.map((x) => `- ${x}`).join("\n");
+  return [
+    `Você é o roteirista de vídeos de venda da ${b.brand} (${b.product}). Posicionamento: ${profile.positioning}`,
+    `Quem compra é empresário: alguém que ${b.audience}. Não é consumidor final.`,
+    `Voz: ${profile.voiceRules.join("; ")}.`,
+    "Pergunta central de todo vídeo: o que impede esse empresário de comprar hoje? O vídeo elimina UMA dúvida e mostra UMA prova.",
+    "Mapeie a estrutura assim: E = a dor real do cliente (concreta, do dia a dia da operação); MAS = a objeção ou a crença errada, respondida sem enrolar; POR ISSO = a prova visual + o diferencial que resolve.",
+    "O tipo de vídeo segue o pilar: Educação = erro comum e como escolher; Autoridade = experiência e fábrica; Demonstração = produto em uso com prova; Bastidores = produção/qualidade; Comparativo = 'parece igual, mas não é'; Histórias = caso real de cliente; Oferta = condição e escassez REAIS, sem inventar.",
+    b.noPrice ? "PROIBIDO falar preço, valor, parcela, desconto em número ou 'R$' — nem no roteiro, nem na tela, nem nas legendas. Preço é no atendimento." : "",
+    "Nunca invente especificação técnica, número ou depoimento que não esteja abaixo.",
+    `Dores reais:\n${list(b.pains)}`,
+    `Desejos:\n${list(b.desires)}`,
+    `Objeções e respostas (use UMA por vídeo):\n${b.objections.map((o) => `- "${o.objection}" → ${o.answer}`).join("\n")}`,
+    `Provas visuais que dá para filmar (use em recording_suggestions):\n${list(b.proofs)}`,
+    `Diferenciais verdadeiros:\n${list(b.differentiators)}`,
+    `CTAs possíveis (adapte, sem pressão):\n${list(b.ctas)}`,
+    `As legendas terminam com a assinatura ${profile.signature}.`,
+    "Gancho de até 12 palavras que para o scroll (dor financeira, curiosidade, comparação, autoridade ou erro). screen_text de 2 a 5 palavras.",
+    "Legendas por plataforma adaptadas; no Facebook/Marketplace pode detalhar o uso do produto (sem preço).",
+    "Responda somente no JSON do schema.",
+  ].filter(Boolean).join("\n");
 }
 
 export const PLATFORM_LIMITS: Record<Platform, number> = { instagram: 2200, tiktok: 2200, facebook: 5000, youtube_shorts: 5000 };

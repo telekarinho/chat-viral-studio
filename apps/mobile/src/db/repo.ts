@@ -75,18 +75,69 @@ export interface MediaRow extends MediaRecord {
 
 // ---------- workspace (kv) ----------
 
+// 'workspace' = the active profile; 'workspace:<id>' = every profile of this account (personal, company, product...)
+
+const withDefaults = (ws: Workspace): Workspace => ({
+  ...ws, settings: { ...DEFAULT_SETTINGS, ...ws.settings, teleprompter: { ...DEFAULT_SETTINGS.teleprompter, ...ws.settings?.teleprompter } },
+});
+
 export async function getWorkspace(): Promise<Workspace | null> {
   const db = await getDb();
   const row = await db.getFirstAsync<{ value: string }>("SELECT value FROM kv WHERE key = 'workspace'");
-  if (!row) return null;
-  const ws = JSON.parse(row.value) as Workspace;
-  return { ...ws, settings: { ...DEFAULT_SETTINGS, ...ws.settings, teleprompter: { ...DEFAULT_SETTINGS.teleprompter, ...ws.settings?.teleprompter } } };
+  return row ? withDefaults(JSON.parse(row.value) as Workspace) : null;
 }
 
-export async function saveWorkspace(ws: Workspace): Promise<void> {
+/** Saves a profile and makes it the active one (activate=false refreshes another profile in the background). */
+export async function saveWorkspace(ws: Workspace, activate = true): Promise<void> {
   const db = await getDb();
-  await db.runAsync("INSERT OR REPLACE INTO kv(key, value) VALUES ('workspace', ?)", JSON.stringify(ws));
+  const active = await getWorkspace();
+  await db.withTransactionAsync(async () => {
+    await db.runAsync("INSERT OR REPLACE INTO kv(key, value) VALUES (?, ?)", `workspace:${ws.id}`, JSON.stringify(ws));
+    if (activate || !active || active.id === ws.id) await db.runAsync("INSERT OR REPLACE INTO kv(key, value) VALUES ('workspace', ?)", JSON.stringify(ws));
+  });
 }
+
+export async function listWorkspaces(): Promise<Workspace[]> {
+  const db = await getDb();
+  const rows = await db.getAllAsync<{ value: string }>("SELECT value FROM kv WHERE key LIKE 'workspace:%'");
+  const all = rows.map((r) => withDefaults(JSON.parse(r.value) as Workspace));
+  const active = await getWorkspace();
+  // installs from before multi-profile only have the active key
+  if (active && !all.some((w) => w.id === active.id)) all.unshift(active);
+  return all;
+}
+
+export async function workspaceById(id: string): Promise<Workspace> {
+  const db = await getDb();
+  const row = await db.getFirstAsync<{ value: string }>("SELECT value FROM kv WHERE key = ?", `workspace:${id}`);
+  if (row) return withDefaults(JSON.parse(row.value) as Workspace);
+  const active = await requireWorkspace();
+  if (active.id !== id) throw new Error("Perfil não encontrado neste aparelho");
+  return active;
+}
+
+export async function activateWorkspace(id: string): Promise<Workspace> {
+  const ws = await workspaceById(id);
+  await saveWorkspace(ws, true);
+  return ws;
+}
+
+/** Name, voice and sales strategy of the active profile. */
+export async function updateProfile(profile: CreatorProfile, name: string): Promise<Workspace> {
+  const ws = await requireWorkspace();
+  const next = { ...ws, name, profile };
+  await saveWorkspace(next);
+  await enqueue(ws, "creator_profiles", ws.id, {
+    onConflict: "workspace_id",
+    rows: [{
+      workspace_id: ws.id, display_name: profile.displayName, handle: profile.handle, positioning: profile.positioning, signature: profile.signature,
+      closing_phrase: profile.closingPhrase, voice_rules: profile.voiceRules, tone: { kind: profile.kind ?? "pessoal", business: profile.business ?? null }, updated_at: nowIso(),
+    }],
+  });
+  return next;
+}
+
+const activeId = async () => (await requireWorkspace()).id;
 
 export async function updateSettings(patch: Partial<Settings>): Promise<Workspace> {
   const ws = await requireWorkspace();
@@ -189,14 +240,16 @@ const planLocks = new Map<string, Promise<void>>();
 /** Creates today's missions from the routine once per day (idempotent, works offline). */
 export async function ensureDayPlan(date: Date): Promise<void> {
   const key = toLocalDateKey(date);
-  const existing = planLocks.get(key);
+  const lockKey = `${await activeId()}:${key}`;
+  const existing = planLocks.get(lockKey);
   if (existing) return existing;
   const p = (async () => {
     const db = await getDb();
-    const done = await db.getFirstAsync<{ value: string }>("SELECT value FROM kv WHERE key = ?", `plan:${key}`);
-    if (done) return;
     const ws = await requireWorkspace();
-    const recent = await db.getAllAsync<{ pillar_slug: string }>("SELECT pillar_slug FROM content_items ORDER BY date DESC LIMIT 30");
+    const done = await db.getFirstAsync<{ value: string }>("SELECT value FROM kv WHERE key = ?", `plan:${ws.id}:${key}`);
+    const hasTasks = await db.getFirstAsync<{ id: string }>("SELECT id FROM tasks WHERE workspace_id = ? AND date = ? LIMIT 1", ws.id, key);
+    if (done || hasTasks) return;
+    const recent = await db.getAllAsync<{ pillar_slug: string }>("SELECT pillar_slug FROM content_items WHERE workspace_id = ? ORDER BY date DESC LIMIT 30", ws.id);
     const plan = buildDayPlan({ date, workspaceId: ws.id, routine: ws.routine, pillars: ws.pillars, recentPillarSlugs: recent.map((r) => r.pillar_slug).reverse(), newId, now: nowIso(),
       // E2E builds only: CI may run on a weekend, when Rodrigo's routine is empty
       weekdayOverride: config.e2e && (date.getDay() === 0 || date.getDay() === 6) ? 1 : undefined });
@@ -208,18 +261,18 @@ export async function ensureDayPlan(date: Date): Promise<void> {
         );
       }
       for (const t of plan.tasks) await insertTask(t);
-      await db.runAsync("INSERT OR REPLACE INTO kv(key, value) VALUES (?, '1')", `plan:${key}`);
+      await db.runAsync("INSERT OR REPLACE INTO kv(key, value) VALUES (?, '1')", `plan:${ws.id}:${key}`);
     });
     for (const c of plan.contentItems) await enqueue(ws, "content_items", c.id, { rows: [contentServerRow({ ...c, draft: null, meta: null, selectedHook: null })] });
     for (const t of plan.tasks) await enqueue(ws, "recording_tasks", t.id, { rows: [taskServerRow(t)] });
-  })().finally(() => planLocks.delete(key));
-  planLocks.set(key, p);
+  })().finally(() => planLocks.delete(lockKey));
+  planLocks.set(lockKey, p);
   return p;
 }
 
 export async function listTasks(dateKey: string): Promise<RecordingTask[]> {
   const db = await getDb();
-  const rows = await db.getAllAsync<TaskRow>("SELECT * FROM tasks WHERE date = ? ORDER BY scheduled_for", dateKey);
+  const rows = await db.getAllAsync<TaskRow>("SELECT * FROM tasks WHERE date = ? AND workspace_id = ? ORDER BY scheduled_for", dateKey, await activeId());
   return rows.map(toTask);
 }
 
@@ -230,9 +283,9 @@ export async function getTask(id: string): Promise<RecordingTask | null> {
 }
 
 export async function runTaskAction(taskId: string, action: TaskAction): Promise<RecordingTask> {
-  const ws = await requireWorkspace();
   const task = await getTask(taskId);
   if (!task) throw new Error("Tarefa não encontrada");
+  const ws = await workspaceById(task.workspaceId);
   const tr = applyTaskAction(task, action, { now: nowIso(), newId });
   const db = await getDb();
   await db.withTransactionAsync(async () => {
@@ -269,12 +322,12 @@ const contentServerRow = (c: Omit<ContentItem, "draft" | "meta"> & { draft: Cont
 
 export async function listContent(dateKey: string): Promise<ContentItem[]> {
   const db = await getDb();
-  return (await db.getAllAsync<ContentRow>("SELECT * FROM content_items WHERE date = ? ORDER BY scheduled_for", dateKey)).map(toContent);
+  return (await db.getAllAsync<ContentRow>("SELECT * FROM content_items WHERE date = ? AND workspace_id = ? ORDER BY scheduled_for", dateKey, await activeId())).map(toContent);
 }
 
 export async function listRecentContent(limit = 60): Promise<ContentItem[]> {
   const db = await getDb();
-  return (await db.getAllAsync<ContentRow>("SELECT * FROM content_items ORDER BY date DESC, scheduled_for DESC LIMIT ?", limit)).map(toContent);
+  return (await db.getAllAsync<ContentRow>("SELECT * FROM content_items WHERE workspace_id = ? ORDER BY date DESC, scheduled_for DESC LIMIT ?", await activeId(), limit)).map(toContent);
 }
 
 export async function getContent(id: string): Promise<ContentItem | null> {
@@ -298,9 +351,9 @@ export async function createAdHocContent(format: "thought" | "main_video", pilla
 }
 
 export async function saveDraft(contentId: string, draft: ContentDraft, gen: GenerationMeta & { notices: string[] }, fingerprints: Fingerprint[], userEdited = false): Promise<ContentItem> {
-  const ws = await requireWorkspace();
   const current = await getContent(contentId);
   if (!current) throw new Error("Conteúdo não encontrado");
+  const ws = await workspaceById(current.workspaceId);
   const scriptId = current.meta?.scriptId ?? newId();
   const meta = { ...gen, scriptId, userEdited };
   const status = current.status === "planned" ? "scripted" : current.status;
@@ -336,10 +389,10 @@ export async function selectHook(contentId: string, index: number): Promise<void
 }
 
 export async function setContentStatus(contentId: string, status: ContentItem["status"]): Promise<void> {
-  const ws = await requireWorkspace();
   const db = await getDb();
   await db.runAsync("UPDATE content_items SET status = ?, updated_at = ? WHERE id = ?", status, nowIso(), contentId);
   const c = await getContent(contentId);
+  const ws = c ? await workspaceById(c.workspaceId) : await requireWorkspace();
   if (c) await enqueue(ws, "content_items", contentId, { rows: [contentServerRow(c)] });
 }
 
@@ -352,10 +405,11 @@ export async function completeContent(contentId: string): Promise<void> {
   await setContentStatus(contentId, "done");
 }
 
-export async function recentFingerprints(limit = 120): Promise<Fingerprint[]> {
+/** Anti-repetition memory is per profile: the company may reuse a word the person used. */
+export async function recentFingerprints(workspaceId: string, limit = 120): Promise<Fingerprint[]> {
   const db = await getDb();
   const rows = await db.getAllAsync<{ type: string; value: string; content_item_id: string | null; created_at: string }>(
-    "SELECT type, value, content_item_id, created_at FROM fingerprints ORDER BY created_at DESC LIMIT ?", limit,
+    "SELECT type, value, content_item_id, created_at FROM fingerprints WHERE workspace_id = ? ORDER BY created_at DESC LIMIT ?", workspaceId, limit,
   );
   return rows.map((r) => ({ type: r.type as FingerprintType, value: r.value, contentItemId: r.content_item_id, createdAt: r.created_at }));
 }
@@ -386,7 +440,9 @@ export async function registerTake(input: {
   mediaId: string; localUri: string; sizeBytes: number; checksum: string; width: number | null; height: number | null; durationMs: number | null;
   taskId: string | null; contentItemId: string | null; category: string; camera: "front" | "back"; segmentIndex?: number | null;
 }): Promise<Take> {
-  const ws = await requireWorkspace();
+  // the take (and its storage path) belongs to the profile of what is being recorded, not to whichever is active
+  const owner = input.contentItemId ? (await getContent(input.contentItemId))?.workspaceId : input.taskId ? (await getTask(input.taskId))?.workspaceId : undefined;
+  const ws = owner ? await workspaceById(owner) : await requireWorkspace();
   const db = await getDb();
   const takeId = newId();
   const createdAt = nowIso();
@@ -443,9 +499,9 @@ export async function getTake(id: string): Promise<Take | null> {
 }
 
 export async function updateTakeMeta(id: string, patch: { tags?: string[]; favorite?: boolean; category?: string }): Promise<void> {
-  const ws = await requireWorkspace();
   const t = await getTake(id);
   if (!t) return;
+  const ws = await workspaceById(t.workspaceId);
   const next = { tags: patch.tags ?? t.tags, favorite: patch.favorite ?? t.favorite, category: patch.category ?? t.category };
   const db = await getDb();
   await db.runAsync("UPDATE takes SET tags = ?, favorite = ?, category = ? WHERE id = ?", JSON.stringify(next.tags), next.favorite ? 1 : 0, next.category, id);
@@ -480,7 +536,7 @@ export async function history(days = 14): Promise<DayHistory[]> {
 
 export async function donePillarSlugs(limit = 60): Promise<string[]> {
   const db = await getDb();
-  const rows = await db.getAllAsync<{ pillar_slug: string }>("SELECT pillar_slug FROM content_items WHERE status IN ('recorded','published','done') ORDER BY date DESC LIMIT ?", limit);
+  const rows = await db.getAllAsync<{ pillar_slug: string }>("SELECT pillar_slug FROM content_items WHERE workspace_id = ? AND status IN ('recorded','published','done') ORDER BY date DESC LIMIT ?", await activeId(), limit);
   return rows.map((r) => r.pillar_slug);
 }
 

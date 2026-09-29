@@ -10,6 +10,7 @@ import { reportError } from "../../src/telemetry";
 import { useApp } from "../../src/app-state";
 import { TodayView } from "../../src/components/TodayView";
 import { UpdateBanner } from "../../src/components/UpdateBanner";
+import { ProfileSwitcher } from "../../src/components/ProfileSwitcher";
 import { ErrorBox, Loading, Screen } from "../../src/ui";
 
 export default function Today() {
@@ -76,6 +77,7 @@ export default function Today() {
   return (
     <Screen testID="today-screen">
       <UpdateBanner />
+      <ProfileSwitcher />
       {error ? <ErrorBox message={error} onRetry={load} /> : null}
       {state ? (
         <TodayView

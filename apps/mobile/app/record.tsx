@@ -6,10 +6,10 @@ import { useVideoPlayer, VideoView } from "expo-video";
 import * as Brightness from "expo-brightness";
 import { Camera, useCameraDevice, useCameraPermission, useMicrophonePermission, type VideoFile } from "react-native-vision-camera";
 import {
-  PRESET_LABEL, availablePresets, buildSegments, initialTeleprompter, pickFormat, segmentProgress, supportedFps, teleprompterReducer,
+  PRESET_LABEL, availablePresets, buildSegments, initialTeleprompter, isBusiness, pickFormat, segmentProgress, supportedFps, teleprompterReducer,
   type ResolutionPreset, type ScriptSegment,
 } from "@postai/domain";
-import { getContent, getTask, latestTakesBySegment, registerTake, runTaskAction, requireWorkspace, updateSettings, updateTakeMeta, type Take } from "../src/db/repo";
+import { getContent, getTask, latestTakesBySegment, registerTake, requireWorkspace, runTaskAction, workspaceById, updateSettings, updateTakeMeta, type Take } from "../src/db/repo";
 import { freeDiskBytes, persistRecording } from "../src/media";
 import { newId } from "../src/config";
 import { syncNow } from "../src/sync/engine";
@@ -64,7 +64,8 @@ export default function RecordScreen() {
       const content = contentId ? await getContent(contentId) : null;
       setCategory(task?.kind ?? content?.format ?? "livre");
       if (content?.draft && params.partes === "1") {
-        const segs = buildSegments(content.draft, { selectedHook: content.selectedHook ?? 0, userEdited: Boolean(content.meta?.userEdited), closingPhrase: ws.profile.closingPhrase });
+        const owner = await workspaceById(content.workspaceId);
+        const segs = buildSegments(content.draft, { selectedHook: content.selectedHook ?? 0, userEdited: Boolean(content.meta?.userEdited), closingPhrase: owner.profile.closingPhrase, business: isBusiness(owner.profile) });
         const recorded = [...(await latestTakesBySegment(content.id)).keys()];
         const next = segmentProgress(segs.length, recorded).next ?? 0;
         setSegments(segs);

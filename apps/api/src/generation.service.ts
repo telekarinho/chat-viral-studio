@@ -1,5 +1,5 @@
 import {
-  PROMPT_VERSION, avoidanceInstructions, buildPrompt, checkRepetition, contentDraftJsonSchema, describeAvoidance, finalizeDraft, fingerprintsFor, parseDraft,
+  PROMPT_VERSION, avoidanceInstructions, buildPrompt, checkRepetition, contentDraftJsonSchema, describeAvoidance, finalizeDraft, fingerprintsFor, mentionsPrice, parseDraft,
   type ContentDraft, type CreatorProfile, type Fingerprint, type GenerateRequest, type GenerationMeta, type RepetitionReport,
 } from "@postai/domain";
 
@@ -62,6 +62,11 @@ export async function generateContent(req: GenerateRequest, llm: LlmClient, memo
       continue;
     }
     const draft = finalizeDraft(parsed.draft, profile);
+    if (profile.business?.noPrice && profile.kind === "empresa" && mentionsPrice(draft)) {
+      await memory.saveRun({ ...base, accepted: false, rejectionReason: "price", repetition: null });
+      avoid = "A versão anterior falou preço/valor/parcela. PROIBIDO: reescreva sem nenhum preço.";
+      continue;
+    }
     const report = checkRepetition(fingerprintsFor(draft), recent);
     if (report.repeated) {
       await memory.saveRun({ ...base, accepted: false, rejectionReason: "repetition", repetition: report });

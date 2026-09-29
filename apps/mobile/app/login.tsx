@@ -3,7 +3,7 @@ import { Text, TextInput } from "react-native";
 import { router } from "expo-router";
 import { supabase } from "../src/supabase";
 import { useApp } from "../src/app-state";
-import { findRemoteWorkspace, pullWorkspace } from "../src/workspace-setup";
+import { findRemoteWorkspaces, pullAllWorkspaces } from "../src/workspace-setup";
 import { Button, Card, ErrorBox, Eyebrow, H1, Screen, s } from "../src/ui";
 
 export default function Login() {
@@ -31,10 +31,10 @@ export default function Login() {
         setMode("signin");
         return;
       }
-      const wsId = await findRemoteWorkspace();
-      if (wsId) await pullWorkspace(wsId);
+      const ids = await findRemoteWorkspaces();
+      if (ids.length) await pullAllWorkspaces(ids);
       await reload();
-      router.replace(wsId ? "/" : "/onboarding");
+      router.replace(ids.length ? "/" : "/onboarding");
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
       setError(/invalid login/i.test(msg) ? "E-mail ou senha incorretos." : /network|fetch/i.test(msg) ? "Sem internet. O login precisa de conexão só na primeira vez." : msg);
