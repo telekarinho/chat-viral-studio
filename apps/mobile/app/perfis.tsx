@@ -69,7 +69,7 @@ function StrategyEditor({ ws, busy, onSave }: { ws: Workspace; busy: boolean; on
   const b = ws.profile.business!;
   const [f, setF] = useState({
     product: b.product, audience: b.audience, signature: ws.profile.signature, pains: lines(b.pains), desires: lines(b.desires),
-    objections: lines(b.objections.map((o) => `${o.objection} | ${o.answer}`)), proofs: lines(b.proofs), differentiators: lines(b.differentiators), ctas: lines(b.ctas),
+    objections: lines(b.objections.map((o) => `${o.objection} | ${o.answer}`)), proofs: lines(b.proofs), differentiators: lines(b.differentiators), pendingClaims: lines(b.pendingClaims ?? []), ctas: lines(b.ctas),
   });
   const set = (k: keyof typeof f) => (v: string) => setF({ ...f, [k]: v });
   const objections = parseLines(f.objections).map((l) => {
@@ -90,13 +90,14 @@ function StrategyEditor({ ws, busy, onSave }: { ws: Workspace; busy: boolean; on
         <Field label="Desejos (uma por linha)" value={f.desires} onChange={set("desires")} multiline />
         <Field label="Objeções: objeção | resposta (uma por linha)" value={f.objections} onChange={set("objections")} multiline />
         <Field label="Provas visuais para filmar (uma por linha)" value={f.proofs} onChange={set("proofs")} multiline />
-        <Field label="Diferenciais verdadeiros (um por linha)" value={f.differentiators} onChange={set("differentiators")} multiline />
+        <Field label="Diferenciais COMPROVADOS — a IA pode afirmar (um por linha)" value={f.differentiators} onChange={set("differentiators")} multiline />
+        <Field label="Alegações a comprovar — não vão para o vídeo até ter prova (uma por linha)" value={f.pendingClaims} onChange={set("pendingClaims")} multiline />
         <Field label="Chamadas / CTAs (uma por linha)" value={f.ctas} onChange={set("ctas")} multiline />
         {invalid ? <Text style={s.muted}>Preencha dores, provas, chamadas e toda objeção com “| resposta”.</Text> : null}
         <Button label="SALVAR ESTRATÉGIA" loading={busy} disabled={invalid}
           onPress={() => onSave({
             ...b, product: f.product.trim(), audience: f.audience.trim(), pains: parseLines(f.pains), desires: parseLines(f.desires), objections,
-            proofs: parseLines(f.proofs), differentiators: parseLines(f.differentiators), ctas: parseLines(f.ctas), noPrice: true,
+            proofs: parseLines(f.proofs), differentiators: parseLines(f.differentiators), pendingClaims: parseLines(f.pendingClaims), ctas: parseLines(f.ctas), noPrice: true,
           }, f.signature.trim() || ws.name)} />
       </Card>
     </>

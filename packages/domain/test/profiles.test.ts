@@ -53,7 +53,8 @@ describe("perfil empresa (ControlPot)", () => {
   it("prompt de empresa traz a Regra de Ouro, a proibição de preço e as objeções reais", () => {
     const { system, user } = buildPrompt({ profile: CONTROLPOT_PROFILE, pillarName: "Demonstração", format: "main_video", eventText: null, recentSummaries: [], avoid: "" });
     expect(system).toContain("PROIBIDO falar preço");
-    expect(system).toContain("caneca cônica");
+    expect(system).toContain("SEM PROVA");
+    expect(system).toMatch(/SEM PROVA[^]*4.000 máquinas/);
     expect(system).not.toContain("E se der certo");
     expect(user).toContain("UMA objeção");
     expect(user).toContain("30–90s");
@@ -63,5 +64,16 @@ describe("perfil empresa (ControlPot)", () => {
     const d = gen("demonstracao").draft;
     const segs = buildSegments(d, { selectedHook: 1, userEdited: false, closingPhrase: "", business: true });
     expect(segs.map((s) => s.label)).toEqual(["Gancho", "A dor do cliente", "A objeção respondida", "A prova", "Chamada"]);
+  });
+});
+
+describe("alegações sem prova", () => {
+  it("o gerador offline nunca afirma alegação pendente", () => {
+    const pending = CONTROLPOT_PROFILE.business!.pendingClaims!;
+    for (const p of BUSINESS_PILLARS) {
+      const d = gen(p.slug).draft;
+      for (const c of pending) expect(d.script.toLowerCase()).not.toContain(c.toLowerCase().slice(0, 18));
+      expect(d.script).not.toMatch(/4\.000|20 anos/);
+    }
   });
 });

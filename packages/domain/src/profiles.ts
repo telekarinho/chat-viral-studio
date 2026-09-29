@@ -21,7 +21,10 @@ export interface BusinessStrategy {
   objections: ObjectionAnswer[];
   /** Visual proofs to film (become B-roll and recording suggestions). */
   proofs: string[];
+  /** Only claims with proof on file (they may be said as facts). */
   differentiators: string[];
+  /** Claims still waiting for proof/approval: never stated as fact in a video. */
+  pendingClaims?: string[];
   ctas: string[];
   /** Never say price/value in the video — price is for the sales conversation. */
   noPrice: boolean;
@@ -60,7 +63,7 @@ export const CONTROLPOT_STRATEGY: BusinessStrategy = {
     { objection: "Outra marca é mais barata", answer: "Compara o resultado no copo e quanto tempo ela aguenta trabalhando todo dia, não só a etiqueta." },
     { objection: "E se quebrar?", answer: "Tem assistência técnica própria e peça de reposição, então a operação não fica parada esperando." },
     { objection: "Posso bater direto no copo?", answer: "Pode: dá para bater direto no copo plástico, sem sujar outra caneca." },
-    { objection: "Qual a diferença pra uma comum?", answer: "A caneca cônica controla a mistura, e a textura fica cremosa e igual toda vez." },
+    { objection: "Qual a diferença pra uma comum?", answer: "Não precisa acreditar em mim: olha a textura no copo, lado a lado." },
   ],
   proofs: [
     "close na textura cremosa escorrendo no copo inclinado",
@@ -71,11 +74,15 @@ export const CONTROLPOT_STRATEGY: BusinessStrategy = {
     "linha de produção e teste de qualidade",
     "assistência técnica trabalhando",
   ],
+  // claims with a number or a third-party name need proof before they go on video (briefing MMIX, item 2)
   differentiators: [
+    "fabricação própria em Londrina/PR",
+    "assistência técnica própria",
+  ],
+  pendingClaims: [
     "mais de 20 anos de mercado",
     "mais de 4.000 máquinas em operação",
-    "fabricante nacional com assistência própria",
-    "caneca cônica exclusiva",
+    "caneca cônica exclusiva e o resultado dela na textura",
     "atende grandes redes e franquias",
   ],
   ctas: [

@@ -20,7 +20,7 @@ const SHAPES: Record<string, PillarShape> = {
   },
   autoridade: {
     structure: "confissao",
-    hooks: (s) => [`Depois de ${s.differentiators[0] ?? "anos de mercado"}, aprendi uma coisa.`, "Já vimos esse erro centenas de vezes.", "Não é teoria, é experiência de fábrica."],
+    hooks: () => ["Na fábrica a gente aprende uma coisa.", "Esse erro aparece toda semana na assistência.", "Não é teoria, é experiência de fábrica."],
     mas: (_s, o) => `Muita gente me pergunta: "${o.objection}". ${o.answer}`,
     porIsso: (_s, proof, diff) => `Isso aqui não é promessa: ${proof}. ${cap(diff)}.`,
   },

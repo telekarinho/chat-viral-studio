@@ -282,8 +282,10 @@ ${list(b.desires)}`,
 ${b.objections.map((o) => `- "${o.objection}" \u2192 ${o.answer}`).join("\n")}`,
     `Provas visuais que d\xE1 para filmar (use em recording_suggestions):
 ${list(b.proofs)}`,
-    `Diferenciais verdadeiros:
+    `Diferenciais comprovados (pode afirmar):
 ${list(b.differentiators)}`,
+    b.pendingClaims?.length ? `Alega\xE7\xF5es AINDA SEM PROVA \u2014 N\xC3O afirme nem cite n\xFAmeros delas:
+${list(b.pendingClaims)}` : "",
     `CTAs poss\xEDveis (adapte, sem press\xE3o):
 ${list(b.ctas)}`,
     `As legendas terminam com a assinatura ${profile.signature}.`,
@@ -359,7 +361,7 @@ var CONTROLPOT_STRATEGY = {
     { objection: "Outra marca \xE9 mais barata", answer: "Compara o resultado no copo e quanto tempo ela aguenta trabalhando todo dia, n\xE3o s\xF3 a etiqueta." },
     { objection: "E se quebrar?", answer: "Tem assist\xEAncia t\xE9cnica pr\xF3pria e pe\xE7a de reposi\xE7\xE3o, ent\xE3o a opera\xE7\xE3o n\xE3o fica parada esperando." },
     { objection: "Posso bater direto no copo?", answer: "Pode: d\xE1 para bater direto no copo pl\xE1stico, sem sujar outra caneca." },
-    { objection: "Qual a diferen\xE7a pra uma comum?", answer: "A caneca c\xF4nica controla a mistura, e a textura fica cremosa e igual toda vez." }
+    { objection: "Qual a diferen\xE7a pra uma comum?", answer: "N\xE3o precisa acreditar em mim: olha a textura no copo, lado a lado." }
   ],
   proofs: [
     "close na textura cremosa escorrendo no copo inclinado",
@@ -370,11 +372,15 @@ var CONTROLPOT_STRATEGY = {
     "linha de produ\xE7\xE3o e teste de qualidade",
     "assist\xEAncia t\xE9cnica trabalhando"
   ],
+  // claims with a number or a third-party name need proof before they go on video (briefing MMIX, item 2)
   differentiators: [
+    "fabrica\xE7\xE3o pr\xF3pria em Londrina/PR",
+    "assist\xEAncia t\xE9cnica pr\xF3pria"
+  ],
+  pendingClaims: [
     "mais de 20 anos de mercado",
     "mais de 4.000 m\xE1quinas em opera\xE7\xE3o",
-    "fabricante nacional com assist\xEAncia pr\xF3pria",
-    "caneca c\xF4nica exclusiva",
+    "caneca c\xF4nica exclusiva e o resultado dela na textura",
     "atende grandes redes e franquias"
   ],
   ctas: [

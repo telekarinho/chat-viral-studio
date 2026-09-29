@@ -92,6 +92,8 @@ export async function saveWorkspace(ws: Workspace, activate = true): Promise<voi
   const db = await getDb();
   const active = await getWorkspace();
   await db.withTransactionAsync(async () => {
+    // installs from before multi-profile only have 'workspace': keep the old profile before replacing the active one
+    if (active && active.id !== ws.id) await db.runAsync("INSERT OR IGNORE INTO kv(key, value) VALUES (?, ?)", `workspace:${active.id}`, JSON.stringify(active));
     await db.runAsync("INSERT OR REPLACE INTO kv(key, value) VALUES (?, ?)", `workspace:${ws.id}`, JSON.stringify(ws));
     if (activate || !active || active.id === ws.id) await db.runAsync("INSERT OR REPLACE INTO kv(key, value) VALUES ('workspace', ?)", JSON.stringify(ws));
   });
@@ -117,7 +119,9 @@ export async function workspaceById(id: string): Promise<Workspace> {
 }
 
 export async function activateWorkspace(id: string): Promise<Workspace> {
-  const ws = await workspaceById(id);
+  // camera/teleprompter/cleanup settings belong to the device, not to a profile
+  const current = await getWorkspace();
+  const ws = { ...(await workspaceById(id)), ...(current ? { settings: current.settings } : {}) };
   await saveWorkspace(ws, true);
   return ws;
 }
@@ -488,6 +492,7 @@ export async function listTakes(filter?: { category?: string; contentItemId?: st
   const args: string[] = [];
   if (filter?.category) { where.push("category = ?"); args.push(filter.category); }
   if (filter?.contentItemId) { where.push("content_item_id = ?"); args.push(filter.contentItemId); }
+  else { where.push("workspace_id = ?"); args.push(await activeId()); }
   const sql = `SELECT * FROM takes ${where.length ? `WHERE ${where.join(" AND ")}` : ""} ORDER BY created_at DESC LIMIT 200`;
   return hydrateTakes(await db.getAllAsync<TakeRow>(sql, ...args));
 }
@@ -530,7 +535,7 @@ export async function history(days = 14): Promise<DayHistory[]> {
   return db.getAllAsync<DayHistory>(
     `SELECT date, SUM(CASE WHEN status = 'done' THEN 1 ELSE 0 END) AS done,
             SUM(CASE WHEN status IN ('rescheduled','alternate_scene') THEN 0 ELSE 1 END) AS total
-     FROM tasks GROUP BY date ORDER BY date DESC LIMIT ?`, days,
+     FROM tasks WHERE workspace_id = ? GROUP BY date ORDER BY date DESC LIMIT ?`, await activeId(), days,
   );
 }
 
