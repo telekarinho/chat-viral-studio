@@ -488,6 +488,9 @@ export async function donePillarSlugs(limit = 60): Promise<string[]> {
 export async function latestTakesBySegment(contentItemId: string): Promise<Map<number, Take>> {
   const takes = await listTakes({ contentItemId });
   const out = new Map<number, Take>();
-  for (const t of takes) if (t.segmentIndex !== null && !out.has(t.segmentIndex)) out.set(t.segmentIndex, t); // list is newest first
+  for (const t of takes) {
+    if (t.tags.includes("descartado")) continue;
+    if (t.segmentIndex !== null && !out.has(t.segmentIndex)) out.set(t.segmentIndex, t); // list is newest first
+  }
   return out;
 }

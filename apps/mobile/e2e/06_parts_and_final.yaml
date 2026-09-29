@@ -45,9 +45,12 @@ appId: me.rodrigoserra.postai
 - tapOn:
     id: record-button
 - extendedWaitUntil:
-    visible: "Parte 1 salva no aparelho ✓"
+    visible: "Parte 1 salva.*"
     timeout: 60000
 - takeScreenshot: 08_parte1_salva
+- scrollUntilVisible:
+    element:
+      id: next-part
 - tapOn:
     id: next-part
 - extendedWaitUntil:
@@ -61,8 +64,11 @@ appId: me.rodrigoserra.postai
 - tapOn:
     id: record-button
 - extendedWaitUntil:
-    visible: "Parte 2 salva no aparelho ✓"
+    visible: "Parte 2 salva.*"
     timeout: 60000
+- scrollUntilVisible:
+    element:
+      id: attach-done
 - tapOn:
     id: attach-done
 - extendedWaitUntil:
