@@ -183,6 +183,8 @@ export interface OutboxPayload {
   update?: boolean;
   /** delete rows matching column=value before inserting (e.g. fingerprints of a regenerated script) */
   replaceFor?: { column: string; value: string };
+  /** plain insert (tables where the client has no update grant, e.g. patrimonio_envios) */
+  insertOnly?: boolean;
 }
 
 export async function enqueue(ws: Workspace, table: string, rowId: string, payload: OutboxPayload): Promise<void> {
@@ -543,6 +545,16 @@ export async function donePillarSlugs(limit = 60): Promise<string[]> {
   const db = await getDb();
   const rows = await db.getAllAsync<{ pillar_slug: string }>("SELECT pillar_slug FROM content_items WHERE workspace_id = ? AND status IN ('recorded','published','done') ORDER BY date DESC LIMIT ?", await activeId(), limit);
   return rows.map((r) => r.pillar_slug);
+}
+
+/** Gravar patrimônio: queues a reviewed take for the MMIX factory (sent after the take itself is synced). */
+export async function queuePatrimonio(takeId: string, ordemId: number, clipeNum: number): Promise<void> {
+  const take = await getTake(takeId);
+  if (!take) throw new Error("Take não encontrado");
+  const ws = await workspaceById(take.workspaceId);
+  if (!ws.cloud) throw new Error("Enviar para a fábrica precisa da conta na nuvem.");
+  const id = newId();
+  await enqueue(ws, "patrimonio_envios", id, { insertOnly: true, rows: [{ id, workspace_id: ws.id, take_id: takeId, ordem_id: ordemId, clipe_num: clipeNum }] });
 }
 
 /** Latest take per part for a content item (a retake replaces the previous choice; originals are kept). */
