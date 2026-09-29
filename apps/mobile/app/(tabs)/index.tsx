@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
+import { View } from "react-native";
 import { router, useFocusEffect } from "expo-router";
 import { toLocalDateKey, type RecordingTask, type TaskAction } from "@postai/domain";
 import { ensureDayPlan, listContent, listTasks, runTaskAction, type ContentItem } from "../../src/db/repo";
@@ -78,8 +79,12 @@ export default function Today() {
     <Screen testID="today-screen">
       <UpdateBanner />
       <ProfileSwitcher />
-      {workspace?.profile.kind === "empresa" && workspace.cloud ? (
-        <Button compact variant="secondary" label="🎬 GRAVAR PATRIMÔNIO PARA A FÁBRICA" onPress={() => router.push("/patrimonio")} testID="open-patrimonio" />
+      {workspace?.profile.kind === "empresa" ? (
+        <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8 }}>
+          <Button compact label="🎥 NOVO PROJETO NO ESTÚDIO" onPress={() => router.push("/projeto")} testID="open-projeto" />
+          {workspace.cloud ? <Button compact variant="secondary" label="🎓 CURSO" onPress={() => router.push("/curso")} testID="open-curso" /> : null}
+          {workspace.cloud ? <Button compact variant="secondary" label="🎬 PATRIMÔNIO" onPress={() => router.push("/patrimonio")} testID="open-patrimonio" /> : null}
+        </View>
       ) : null}
       {error ? <ErrorBox message={error} onRetry={load} /> : null}
       {state ? (

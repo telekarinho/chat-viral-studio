@@ -1,4 +1,4 @@
-import { checkRepetition, describeAvoidance, fingerprintsFor, generateLocal, isBusiness, mentionsPrice, parseDraft, parseManualResponse, type ContentDraft, type Fingerprint, type GenerationMeta } from "@postai/domain";
+import { PRODUCTION_MODES, SHOT_LIBRARY, checkRepetition, describeAvoidance, fingerprintsFor, generateLocal, isBusiness, mentionsPrice, parseDraft, pendingClaimsIn, projectBrief, parseManualResponse, type ContentDraft, type Fingerprint, type GenerationMeta } from "@postai/domain";
 import { config, generateEndpoint } from "./config";
 import { currentSession } from "./supabase";
 import { getContent, recentFingerprints, saveDraft, workspaceById, type ContentItem } from "./db/repo";
@@ -18,7 +18,7 @@ async function viaApi(content: ContentItem, eventText: string | null): Promise<A
       method: "POST",
       signal: ctrl.signal,
       headers: { "Content-Type": "application/json", Authorization: `Bearer ${session.access_token}`, apikey: config.supabaseAnonKey },
-      body: JSON.stringify({ workspace_id: content.workspaceId, content_item_id: content.id, format: content.format, pillar_slug: content.pillarSlug, event_text: eventText }),
+      body: JSON.stringify({ workspace_id: content.workspaceId, content_item_id: content.id, format: content.format, pillar_slug: content.pillarSlug, event_text: eventText, brief: content.project ? projectBrief(content.project) : null }),
     });
     if (!res.ok) return null;
     const body = (await res.json()) as ApiResponse;
@@ -41,7 +41,7 @@ export async function generateForContent(contentId: string, eventText: string | 
   if (content.format !== "thought" && content.format !== "main_video") throw new Error("Formato sem roteiro");
   const ws = await workspaceById(content.workspaceId);
   const remote = await viaApi(content, eventText);
-  if (remote) return saveDraft(contentId, remote.draft, { ...remote.meta, notices: remote.notices }, remote.fingerprints);
+  if (remote) return saveDraft(contentId, withShotList(content, remote.draft), { ...remote.meta, notices: remote.notices }, remote.fingerprints);
 
   const pillar = ws.pillars.find((p) => p.slug === content.pillarSlug);
   const local = generateLocal({
@@ -50,7 +50,14 @@ export async function generateForContent(contentId: string, eventText: string | 
   });
   const notices = [...local.notices];
   if (generateEndpoint) notices.unshift("IA indisponível agora (sem internet ou não configurada): usei o gerador offline.");
-  return saveDraft(contentId, local.draft, { ...local.meta, notices }, fingerprintsFor(local.draft));
+  return saveDraft(contentId, withShotList(content, local.draft), { ...local.meta, notices }, fingerprintsFor(local.draft));
+}
+
+/** Estúdio: o plano de tomadas do modo vira as sugestões de gravação (lista de tomadas da gravação). */
+function withShotList(content: ContentItem, draft: ContentDraft): ContentDraft {
+  if (!content.project) return draft;
+  const shots = PRODUCTION_MODES[content.project.mode].shots.map((k) => SHOT_LIBRARY[k]);
+  return { ...draft, recording_suggestions: shots.map((s) => ({ scene: s.label, duration_seconds: s.seconds[1], location_hint: s.hint })) };
 }
 
 /** Paste-back from the user's own ChatGPT/Claude app. */
@@ -64,6 +71,8 @@ export async function importManualDraft(contentId: string, pasted: string): Prom
   if (isBusiness(ws.profile) && ws.profile.business.noPrice && mentionsPrice(draft)) {
     return { ok: false, errors: ["O roteiro fala preço/valor. Neste perfil de empresa preço não aparece no vídeo — peça para o assistente reescrever sem preço."] };
   }
+  const unproven = isBusiness(ws.profile) ? pendingClaimsIn(`${draft.script} ${draft.cta}`, ws.profile.business.pendingClaims ?? []) : [];
+  if (unproven.length) return { ok: false, errors: [`O roteiro afirma algo ainda sem prova: ${unproven.join("; ")}. Peça para reescrever sem isso.`] };
   const fps = fingerprintsFor(draft);
   const report = checkRepetition(fps, (await recentFingerprints(ws.id)).filter((f) => f.contentItemId !== contentId));
   const notices = report.repeated ? describeAvoidance(report).map((n) => n.replace("Evitei repetir", "Atenção: parece repetir")) : [];

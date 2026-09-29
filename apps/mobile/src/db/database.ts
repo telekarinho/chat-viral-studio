@@ -44,6 +44,10 @@ export function getDb(): Promise<SQLite.SQLiteDatabase> {
       // v2: gravação por partes
       const cols = await db.getAllAsync<{ name: string }>("PRAGMA table_info(takes)");
       if (!cols.some((c) => c.name === "segment_index")) await db.execAsync("ALTER TABLE takes ADD COLUMN segment_index INTEGER");
+      // v3: estúdio da fábrica (metadados do clipe, projeto, peça derivada)
+      if (!cols.some((c) => c.name === "meta")) await db.execAsync("ALTER TABLE takes ADD COLUMN meta TEXT");
+      const ccols = await db.getAllAsync<{ name: string }>("PRAGMA table_info(content_items)");
+      if (!ccols.some((c) => c.name === "project")) await db.execAsync("ALTER TABLE content_items ADD COLUMN project TEXT; ALTER TABLE content_items ADD COLUMN derived_from TEXT; ALTER TABLE content_items ADD COLUMN precisa_revisao TEXT;");
       return db;
     })();
   }

@@ -1,7 +1,7 @@
 import {
   applyTaskAction, buildDayPlan, toLocalDateKey, type ContentDraft, type ContentFormat, type CreatorProfile, type Fingerprint,
   type FingerprintType, type GenerationMeta, type MediaRecord, type MediaState, type Pillar, type RecordingTask, type ResolutionPreset,
-  type RoutineBlock, type TaskAction, type TaskStatus,
+  type RoutineBlock, type TaskAction, type TaskStatus, type ClipMeta, type ProjectInfo, type UseTarget, PRODUCTION_MODES,
 } from "@postai/domain";
 import { config, newId, nowIso } from "../config";
 import { getDb } from "./database";
@@ -46,6 +46,9 @@ export interface ContentItem {
   draft: ContentDraft | null;
   meta: (GenerationMeta & { scriptId: string; notices: string[]; userEdited: boolean }) | null;
   selectedHook: number | null;
+  project?: ProjectInfo | null;
+  derivedFrom?: string | null;
+  precisaRevisao?: string | null;
 }
 
 export interface Take {
@@ -60,6 +63,7 @@ export interface Take {
   favorite: boolean;
   segmentIndex: number | null;
   createdAt: string;
+  meta: ClipMeta;
   media: MediaRow;
 }
 
@@ -313,17 +317,20 @@ export async function runTaskAction(taskId: string, action: TaskAction): Promise
 type ContentRow = {
   id: string; workspace_id: string; date: string; format: string; pillar_slug: string; title: string; status: string; scheduled_for: string;
   draft: string | null; meta: string | null; selected_hook: number | null;
+  project?: string | null; derived_from?: string | null; precisa_revisao?: string | null;
 };
 
 const toContent = (r: ContentRow): ContentItem => ({
   id: r.id, workspaceId: r.workspace_id, date: r.date, format: r.format as ContentFormat, pillarSlug: r.pillar_slug, title: r.title,
   status: r.status as ContentItem["status"], scheduledFor: r.scheduled_for, draft: r.draft ? JSON.parse(r.draft) : null,
   meta: r.meta ? JSON.parse(r.meta) : null, selectedHook: r.selected_hook,
+  project: r.project ? JSON.parse(r.project) : null, derivedFrom: r.derived_from ?? null, precisaRevisao: r.precisa_revisao ?? null,
 });
 
 const contentServerRow = (c: Omit<ContentItem, "draft" | "meta"> & { draft: ContentDraft | null; meta: ContentItem["meta"] }) => ({
   id: c.id, workspace_id: c.workspaceId, pillar_slug: c.pillarSlug, plan_date: c.date, scheduled_for: c.scheduledFor, format: c.format,
-  title: c.title, duration_seconds: c.draft?.duration_seconds ?? null, status: c.status, structured_payload: { selected_hook: c.selectedHook }, updated_at: nowIso(),
+  title: c.title, duration_seconds: c.draft?.duration_seconds ?? null, status: c.status, structured_payload: { selected_hook: c.selectedHook, project: c.project ?? null },
+  derived_from: c.derivedFrom ?? null, precisa_revisao: c.precisaRevisao ?? null, updated_at: nowIso(),
 });
 
 export async function listContent(dateKey: string): Promise<ContentItem[]> {
@@ -340,6 +347,55 @@ export async function getContent(id: string): Promise<ContentItem | null> {
   const db = await getDb();
   const r = await db.getFirstAsync<ContentRow>("SELECT * FROM content_items WHERE id = ?", id);
   return r ? toContent(r) : null;
+}
+
+/** Projeto do estúdio (modo A–G, SKU filmado, fonte de sorvete) — vira um conteúdo com roteiro e plano de tomadas. */
+export async function createProject(project: ProjectInfo, title: string, derivedFrom: string | null = null): Promise<ContentItem> {
+  const ws = await requireWorkspace();
+  const now = new Date();
+  const c: ContentItem = { id: newId(), workspaceId: ws.id, date: toLocalDateKey(now), format: "main_video", pillarSlug: PRODUCTION_MODES[project.mode].pillar, title, status: "planned",
+    scheduledFor: now.toISOString(), draft: null, meta: null, selectedHook: null, project, derivedFrom, precisaRevisao: null };
+  const db = await getDb();
+  await db.runAsync(
+    "INSERT INTO content_items(id, workspace_id, date, format, pillar_slug, title, status, scheduled_for, updated_at, project, derived_from) VALUES (?,?,?,?,?,?,?,?,?,?,?)",
+    c.id, c.workspaceId, c.date, c.format, c.pillarSlug, c.title, c.status, c.scheduledFor, nowIso(), JSON.stringify(project), derivedFrom,
+  );
+  await enqueue(ws, "content_items", c.id, { rows: [contentServerRow(c)] });
+  // lesson → recording link (queued after the content row so the FK holds)
+  if (project.aulaId && !derivedFrom) await enqueue(ws, "course_lessons", project.aulaId, { update: true, rows: [{ id: project.aulaId, content_item_id: c.id, updated_at: nowIso() }] });
+  return c;
+}
+
+/** Peça derivada (aula, curto, marketplace...) de uma gravação: guarda a origem e herda o projeto. */
+export async function deriveContent(originId: string, target: UseTarget): Promise<ContentItem> {
+  const o = await getContent(originId);
+  if (!o?.project) throw new Error("Só dá para derivar de um projeto do estúdio.");
+  return createProject({ ...o.project, derivedTarget: target }, `${o.title} → ${target.replace("_", " ")}`, o.id);
+}
+
+/** Correção na origem (claim, SKU, receita, imagem): marca todas as peças derivadas para revisão. */
+export async function flagDerived(originId: string, motivo: string): Promise<number> {
+  const db = await getDb();
+  const ids: string[] = [];
+  let frontier = [originId];
+  while (frontier.length) {
+    const rows = await db.getAllAsync<{ id: string }>(`SELECT id FROM content_items WHERE derived_from IN (${frontier.map(() => "?").join(",")})`, ...frontier);
+    frontier = rows.map((r) => r.id).filter((id) => !ids.includes(id));
+    ids.push(...frontier);
+  }
+  for (const id of ids) {
+    await db.runAsync("UPDATE content_items SET precisa_revisao = ?, updated_at = ? WHERE id = ?", motivo.slice(0, 300), nowIso(), id);
+    const c = await getContent(id);
+    if (c) await enqueue(await workspaceById(c.workspaceId), "content_items", id, { rows: [contentServerRow(c)] });
+  }
+  return ids.length;
+}
+
+export async function clearReviewFlag(contentId: string): Promise<void> {
+  const db = await getDb();
+  await db.runAsync("UPDATE content_items SET precisa_revisao = NULL, updated_at = ? WHERE id = ?", nowIso(), contentId);
+  const c = await getContent(contentId);
+  if (c) await enqueue(await workspaceById(c.workspaceId), "content_items", contentId, { rows: [contentServerRow(c)] });
 }
 
 /** Ad-hoc content (e.g. "aconteceu algo hoje") not tied to a routine block. */
@@ -444,11 +500,14 @@ export const mediaServerRow = (m: MediaRow) => ({
  */
 export async function registerTake(input: {
   mediaId: string; localUri: string; sizeBytes: number; checksum: string; width: number | null; height: number | null; durationMs: number | null;
-  taskId: string | null; contentItemId: string | null; category: string; camera: "front" | "back"; segmentIndex?: number | null;
+  taskId: string | null; contentItemId: string | null; category: string; camera: "front" | "back"; segmentIndex?: number | null; meta?: ClipMeta;
 }): Promise<Take> {
   // the take (and its storage path) belongs to the profile of what is being recorded, not to whichever is active
   const owner = input.contentItemId ? (await getContent(input.contentItemId))?.workspaceId : input.taskId ? (await getTask(input.taskId))?.workspaceId : undefined;
   const ws = owner ? await workspaceById(owner) : await requireWorkspace();
+  // clip keeps its origin: the project of the content (mode, SKU, ice-cream source, lesson) + what was set while filming
+  const project = input.contentItemId ? (await getContent(input.contentItemId))?.project : null;
+  const meta: ClipMeta = { ...(project ? { mode: project.mode, produtoId: project.produtoId ?? null, sku: project.sku ?? null, skuNome: project.skuNome ?? null, fonteSorvete: project.fonteSorvete, receita: project.receita ?? null, aulaId: project.aulaId ?? null } : {}), ...input.meta };
   const db = await getDb();
   const takeId = newId();
   const createdAt = nowIso();
@@ -459,14 +518,14 @@ export async function registerTake(input: {
       input.mediaId, ws.id, input.localUri, input.sizeBytes, input.checksum, state, createdAt, `${ws.id}/${input.mediaId}.mp4`, input.width, input.height, input.durationMs, createdAt,
     );
     await db.runAsync(
-      "INSERT INTO takes(id, workspace_id, task_id, content_item_id, media_id, category, tags, camera, segment_index, created_at) VALUES (?,?,?,?,?,?,?,?,?,?)",
-      takeId, ws.id, input.taskId, input.contentItemId, input.mediaId, input.category, "[]", input.camera, input.segmentIndex ?? null, createdAt,
+      "INSERT INTO takes(id, workspace_id, task_id, content_item_id, media_id, category, tags, camera, segment_index, created_at, meta) VALUES (?,?,?,?,?,?,?,?,?,?,?)",
+      takeId, ws.id, input.taskId, input.contentItemId, input.mediaId, input.category, "[]", input.camera, input.segmentIndex ?? null, createdAt, JSON.stringify(meta),
     );
   });
   const take = (await getTake(takeId))!;
   await enqueue(ws, "media_files", input.mediaId, { rows: [mediaServerRow(take.media)] });
   await enqueue(ws, "takes", takeId, {
-    rows: [{ id: takeId, workspace_id: ws.id, recording_task_id: input.taskId, content_item_id: input.contentItemId, media_file_id: input.mediaId, category: input.category, tags: [], camera: input.camera, segment_index: input.segmentIndex ?? null }],
+    rows: [{ id: takeId, workspace_id: ws.id, recording_task_id: input.taskId, content_item_id: input.contentItemId, media_file_id: input.mediaId, category: input.category, tags: [], camera: input.camera, segment_index: input.segmentIndex ?? null, meta }],
   });
   if (input.contentItemId) {
     const c = await getContent(input.contentItemId);
@@ -475,7 +534,7 @@ export async function registerTake(input: {
   return take;
 }
 
-type TakeRow = { id: string; workspace_id: string; task_id: string | null; content_item_id: string | null; media_id: string; category: string; tags: string; camera: string | null; favorite: number; segment_index: number | null; created_at: string };
+type TakeRow = { id: string; workspace_id: string; task_id: string | null; content_item_id: string | null; media_id: string; category: string; tags: string; camera: string | null; favorite: number; segment_index: number | null; created_at: string; meta?: string | null };
 
 async function hydrateTakes(rows: TakeRow[]): Promise<Take[]> {
   const db = await getDb();
@@ -483,7 +542,7 @@ async function hydrateTakes(rows: TakeRow[]): Promise<Take[]> {
   for (const r of rows) {
     const m = await db.getFirstAsync<MediaDbRow>("SELECT * FROM media WHERE id = ?", r.media_id);
     if (!m) continue;
-    out.push({ id: r.id, workspaceId: r.workspace_id, taskId: r.task_id, contentItemId: r.content_item_id, mediaId: r.media_id, category: r.category, tags: JSON.parse(r.tags), camera: r.camera as Take["camera"], favorite: r.favorite === 1, segmentIndex: r.segment_index, createdAt: r.created_at, media: toMedia(m) });
+    out.push({ id: r.id, workspaceId: r.workspace_id, taskId: r.task_id, contentItemId: r.content_item_id, mediaId: r.media_id, category: r.category, tags: JSON.parse(r.tags), camera: r.camera as Take["camera"], favorite: r.favorite === 1, segmentIndex: r.segment_index, createdAt: r.created_at, meta: r.meta ? (JSON.parse(r.meta) as ClipMeta) : {}, media: toMedia(m) });
   }
   return out;
 }
@@ -505,14 +564,14 @@ export async function getTake(id: string): Promise<Take | null> {
   return r ? (await hydrateTakes([r]))[0] ?? null : null;
 }
 
-export async function updateTakeMeta(id: string, patch: { tags?: string[]; favorite?: boolean; category?: string }): Promise<void> {
+export async function updateTakeMeta(id: string, patch: { tags?: string[]; favorite?: boolean; category?: string; meta?: Partial<ClipMeta> }): Promise<void> {
   const t = await getTake(id);
   if (!t) return;
   const ws = await workspaceById(t.workspaceId);
-  const next = { tags: patch.tags ?? t.tags, favorite: patch.favorite ?? t.favorite, category: patch.category ?? t.category };
+  const next = { tags: patch.tags ?? t.tags, favorite: patch.favorite ?? t.favorite, category: patch.category ?? t.category, meta: { ...t.meta, ...patch.meta } };
   const db = await getDb();
-  await db.runAsync("UPDATE takes SET tags = ?, favorite = ?, category = ? WHERE id = ?", JSON.stringify(next.tags), next.favorite ? 1 : 0, next.category, id);
-  await enqueue(ws, "takes", id, { rows: [{ id, workspace_id: ws.id, media_file_id: t.mediaId, recording_task_id: t.taskId, content_item_id: t.contentItemId, category: next.category, tags: next.tags, favorite: next.favorite, camera: t.camera, segment_index: t.segmentIndex }] });
+  await db.runAsync("UPDATE takes SET tags = ?, favorite = ?, category = ?, meta = ? WHERE id = ?", JSON.stringify(next.tags), next.favorite ? 1 : 0, next.category, JSON.stringify(next.meta), id);
+  await enqueue(ws, "takes", id, { rows: [{ id, workspace_id: ws.id, media_file_id: t.mediaId, recording_task_id: t.taskId, content_item_id: t.contentItemId, category: next.category, tags: next.tags, favorite: next.favorite, camera: t.camera, segment_index: t.segmentIndex, meta: next.meta }] });
 }
 
 export async function listMedia(): Promise<MediaRow[]> {

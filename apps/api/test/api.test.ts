@@ -61,6 +61,17 @@ describe("generateContent (IA estruturada)", () => {
     expect(res.draft.script).not.toContain("E se der certo");
   });
 
+  it("perfil empresa: alegação sem prova é rejeitada e o briefing do projeto vai para o prompt", async () => {
+    const { mem, runs } = fakeMemory([], CONTROLPOT_PROFILE);
+    const biz = generateLocal({ profile: CONTROLPOT_PROFILE, pillarSlug: "autoridade", pillarName: "Autoridade", format: "main_video", eventText: null, recent: [] }).draft;
+    const llm = scriptedLlm([{ ...biz, script: "Temos mais de 4.000 máquinas em operação. Olha o resultado." }, biz]);
+    const res = await generateContent({ ...body, pillar_slug: "autoridade", brief: "Modo A · mixer SKU CF-MIXERP-1778541098, sorvete expresso" } as never, llm, mem);
+    expect(runs[0]).toMatchObject({ accepted: false, rejectionReason: "claim_sem_prova" });
+    expect(llm.prompts[0]).toContain("CF-MIXERP-1778541098");
+    expect(llm.prompts[1]).toContain("SEM PROVA");
+    expect(res.draft.script).not.toMatch(/4\.000/);
+  });
+
   it("rejeita JSON fora do schema e tenta de novo", async () => {
     const { mem, runs } = fakeMemory();
     const res = await generateContent(body as never, scriptedLlm([{ title: "incompleto" }, sample("humor")]), mem);

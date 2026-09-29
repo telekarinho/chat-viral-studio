@@ -1,5 +1,5 @@
 import {
-  PROMPT_VERSION, avoidanceInstructions, buildPrompt, checkRepetition, contentDraftJsonSchema, describeAvoidance, finalizeDraft, fingerprintsFor, mentionsPrice, parseDraft,
+  PROMPT_VERSION, avoidanceInstructions, buildPrompt, checkRepetition, contentDraftJsonSchema, describeAvoidance, finalizeDraft, fingerprintsFor, mentionsPrice, parseDraft, pendingClaimsIn,
   type ContentDraft, type CreatorProfile, type Fingerprint, type GenerateRequest, type GenerationMeta, type RepetitionReport,
 } from "@postai/domain";
 
@@ -47,7 +47,7 @@ export async function generateContent(req: GenerateRequest, llm: LlmClient, memo
   let fallback: { draft: ContentDraft; report: RepetitionReport } | null = null;
 
   for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
-    const prompt = buildPrompt({ profile, pillarName, format: req.format, eventText: req.event_text, recentSummaries: summaries, avoid });
+    const prompt = buildPrompt({ profile, pillarName, format: req.format, eventText: req.event_text, brief: req.brief ?? null, recentSummaries: summaries, avoid });
     const started = Date.now();
     let raw: unknown;
     try {
@@ -65,6 +65,12 @@ export async function generateContent(req: GenerateRequest, llm: LlmClient, memo
     if (profile.business?.noPrice && profile.kind === "empresa" && mentionsPrice(draft)) {
       await memory.saveRun({ ...base, accepted: false, rejectionReason: "price", repetition: null });
       avoid = "A versão anterior falou preço/valor/parcela. PROIBIDO: reescreva sem nenhum preço.";
+      continue;
+    }
+    const unproven = profile.kind === "empresa" ? pendingClaimsIn([draft.script, draft.cta, ...draft.hook_options].join(" "), profile.business?.pendingClaims ?? []) : [];
+    if (unproven.length) {
+      await memory.saveRun({ ...base, accepted: false, rejectionReason: "claim_sem_prova", repetition: null });
+      avoid = `A versão anterior afirmou alegação SEM PROVA (${unproven.join("; ")}). Reescreva sem ela e sem números não comprovados.`;
       continue;
     }
     const report = checkRepetition(fingerprintsFor(draft), recent);

@@ -12,3 +12,4 @@ export * from "./ai/manual";
 export * from "./segments";
 export * from "./editPlan";
 export * from "./profiles";
+export * from "./studio";

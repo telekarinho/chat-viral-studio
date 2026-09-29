@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { Linking, Text, TextInput } from "react-native";
 import * as Clipboard from "expo-clipboard";
 import { router, useLocalSearchParams } from "expo-router";
-import { buildManualPrompt, summarizeForMemory } from "@postai/domain";
+import { buildManualPrompt, projectBrief, summarizeForMemory } from "@postai/domain";
 import { getContent, listRecentContent, workspaceById } from "../../src/db/repo";
 import { importManualDraft } from "../../src/generate";
 import { Button, Card, ErrorBox, Eyebrow, H1, Screen, Section, s } from "../../src/ui";
@@ -26,7 +26,7 @@ export default function ManualAssistant() {
       const ws = await workspaceById(c.workspaceId);
       const pillar = ws.pillars.find((p) => p.slug === c.pillarSlug)?.name ?? c.pillarSlug;
       const summaries = recent.filter((r) => r.draft && r.id !== id).map((r) => summarizeForMemory(r.draft!));
-      setPrompt(buildManualPrompt({ profile: ws.profile, pillarName: pillar, format: c.format, eventText: null, recentSummaries: summaries, avoid: "" }));
+      setPrompt(buildManualPrompt({ profile: ws.profile, pillarName: pillar, format: c.format, eventText: null, brief: c.project ? projectBrief(c.project) : null, recentSummaries: summaries, avoid: "" }));
     })();
   }, [id]);
 
