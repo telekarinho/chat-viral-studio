@@ -35,6 +35,9 @@ export interface EditClip {
   captions: CaptionCue[]; // relative to clip start (after trim)
 }
 
+export type Retouch = "off" | "leve" | "forte";
+export const RETOUCH_LEVELS: readonly Retouch[] = ["forte", "leve", "off"];
+
 export type CaptionStyle = "manuscrito" | "destaque" | "limpo" | "nenhuma";
 export const CAPTION_STYLES: readonly CaptionStyle[] = ["manuscrito", "destaque", "limpo", "nenhuma"];
 
@@ -52,8 +55,10 @@ export interface EditPlan {
   height: 1920;
   fps: 30;
   captionStyle: CaptionStyle;
-  /** light skin retouch on the final (never on the original): "leve" ≈ TikTok/WhatsApp beauty, subtle */
-  retouch: "off" | "leve";
+  /** embelezamento no FINAL (o original nunca muda): "leve" = natural, "forte" = tipo câmera do iPhone/WhatsApp */
+  retouch: Retouch;
+  /** tira o tremido de quem grava andando */
+  stabilize?: boolean;
   signature: string;
   /** cor do destaque da legenda (#RRGGBB) */
   accentColor?: string;
@@ -67,7 +72,8 @@ export interface PlanInput {
   /** chosen (latest) take per segment index */
   takes: ReadonlyArray<{ segmentIndex: number; takeId: string; durationMs: number }>;
   captionStyle?: CaptionStyle;
-  retouch?: "off" | "leve";
+  retouch?: Retouch;
+  stabilize?: boolean;
   signature: string;
   accentColor?: string;
   music?: PlanMusic | null;
@@ -163,7 +169,7 @@ export function buildEditPlan(input: PlanInput): EditPlan {
     };
   });
   return {
-    version: "edit-v1", width: 1080, height: 1920, fps: 30, captionStyle: style, retouch: input.retouch ?? "leve", signature: input.signature,
+    version: "edit-v1", width: 1080, height: 1920, fps: 30, captionStyle: style, retouch: input.retouch ?? "leve", stabilize: input.stabilize ?? false, signature: input.signature,
     ...(input.accentColor ? { accentColor: input.accentColor } : {}), music: input.music ?? null, clips, totalMs: clips.reduce((a, c) => a + c.durationMs, 0),
   };
 }
@@ -174,6 +180,8 @@ export interface EditChoices {
   /** "auto" = clima do pilar · "none" = sem música · um clima (MusicMood) · ou o id de uma faixa */
   music: string;
   musicVolume?: number;
+  retouch?: Retouch;
+  stabilize?: boolean;
 }
 
-export const DEFAULT_EDIT_CHOICES: EditChoices = { captionStyle: "manuscrito", music: "auto", musicVolume: 0.22 };
+export const DEFAULT_EDIT_CHOICES: EditChoices = { captionStyle: "manuscrito", music: "auto", musicVolume: 0.22, retouch: "forte", stabilize: true };

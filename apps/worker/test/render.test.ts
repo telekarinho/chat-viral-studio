@@ -45,6 +45,23 @@ describe("renderizador (comando)", () => {
     const off = ffmpegArgs({ plan: { ...plan, retouch: "off" }, inputs: ["a.mp4", "b.mp4", "c.mp4"], hasAudio: [true, true, true], fontFile: "f.ttf", output: "o.mp4" });
     expect(off[off.indexOf("-filter_complex") + 1]).not.toContain("bilateral=");
   });
+  it("embelezamento só na pele (máscara), 3 níveis, sem saturar a boca, e tirar tremido", () => {
+    const g = (p: typeof plan) => { const a = ffmpegArgs({ plan: p, inputs: ["a.mp4", "b.mp4", "c.mp4"], hasAudio: [true, true, true], fontFile: "f.ttf", output: "o.mp4" }); return a[a.indexOf("-filter_complex") + 1]!; };
+    const forte = g({ ...plan, retouch: "forte", stabilize: true });
+    expect(forte).toContain("chromakey=color=0xC08A70"); // máscara de pele
+    expect(forte).toContain("bilateral=sigmaS=12:sigmaR=0.11");
+    expect(forte).toContain("blend=all_mode=normal:all_opacity=0.80"); // textura volta: sem cara de plástico
+    expect(forte).toContain("vibrance=");
+    expect(forte).not.toMatch(/saturation=1\.\d/); // não reforça vermelho da boca
+    expect(forte).toContain("deshake=");
+    expect(g({ ...plan, retouch: "leve" })).toContain("bilateral=sigmaS=6:sigmaR=0.08");
+    const off = g({ ...plan, retouch: "off", stabilize: false });
+    expect(off).not.toContain("chromakey");
+    expect(off).not.toContain("deshake");
+    expect(editChoices(null, "academia", false, "c").retouch).toBe("forte");
+    expect(editChoices(null, "demonstracao", true, "c").retouch).toBe("leve");
+    expect(editChoices({ edit: { retouch: "rosa-choque", stabilize: "x" } }, "academia", false, "c")).toMatchObject({ retouch: "forte", stabilize: true });
+  });
   it("legenda ASS sobre o vídeo montado e música com ducking sob a voz", () => {
     const withMusic = { ...plan, music: { trackId: "mixkit-32", mood: "motivacional" as const, volume: 0.22 } };
     const args = ffmpegArgs({ plan: withMusic, inputs: ["a.mp4", "b.mp4", "c.mp4"], hasAudio: [true, true, true], fontFile: "f.ttf", output: "o.mp4", assFile: String.raw`C:\tmp\leg.ass`, fontsDir: String.raw`C:\fonts`, musicFile: "m.mp3" });
@@ -60,7 +77,7 @@ describe("renderizador (comando)", () => {
   });
   it("escolhas do criador validadas no servidor (legenda, música auto pelo pilar, sem música)", () => {
     expect(editChoices(null, "academia", false, "c1")).toMatchObject({ captionStyle: "manuscrito", music: { mood: "treino", volume: 0.22 } });
-    expect(editChoices({ edit: { captionStyle: "destaque", music: "none" } }, "academia", false, "c1")).toEqual({ captionStyle: "destaque", music: null, accentColor: undefined });
+    expect(editChoices({ edit: { captionStyle: "destaque", music: "none" } }, "academia", false, "c1")).toMatchObject({ captionStyle: "destaque", music: null });
     expect(editChoices({ edit: { captionStyle: "<script>", music: "mixkit-22", musicVolume: 9 } }, "x", false, "c1")).toMatchObject({ captionStyle: "manuscrito", music: { trackId: "mixkit-22", mood: "reflexao", volume: 0.22 } });
     expect(editChoices({ edit: { music: "empresa" } }, "educacao", true, "c1").music?.mood).toBe("empresa");
   });
@@ -80,7 +97,7 @@ describe.skipIf(!hasFfmpeg || !FONT)("renderizador (FFmpeg real)", () => {
     const takes = await Promise.all(inputs.map(async (f, i) => ({ segmentIndex: segments[i]!.index, takeId: `t${i}`, durationMs: (await probe(f)).durationMs })));
     const music = join(dir, "music.mp3");
     await run("ffmpeg", ["-y", "-loglevel", "error", "-f", "lavfi", "-i", "sine=frequency=220:duration=4", "-c:a", "libmp3lame", music]);
-    const plan = buildEditPlan({ segments, takes, signature: "RodrigoSerra.me", captionStyle: "destaque", music: { trackId: "mixkit-32", mood: "motivacional", volume: 0.22 } });
+    const plan = buildEditPlan({ segments, takes, signature: "RodrigoSerra.me", captionStyle: "destaque", retouch: "forte", stabilize: true, music: { trackId: "mixkit-32", mood: "motivacional", volume: 0.22 } });
     const assFile = join(dir, "legendas.ass");
     writeFileSync(assFile, buildAss(plan), "utf8");
     const out = join(dir, "final.mp4");

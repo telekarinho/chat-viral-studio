@@ -36,13 +36,32 @@ export function escapeDrawtext(s: string): string {
 
 const sec = (ms: number) => (ms / 1000).toFixed(3);
 
+const BEAUTY: Record<"leve" | "forte", { bil: string; lift: string; mix: string }> = {
+  // "Natural": tira o excesso de textura e dá uma leve iluminada
+  leve: { bil: "sigmaS=6:sigmaR=0.08", lift: "gamma=1.05:brightness=0.015", mix: "0.85" },
+  // "Forte (tipo iPhone/WhatsApp)": pele uniforme, poros/manchas/linhas finas suavizados, sombras do rosto clareadas
+  forte: { bil: "sigmaS=12:sigmaR=0.11", lift: "gamma=1.09:brightness=0.028:saturation=0.97", mix: "0.80" },
+};
+// tom médio de pele (a máscara pega de pele clara a morena; o resto da imagem fica intocado)
+const SKIN_KEY = "0xC08A70";
+
 /**
- * "Retoque leve": edge-preserving skin smoothing (softens pores/fine lines, keeps eyes/beard sharp),
- * light denoise and a small lift in light/color. Deliberately subtle — no face reshaping.
+ * Embelezamento com MÁSCARA DE PELE: só a pele é alisada/iluminada — olhos, sobrancelha, barba, cabelo e fundo
+ * ficam como estão. Parte da textura original volta por cima (sem cara de plástico). Não mexe em formato do rosto
+ * e não satura a boca: usa vibrance (reforça só cores apagadas) em vez de saturation.
+ * Retorna segmentos do filtergraph: [in] → [out].
  */
-export function retouchFilters(mode: EditPlan["retouch"] | undefined): string[] {
-  if (mode === "off") return [];
-  return ["hqdn3d=1.5:1.5:4:4", "bilateral=sigmaS=3:sigmaR=0.06:planes=1", "eq=brightness=0.02:contrast=1.03:saturation=1.06", "unsharp=5:5:0.3:5:5:0"];
+export function beautyGraph(inLabel: string, outLabel: string, mode: EditPlan["retouch"] | undefined): string[] {
+  if (!mode || mode === "off") return [`[${inLabel}]null[${outLabel}]`];
+  const b = BEAUTY[mode];
+  const id = outLabel;
+  return [
+    `[${inLabel}]split=3[${id}t][${id}o][${id}x]`,
+    `[${id}t]hqdn3d=3:3:6:6,bilateral=${b.bil}:planes=1,eq=${b.lift}[${id}s]`,
+    `[${id}s][${id}x]blend=all_mode=normal:all_opacity=${b.mix}[${id}m]`,
+    `[${id}o]format=yuva444p,chromakey=color=${SKIN_KEY}:similarity=0.13:blend=0.10[${id}k]`,
+    `[${id}m][${id}k]overlay=format=auto,vibrance=intensity=0.08,unsharp=5:5:0.3:5:5:0,format=yuv420p[${outLabel}]`,
+  ];
 }
 
 /** zoompan expression: moves from→to over moveMs (0 = whole clip), then holds. */
@@ -66,17 +85,18 @@ export function ffmpegArgs(r: RenderInput): string[] {
   plan.clips.forEach((clip, i) => {
     const start = sec(clip.trimStartMs);
     const end = sec(clip.trimStartMs + clip.durationMs);
-    const v = [
+    const pre = [
       `trim=start=${start}:end=${end}`,
       "setpts=PTS-STARTPTS",
+      // gravado andando: tira o tremido (as bordas espelhadas somem no zoom do enquadramento)
+      ...(plan.stabilize ? ["deshake=rx=32:ry=32:edge=mirror"] : []),
       `scale=${W}:${H}:force_original_aspect_ratio=increase`,
       `crop=${W}:${H}`,
       `fps=${plan.fps}`,
-      ...retouchFilters(plan.retouch),
-      `zoompan=z='${zoomExpr(clip, plan.fps)}':x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':d=1:s=${W}x${H}:fps=${plan.fps}`,
-      "setsar=1",
     ];
-    parts.push(`[${i}:v]${v.join(",")}[v${i}]`);
+    parts.push(`[${i}:v]${pre.join(",")}[p${i}]`);
+    parts.push(...beautyGraph(`p${i}`, `b${i}`, plan.retouch));
+    parts.push(`[b${i}]zoompan=z='${zoomExpr(clip, plan.fps)}':x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':d=1:s=${W}x${H}:fps=${plan.fps},setsar=1[v${i}]`);
     if (r.hasAudio[i]) {
       parts.push(`[${i}:a]atrim=start=${start}:end=${end},asetpts=PTS-STARTPTS,aresample=48000,aformat=channel_layouts=stereo[a${i}]`);
     } else {

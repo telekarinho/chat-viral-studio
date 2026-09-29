@@ -1,6 +1,8 @@
 import { Text, View } from "react-native";
-import { DEFAULT_EDIT_CHOICES, MOOD_LABEL, moodForPillar, type CaptionStyle, type EditChoices, type MusicMood } from "@postai/domain";
+import { DEFAULT_EDIT_CHOICES, MOOD_LABEL, moodForPillar, type CaptionStyle, type EditChoices, type MusicMood, type Retouch } from "@postai/domain";
 import { Chip, s } from "../ui";
+
+const RETOUCH_LABEL: Record<Retouch, string> = { forte: "✨ Forte (tipo câmera do iPhone)", leve: "Natural", off: "Desligado" };
 
 const CAPTION_LABEL: Record<CaptionStyle, string> = {
   manuscrito: "✍️ Manuscrito (creme, pincel)", destaque: "🔆 Destaque (palavra acende)", limpo: "Limpo", nenhuma: "Sem legenda",
@@ -10,11 +12,19 @@ const CAPTION_LABEL: Record<CaptionStyle, string> = {
 export function FinishOptions({ value, onChange, pillarSlug, business }: {
   value: EditChoices | null | undefined; onChange: (v: EditChoices) => void; pillarSlug: string; business: boolean;
 }) {
-  const v = value ?? DEFAULT_EDIT_CHOICES;
+  const v = value ?? { ...DEFAULT_EDIT_CHOICES, retouch: business ? "leve" : "forte" };
+  const retouch = v.retouch ?? (business ? "leve" : "forte");
   const auto = moodForPillar(pillarSlug, business);
   const set = (patch: Partial<EditChoices>) => onChange({ ...v, ...patch });
   return (
     <View style={{ gap: 8 }} testID="finish-options">
+      <Text style={s.label}>Embelezamento do rosto (só na pele — olhos, barba e boca ficam naturais)</Text>
+      <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8 }}>
+        {(Object.keys(RETOUCH_LABEL) as Retouch[]).map((k) => (
+          <Chip key={k} label={RETOUCH_LABEL[k]} selected={retouch === k} onPress={() => set({ retouch: k })} testID={`retouch-${k}`} />
+        ))}
+        <Chip label={v.stabilize === false ? "Tirar tremido: não" : "✓ Tirar tremido (gravei andando)"} selected={v.stabilize !== false} onPress={() => set({ stabilize: v.stabilize === false })} testID="stabilize" />
+      </View>
       <Text style={s.label}>Legenda (sincronizada com a sua fala)</Text>
       <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8 }}>
         {(Object.keys(CAPTION_LABEL) as CaptionStyle[]).map((k) => (

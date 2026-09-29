@@ -3,8 +3,8 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import {
-  CAPTION_STYLES, MOOD_LABEL, buildAss, buildEditPlan, buildSegments, cuesFromWords, moodForPillar, parseDraft, pickTrack, trackById, wholeTakeSegment,
-  type CaptionStyle, type EditPlan, type MusicMood, type PlanMusic,
+  CAPTION_STYLES, MOOD_LABEL, RETOUCH_LEVELS, buildAss, buildEditPlan, buildSegments, cuesFromWords, moodForPillar, parseDraft, pickTrack, trackById, wholeTakeSegment,
+  type CaptionStyle, type EditPlan, type MusicMood, type PlanMusic, type Retouch,
 } from "@postai/domain";
 import { fetchTrack, transcribeClip } from "./media-extras";
 import { render } from "./ffmpeg";
@@ -29,17 +29,22 @@ export class NotReadyError extends Error {}
  * Escolhas do criador para a montagem (content_items.structured_payload.edit), validadas no servidor:
  * estilo da legenda e música (auto = clima do pilar, none = sem música, ou um clima/faixa da biblioteca).
  */
-export function editChoices(payload: Record<string, unknown> | null | undefined, pillarSlug: string, business: boolean, seed: string): { captionStyle: CaptionStyle; music: PlanMusic | null; accentColor?: string } {
-  const edit = (payload?.edit ?? {}) as { captionStyle?: unknown; music?: unknown; musicVolume?: unknown; accentColor?: unknown };
+export function editChoices(payload: Record<string, unknown> | null | undefined, pillarSlug: string, business: boolean, seed: string): {
+  captionStyle: CaptionStyle; music: PlanMusic | null; accentColor?: string; retouch: Retouch; stabilize: boolean;
+} {
+  const edit = (payload?.edit ?? {}) as { captionStyle?: unknown; music?: unknown; musicVolume?: unknown; accentColor?: unknown; retouch?: unknown; stabilize?: unknown };
+  // pessoal: "forte" (tipo iPhone); empresa: "leve" (não alisa a textura do produto que aparece junto)
+  const retouch: Retouch = RETOUCH_LEVELS.includes(edit.retouch as Retouch) ? (edit.retouch as Retouch) : business ? "leve" : "forte";
+  const stabilize = typeof edit.stabilize === "boolean" ? edit.stabilize : true;
   const captionStyle = CAPTION_STYLES.includes(edit.captionStyle as CaptionStyle) ? (edit.captionStyle as CaptionStyle) : "manuscrito";
   const accentColor = typeof edit.accentColor === "string" && /^#[0-9a-fA-F]{6}$/.test(edit.accentColor) ? edit.accentColor : undefined;
   const volume = typeof edit.musicVolume === "number" && edit.musicVolume >= 0.05 && edit.musicVolume <= 0.6 ? edit.musicVolume : 0.22;
   const choice = typeof edit.music === "string" ? edit.music : "auto";
-  if (choice === "none") return { captionStyle, music: null, accentColor };
+  if (choice === "none") return { captionStyle, music: null, accentColor, retouch, stabilize };
   const exact = trackById(choice);
   const mood: MusicMood = exact?.mood ?? (choice in MOOD_LABEL ? (choice as MusicMood) : moodForPillar(pillarSlug, business));
   const track = exact ?? pickTrack(mood, seed);
-  return { captionStyle, music: { trackId: track.id, mood, volume }, accentColor };
+  return { captionStyle, music: { trackId: track.id, mood, volume }, accentColor, retouch, stabilize };
 }
 
 export async function buildServerPlan(db: SupabaseClient, job: RenderJobRow): Promise<{ plan: EditPlan; keys: string[]; prompt: string }> {
