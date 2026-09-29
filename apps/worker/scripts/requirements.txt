@@ -1,1 +1,3 @@
 faster-whisper==1.1.1
+# faster_whisper.utils importa requests (o huggingface_hub novo não traz mais)
+requests>=2.31
