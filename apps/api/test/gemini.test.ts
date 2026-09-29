@@ -30,6 +30,12 @@ describe("Gemini (Google AI)", () => {
     expect(await geminiClient("K", "m", impl).complete({ system: "", user: "", schema: {} })).toEqual({ b: 2 });
     expect((calls[1]!.body.generationConfig as Record<string, unknown>).responseJsonSchema).toBeUndefined();
   });
+  it("chave recusada no header (401/403) é reenviada como ?key=", async () => {
+    const { impl, calls } = fakeFetch([{ status: 403, json: { error: { message: "denied" } } }, ok({ c: 3 })]);
+    expect(await geminiClient("AQ.x", "m", impl).complete({ system: "", user: "", schema: {} })).toEqual({ c: 3 });
+    expect(calls[1]!.url).toContain("?key=AQ.x");
+    expect(calls[1]!.headers["x-goog-api-key"]).toBeUndefined();
+  });
   it("erro de cota vira exceção (app cai para o gerador offline)", async () => {
     const { impl } = fakeFetch([{ status: 429, json: { error: { message: "quota" } } }]);
     await expect(geminiClient("K", "m", impl).complete({ system: "", user: "", schema: {} })).rejects.toThrow(/429/);

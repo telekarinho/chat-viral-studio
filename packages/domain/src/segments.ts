@@ -91,3 +91,8 @@ function stripClosing(script: string, closing: string): string {
   if (!closing) return body;
   return body.toLowerCase().endsWith(closing.toLowerCase()) ? body.slice(0, body.length - closing.length).trim() : body;
 }
+
+/** A take recorded in one go (not by parts) is edited as a single "free" segment covering the whole script. */
+export function wholeTakeSegment(draft: ContentDraft): ScriptSegment {
+  return { index: 0, role: "free", label: "Take completo", text: draft.script.replace(/\s+/g, " ").trim() };
+}

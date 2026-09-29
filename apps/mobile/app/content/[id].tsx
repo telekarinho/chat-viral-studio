@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import { Text, TextInput, View } from "react-native";
 import * as Clipboard from "expo-clipboard";
 import { router, useFocusEffect, useLocalSearchParams } from "expo-router";
-import { FORMAT_LABEL, PLATFORMS, PLATFORM_LABEL, buildEditPlan, buildSegments, type EditPlan, type Platform, type ScriptSegment } from "@postai/domain";
+import { FORMAT_LABEL, PLATFORMS, PLATFORM_LABEL, buildEditPlan, buildSegments, wholeTakeSegment, type EditPlan, type Platform, type ScriptSegment } from "@postai/domain";
 import { completeContent, getContent, latestTakesBySegment, listTakes, listTasks, requireWorkspace, selectHook, type ContentItem, type Take } from "../../src/db/repo";
 import { generateForContent, saveUserEdit } from "../../src/generate";
 import { reportError } from "../../src/telemetry";
@@ -33,9 +33,12 @@ export default function ContentScreen() {
       const segments = buildSegments(item.draft, { selectedHook: item.selectedHook ?? 0, userEdited: Boolean(item.meta?.userEdited), closingPhrase: ws.profile.closingPhrase });
       const chosen = await latestTakesBySegment(item.id);
       const recorded = segments.filter((sg) => chosen.has(sg.index)).map((sg) => sg.index);
+      const whole = recorded.length === 0 ? (await listTakes({ contentItemId: item.id })).find((t) => t.segmentIndex === null) : undefined;
       const plan = recorded.length === segments.length
         ? buildEditPlan({ segments, signature: ws.profile.signature, takes: segments.map((sg) => ({ segmentIndex: sg.index, takeId: chosen.get(sg.index)!.id, durationMs: chosen.get(sg.index)!.media.durationMs ?? 0 })) })
-        : null;
+        : whole
+          ? buildEditPlan({ segments: [wholeTakeSegment(item.draft)], signature: ws.profile.signature, takes: [{ segmentIndex: 0, takeId: whole.id, durationMs: whole.media.durationMs ?? 0 }] })
+          : null;
       setParts({ segments, recorded, plan });
       setFinalUri(await localFinal(item.id));
       if (plan) setJob(await latestRenderJob(item.id).catch(() => null));
@@ -179,7 +182,7 @@ export default function ContentScreen() {
               </Card>
               {parts.plan ? (
                 <Card testID="edit-plan" style={{ gap: 4 }}>
-                  <Text style={{ fontWeight: "900", color: colors.ink }}>Edição automática pronta para montar · {Math.round(parts.plan.totalMs / 1000)}s</Text>
+                  <Text style={{ fontWeight: "900", color: colors.ink }}>{`Edição automática pronta · ${Math.round(parts.plan.totalMs / 1000)}s · retoque leve incluído`}</Text>
                   {parts.plan.clips.map((c) => (
                     <Text key={c.segmentIndex} style={s.muted}>{c.segmentIndex + 1}. {EFFECT_LABEL[c.effect.kind]} · {(c.durationMs / 1000).toFixed(1)}s · {c.captions.length} {c.captions.length === 1 ? "legenda" : "legendas"}</Text>
                   ))}
@@ -196,7 +199,7 @@ export default function ContentScreen() {
                   ) : (
                     <>
                       {job?.status === "failed" ? <Text style={{ color: colors.bad }}>A montagem falhou: {job.error}</Text> : null}
-                      <Button compact label="MONTAR VÍDEO FINAL" loading={busy === "montar"} testID="request-final" onPress={() => run("montar", async () => {
+                      <Button compact label="MELHORAR E FINALIZAR (retoque leve + legenda)" loading={busy === "montar"} testID="request-final" onPress={() => run("montar", async () => {
                         const r = await requestFinalRender(c.workspaceId, c.id, parts.plan!);
                         if (!r.ok) throw new Error(r.reason);
                       })} />

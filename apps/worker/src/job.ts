@@ -2,7 +2,7 @@ import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { buildEditPlan, buildSegments, parseDraft, type EditPlan } from "@postai/domain";
+import { buildEditPlan, buildSegments, parseDraft, wholeTakeSegment, type EditPlan } from "@postai/domain";
 import { render } from "./ffmpeg";
 
 export interface RenderJobRow {
@@ -26,7 +26,7 @@ export async function buildServerPlan(db: SupabaseClient, job: RenderJobRow): Pr
     db.from("content_items").select("id, workspace_id, structured_payload").eq("id", job.content_item_id).single(),
     db.from("scripts").select("draft, user_edited").eq("content_item_id", job.content_item_id).order("updated_at", { ascending: false }).limit(1).maybeSingle(),
     db.from("creator_profiles").select("signature, closing_phrase").eq("workspace_id", job.workspace_id).single(),
-    db.from("takes").select("id, workspace_id, segment_index, created_at, media_files(storage_key, duration_ms, state)").eq("content_item_id", job.content_item_id).not("segment_index", "is", null).order("created_at", { ascending: false }),
+    db.from("takes").select("id, workspace_id, segment_index, created_at, media_files(storage_key, duration_ms, state)").eq("content_item_id", job.content_item_id).order("created_at", { ascending: false }),
   ]);
   const err = content.error ?? script.error ?? profile.error ?? takes.error;
   if (err) throw new Error(err.message);
@@ -39,11 +39,23 @@ export async function buildServerPlan(db: SupabaseClient, job: RenderJobRow): Pr
     userEdited: Boolean(script.data?.user_edited),
     closingPhrase: profile.data.closing_phrase ?? "",
   });
-  type TakeRow = { id: string; workspace_id: string; segment_index: number; media_files: { storage_key: string | null; duration_ms: number | null; state: string } | null };
+  type TakeRow = { id: string; workspace_id: string; segment_index: number | null; media_files: { storage_key: string | null; duration_ms: number | null; state: string } | null };
+  const own = ((takes.data ?? []) as unknown as TakeRow[]).filter((t) => t.workspace_id === job.workspace_id);
   const latest = new Map<number, TakeRow>();
-  for (const t of (takes.data ?? []) as unknown as TakeRow[]) {
-    if (t.workspace_id !== job.workspace_id) continue;
-    if (!latest.has(t.segment_index)) latest.set(t.segment_index, t);
+  for (const t of own) {
+    if (t.segment_index !== null && !latest.has(t.segment_index)) latest.set(t.segment_index, t);
+  }
+  // recorded in one go (no parts): enhance the latest whole take as a single clip
+  if (latest.size === 0) {
+    const whole = own.find((t) => t.segment_index === null);
+    if (!whole) throw new Error("nenhum take gravado para este conteúdo");
+    if (!whole.media_files?.storage_key || whole.media_files.state !== "uploaded_original") throw new NotReadyError("take ainda não sincronizado");
+    const plan = buildEditPlan({
+      segments: [wholeTakeSegment(parsed.draft)],
+      signature: profile.data!.signature ?? "",
+      takes: [{ segmentIndex: 0, takeId: whole.id, durationMs: whole.media_files.duration_ms ?? 0 }],
+    });
+    return { plan, keys: [whole.media_files.storage_key] };
   }
   const chosen = segments.map((s) => latest.get(s.index));
   const notReady = segments.filter((s, i) => !chosen[i]?.media_files?.storage_key || chosen[i]!.media_files!.state !== "uploaded_original").map((s) => s.index + 1);
