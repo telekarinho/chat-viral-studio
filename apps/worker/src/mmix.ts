@@ -122,6 +122,40 @@ export async function forwardOne(db: SupabaseClient, cfg: MmixConfig): Promise<b
   return true;
 }
 
+/** Franchise brands are clients, not sellers: never mixed into ControlPot content (MMIX brand rule). */
+const FRANQUIAS = /milky ?moo|johnny ?joy/i;
+
+interface ProdutoMmix { id: number | string; nome: string; sku_interno: string | null; categoria: string | null; modelo: string | null; imagem_principal: string | null }
+
+/** Only what the recording app needs to name the filmed equipment: no price, stock or description. */
+export function produtosParaEstudio(list: readonly ProdutoMmix[], siteBase: string): { id: number; sku: string; nome: string; categoria: string | null; modelo: string | null; imagem: string | null }[] {
+  return list
+    .filter((p) => /mixer|batedor/i.test(`${p.categoria ?? ""} ${p.nome}`) && !/servi[cç]o|assinatura/i.test(p.categoria ?? "") && !FRANQUIAS.test(p.nome) && p.sku_interno)
+    .map((p) => ({
+      id: Number(p.id), sku: String(p.sku_interno), nome: p.nome.trim(), categoria: p.categoria, modelo: p.modelo,
+      imagem: p.imagem_principal ? (/^https?:/.test(p.imagem_principal) ? p.imagem_principal : `${siteBase}/${p.imagem_principal.replace(/^\//, "")}`) : null,
+    }));
+}
+
+/** Mirrors the MMIX catalog (mixers) into the linked profile — read-only for the app. */
+export async function syncProdutos(db: SupabaseClient, cfg: MmixConfig): Promise<number> {
+  if (cfg.kind !== "key") return 0; // api-claude.php only accepts the API key
+  const site = cfg.baseUrl.replace(/\/api-fabrica\.php.*$/, "");
+  const res = await (cfg.fetch ?? fetch)(`${site}/api-claude.php?modulo=produtos&acao=listar&limite=500`, { headers: { "X-API-Key": cfg.token, Accept: "application/json" } });
+  const body = (await res.json().catch(() => null)) as { produtos?: ProdutoMmix[]; data?: { produtos?: ProdutoMmix[] } } | null;
+  const list = body?.produtos ?? body?.data?.produtos;
+  if (!res.ok || !Array.isArray(list)) throw new Error(`catálogo MMIX indisponível (${res.status})`);
+  const rows = produtosParaEstudio(list, site).map((p) => ({ ...p, workspace_id: cfg.workspaceId, synced_at: new Date().toISOString() }));
+  if (rows.length) {
+    const up = await db.from("mmix_produtos").upsert(rows, { onConflict: "workspace_id,id" });
+    if (up.error) throw new Error(up.error.message);
+  }
+  const ids = rows.map((r) => r.id);
+  const del = db.from("mmix_produtos").delete().eq("workspace_id", cfg.workspaceId);
+  await (ids.length ? del.not("id", "in", `(${ids.join(",")})`) : del);
+  return rows.length;
+}
+
 /** Credential check without a linked profile yet: how many recording orders are open. */
 export async function countOpenOrders(cfg: MmixConfig): Promise<number> {
   const list = await call(cfg, "gravacao_solicitacoes_listar", { limit: "100" });

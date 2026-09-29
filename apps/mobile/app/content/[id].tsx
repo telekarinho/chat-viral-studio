@@ -3,7 +3,8 @@ import { Text, TextInput, View } from "react-native";
 import * as Clipboard from "expo-clipboard";
 import { router, useFocusEffect, useLocalSearchParams } from "expo-router";
 import { FORMAT_LABEL, PLATFORMS, PLATFORM_LABEL, buildEditPlan, buildSegments, isBusiness, wholeTakeSegment, type EditPlan, type Platform, type ScriptSegment } from "@postai/domain";
-import { completeContent, getContent, latestTakesBySegment, listTakes, listTasks, workspaceById, selectHook, type ContentItem, type Take } from "../../src/db/repo";
+import { completeContent, getContent, latestTakesBySegment, listTakes, listTasks, workspaceById, selectHook, type ContentItem, type Take, type Workspace } from "../../src/db/repo";
+import { ProjectPanel } from "../../src/components/ProjectPanel";
 import { generateForContent, saveUserEdit } from "../../src/generate";
 import { reportError } from "../../src/telemetry";
 import { downloadFinal, latestRenderJob, localFinal, requestFinalRender, type RenderJob } from "../../src/finalRender";
@@ -22,11 +23,18 @@ export default function ContentScreen() {
   const [parts, setParts] = useState<{ segments: ScriptSegment[]; recorded: number[]; plan: EditPlan | null } | null>(null);
   const [job, setJob] = useState<RenderJob | null>(null);
   const [finalUri, setFinalUri] = useState<string | null>(null);
+  const [owner, setOwner] = useState<{ ws: Workspace; takes: Take[] } | null>(null);
 
   const load = useCallback(async () => {
     const item = await getContent(id);
     setC(item);
-    setTakes(await listTakes({ contentItemId: id }));
+    const own = await listTakes({ contentItemId: id });
+    setTakes(own);
+    if (item?.project) {
+      // a derived piece reuses the recording of its origin
+      const clipTakes = own.length || !item.derivedFrom ? own : await listTakes({ contentItemId: item.derivedFrom });
+      setOwner({ ws: await workspaceById(item.workspaceId), takes: clipTakes });
+    }
     if (item) setTaskId((await listTasks(item.date)).find((t) => t.contentItemId === id && t.status === "pending")?.id ?? null);
     if (item?.draft) {
       const ws = await workspaceById(item.workspaceId);
@@ -83,6 +91,7 @@ export default function ContentScreen() {
       <Eyebrow>{`${FORMAT_LABEL[c.format]} · ${c.draft?.pillar ?? c.pillarSlug}`}</Eyebrow>
       <H1>{d?.title ?? "Sem roteiro ainda"}</H1>
       {error ? <ErrorBox message={error} /> : null}
+      {c.project && owner ? <ProjectPanel c={c} ws={owner.ws} takes={owner.takes} onChange={() => void load()} /> : null}
 
       {!d ? (
         <Card style={{ gap: 10 }}>

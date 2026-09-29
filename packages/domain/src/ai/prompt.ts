@@ -40,6 +40,7 @@ export interface PromptInput {
   pillarName: string;
   format: "thought" | "main_video";
   eventText: string | null;
+  brief?: string | null;
   recentSummaries: string[];
   avoid: string;
 }
@@ -71,6 +72,7 @@ export function buildPrompt(input: PromptInput): { system: string; user: string;
     `Formato: ${input.format === "thought" ? "Pensamento do Dia" : "Vídeo principal"} (${min}–${max}s).`,
     b ? "" : `Pilar editorial: ${input.pillarName}.`,
     input.eventText ? `${b ? "Situação real da empresa hoje" : "Acontecimento real de hoje contado pelo criador"} (transforme em conteúdo, preserve os fatos): "${input.eventText}"` : b ? "Sem acontecimento específico: parta de uma dor real do cliente." : "Sem acontecimento específico: parta de uma situação comum e concreta do dia dele.",
+    input.brief ? `Briefing do projeto (siga à risca; dados do equipamento só os daqui): ${input.brief}` : "",
     input.format === "main_video" ? "Inclua em 'versions' variações de 15s, 30s e 60s quando fizer sentido." : "Em 'versions' inclua no máximo uma variação de até 15s.",
     input.recentSummaries.length ? `Conteúdos recentes (não repita assunto, frase, metáfora, gancho, CTA nem estrutura):\n${input.recentSummaries.map((s) => `- ${s}`).join("\n")}` : "",
     input.avoid,

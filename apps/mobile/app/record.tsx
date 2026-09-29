@@ -1,12 +1,12 @@
 import { useCallback, useEffect, useReducer, useRef, useState } from "react";
-import { Pressable, StyleSheet, Text, View } from "react-native";
+import { Pressable, StyleSheet, Text, TextInput, View } from "react-native";
 import { router, useLocalSearchParams } from "expo-router";
 import { useKeepAwake } from "expo-keep-awake";
 import { useVideoPlayer, VideoView } from "expo-video";
 import * as Brightness from "expo-brightness";
 import { Camera, useCameraDevice, useCameraPermission, useMicrophonePermission, type VideoFile } from "react-native-vision-camera";
 import {
-  PRESET_LABEL, availablePresets, buildSegments, initialTeleprompter, isBusiness, pickFormat, segmentProgress, supportedFps, teleprompterReducer,
+  PRESET_LABEL, PRODUCTION_MODES, SHOT_LIBRARY, availablePresets, buildSegments, initialTeleprompter, isBusiness, type ProjectInfo, type ShotKey, pickFormat, segmentProgress, supportedFps, teleprompterReducer,
   type ResolutionPreset, type ScriptSegment,
 } from "@postai/domain";
 import { getContent, getTask, latestTakesBySegment, registerTake, requireWorkspace, queuePatrimonio, runTaskAction, workspaceById, updateSettings, updateTakeMeta, type Take } from "../src/db/repo";
@@ -43,6 +43,9 @@ export default function RecordScreen() {
   const [segIndex, setSegIndex] = useState<number | null>(null);
   const [recordedParts, setRecordedParts] = useState<number[]>([]);
   const [script, setScript] = useState("");
+  // estúdio: equipamento filmado e tomada atual (vão nos metadados do clipe)
+  const [project, setProject] = useState<ProjectInfo | null>(null);
+  const [shot, setShot] = useState<ShotKey | null>(null);
   const [category, setCategory] = useState("livre");
   const [tp, dispatch] = useReducer(teleprompterReducer, initialTeleprompter);
   const [phase, setPhase] = useState<Phase>("ready");
@@ -66,6 +69,10 @@ export default function RecordScreen() {
       const content = contentId ? await getContent(contentId) : null;
       setCategory(params.ordem ? "patrimonio" : task?.kind ?? content?.format ?? "livre");
       if (params.instrucao) setScript(params.instrucao);
+      if (content?.project) {
+        setProject(content.project);
+        setShot(PRODUCTION_MODES[content.project.mode].shots[0] ?? null);
+      }
       if (content?.draft && params.partes === "1") {
         const owner = await workspaceById(content.workspaceId);
         const segs = buildSegments(content.draft, { selectedHook: content.selectedHook ?? 0, userEdited: Boolean(content.meta?.userEdited), closingPhrase: owner.profile.closingPhrase, business: isBusiness(owner.profile) });
@@ -124,6 +131,11 @@ export default function RecordScreen() {
       const take = await registerTake({
         mediaId, localUri: file.uri, sizeBytes: file.sizeBytes, checksum: file.checksum, width: video.width ?? null, height: video.height ?? null,
         durationMs: Math.round((video.duration ?? 0) * 1000), taskId, contentItemId: contentId, category, camera: position, segmentIndex: segIndex,
+        meta: project ? {
+          shot, capitulo: segIndex !== null ? segments?.[segIndex]?.label ?? null : shot ? SHOT_LIBRARY[shot].label : null,
+          // tempo de preparo REGISTRADO nesta demonstração (referência, nunca promessa)
+          tempoPreparoSeg: shot === "preparo" ? Math.round(video.duration ?? 0) : null,
+        } : undefined,
       });
       if (segIndex !== null) setRecordedParts((r) => [...new Set([...r, segIndex])]);
       setSaved(take);
@@ -134,7 +146,7 @@ export default function RecordScreen() {
       setMessage(`Não consegui salvar o vídeo: ${e instanceof Error ? e.message : String(e)}`);
       setPhase("error");
     }
-  }, [taskId, contentId, category, position, segIndex]);
+  }, [taskId, contentId, category, position, segIndex, project, shot, segments]);
 
   const beginRecording = useCallback(() => {
     if (!camera.current) return;
@@ -242,6 +254,7 @@ export default function RecordScreen() {
           </View>
         </View>
         <Button variant="secondary" label={`↺ GRAVAR DE NOVO A PARTE ${segIndex + 1}`} onPress={() => void discardAndRetake(saved, segIndex)} testID="retake-part" />
+        {project ? <StudioNotes take={saved} /> : null}
         <Text style={s.muted}>{`${prog.recorded.length} de ${segments.length} partes boas · ${segments.map((sg) => (prog.recorded.includes(sg.index) ? "✓" : "○")).join(" ")}`}</Text>
       </Screen>
     );
@@ -254,6 +267,7 @@ export default function RecordScreen() {
         <ReviewPlayer uri={saved.media.localUri} />
         <Button label={patrimonio ? "✓ FICOU BOM — ENVIAR PARA A FÁBRICA" : taskId ? "✓ FICOU BOM — MARCAR FEITO" : "✓ FICOU BOM"} onPress={attachAndDone} testID="attach-done" />
         <Button variant="secondary" label="↺ GRAVAR DE NOVO" onPress={() => void discardAndRetake(saved, null)} testID="record-again" />
+        {project ? <StudioNotes take={saved} /> : null}
         <Text style={s.muted}>{`${Math.round((saved.media.durationMs ?? 0) / 1000)}s · ${(saved.media.sizeBytes / 1_048_576).toFixed(1)} MB · o original fica guardado no celular e sobe para a nuvem sozinho.`}</Text>
       </Screen>
     );
@@ -299,6 +313,12 @@ export default function RecordScreen() {
         )}
         <Pill label="⟲" onPress={() => phase !== "recording" && setPosition(position === "front" ? "back" : "front")} hint="Trocar câmera" testID="flip-camera" />
       </View>
+      {project ? (
+        <View style={st.studio} pointerEvents="none" testID="studio-indicator">
+          <Text style={st.meta}>{`🎥 ${project.skuNome ?? project.sku ?? "sem SKU"}${shot ? ` · ${SHOT_LIBRARY[shot].label}` : ""}`}</Text>
+          {shot && phase !== "recording" ? <Text style={st.meta}>{SHOT_LIBRARY[shot].hint}</Text> : null}
+        </View>
+      ) : null}
 
       <View style={st.bottom}>
         {message ? <Text style={st.message} accessibilityRole="alert">{message}</Text> : null}
@@ -308,6 +328,11 @@ export default function RecordScreen() {
               {presets.map((p) => <Pill key={p} label={PRESET_LABEL[p]} selected={p === preset} onPress={() => { setPreset(p); savePrefs({ resolution: p }); }} testID={`res-${p}`} />)}
               {fpsOptions.map((f) => <Pill key={f} label={`${f}fps`} selected={f === effectiveFps} onPress={() => { setFps(f); savePrefs({ fps: f }); }} />)}
             </View>
+            {project ? (
+              <View style={st.row}>
+                {PRODUCTION_MODES[project.mode].shots.map((k) => <Pill key={k} label={SHOT_LIBRARY[k].label} selected={k === shot} onPress={() => setShot(k)} testID={`shot-${k}`} />)}
+              </View>
+            ) : null}
             <View style={st.row}>
               <Pill label={LIGHT_LABEL[light]} selected={light !== "off"} onPress={() => setLight(NEXT_LIGHT[light])} hint="Luz para gravar" testID="toggle-light" />
               <Pill label={prompterOn ? "Prompter ON" : "Prompter OFF"} selected={prompterOn} onPress={() => setPrompterOn(!prompterOn)} testID="toggle-prompter" />
@@ -344,6 +369,19 @@ export default function RecordScreen() {
 }
 
 /** Plays the take right after recording, looping, with sound — to judge it on the spot. */
+/** Medidas e observações anotadas na hora da filmagem (vão para o clipe, base da ficha técnica). */
+function StudioNotes({ take }: { take: Take }) {
+  const [text, setText] = useState(take.meta.medidas ?? "");
+  const [ok, setOk] = useState(false);
+  return (
+    <View style={{ gap: 6 }}>
+      <TextInput style={[s.input, { minHeight: 64, textAlignVertical: "top" }]} multiline value={text} onChangeText={(v) => { setText(v); setOk(false); }}
+        placeholder="Medidas, temperatura, textura, observações desta tomada" accessibilityLabel="Medidas e observações" testID="studio-notes" />
+      <Button compact variant="ghost" label={ok ? "✓ ANOTADO" : "SALVAR ANOTAÇÃO"} onPress={() => void updateTakeMeta(take.id, { meta: { medidas: text.trim() || null } }).then(() => setOk(true))} />
+    </View>
+  );
+}
+
 function ReviewPlayer({ uri }: { uri: string }) {
   const player = useVideoPlayer(uri, (p) => {
     p.loop = true;
@@ -379,6 +417,7 @@ const st = StyleSheet.create({
   frame: { width: "100%", aspectRatio: 9 / 16, alignSelf: "center", overflow: "hidden" },
   ring: { ...StyleSheet.absoluteFillObject, borderWidth: 34, borderRadius: 28 },
   top: { position: "absolute", top: 18, left: 12, right: 12, flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
+  studio: { position: "absolute", top: 64, left: 12, right: 12, alignItems: "center", gap: 2 },
   bottom: { position: "absolute", bottom: 24, left: 12, right: 12, alignItems: "center", gap: 10 },
   row: { flexDirection: "row", flexWrap: "wrap", gap: 8, justifyContent: "center", alignItems: "center" },
   pill: { minHeight: 44, minWidth: 44, paddingHorizontal: 12, borderRadius: 22, backgroundColor: "rgba(0,0,0,0.55)", alignItems: "center", justifyContent: "center" },

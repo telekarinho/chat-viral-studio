@@ -1,5 +1,5 @@
 import { createClient } from "@supabase/supabase-js";
-import { countOpenOrders, forwardOne, mmixConfigFromEnv, syncOrders } from "./mmix";
+import { countOpenOrders, forwardOne, mmixConfigFromEnv, syncOrders, syncProdutos } from "./mmix";
 
 const MAX_SENDS_PER_RUN = 10;
 
@@ -13,9 +13,11 @@ async function main() {
   }
   const db = createClient(process.env.SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY!, { auth: { persistSession: false } });
   const orders = await syncOrders(db, cfg);
+  const produtos = await syncProdutos(db, cfg).catch((e) => { process.stdout.write(`catálogo: ${e instanceof Error ? e.message : e}
+`); return -1; });
   let sent = 0;
   while (sent < MAX_SENDS_PER_RUN && (await forwardOne(db, cfg))) sent++;
-  process.stdout.write(JSON.stringify({ level: "info", msg: "mmix.tick", orders, sent }) + "\n");
+  process.stdout.write(JSON.stringify({ level: "info", msg: "mmix.tick", orders, produtos, sent }) + "\n");
 }
 
 main().catch((e) => {

@@ -66,3 +66,17 @@ describe.skipIf(!hasFfmpeg || !FONT)("renderizador (FFmpeg real)", () => {
     expect(Math.abs(res.durationMs - plan.totalMs)).toBeLessThan(250);
   }, 180_000);
 });
+
+describe("catálogo MMIX para o estúdio", async () => {
+  const { produtosParaEstudio } = await import("../src/mmix");
+  it("só mixers ControlPot, sem franquias, serviços, preço ou descrição", () => {
+    const out = produtosParaEstudio([
+      { id: 348, nome: "Mixer Profissional MMIX SD 201 ControlPot", sku_interno: "CF-MIXERP-1778541098", categoria: "Mixer", modelo: null, imagem_principal: "uploads/catalogo/produtos/348/foto_1.jpeg" },
+      { id: 374, nome: "Mixer MilkyMoo BASE DE TROCA", sku_interno: "MIXER-BASE-TROCA", categoria: "Mixers", modelo: null, imagem_principal: "" },
+      { id: 47, nome: "Mixers Sob Demanda", sku_interno: "SERV-SOB-DEMANDA", categoria: "Serviços", modelo: null, imagem_principal: null },
+      { id: 9, nome: "Caneca inox", sku_interno: "X", categoria: "Peças", modelo: null, imagem_principal: null },
+    ], "https://mmix.com.br");
+    expect(out).toEqual([{ id: 348, sku: "CF-MIXERP-1778541098", nome: "Mixer Profissional MMIX SD 201 ControlPot", categoria: "Mixer", modelo: null, imagem: "https://mmix.com.br/uploads/catalogo/produtos/348/foto_1.jpeg" }]);
+    expect(JSON.stringify(out)).not.toMatch(/preco|valor|R\$/);
+  });
+});

@@ -183,7 +183,9 @@ var GenerateRequestSchema = z.object({
   content_item_id: z.uuid().nullable(),
   format: z.enum(["thought", "main_video"]),
   pillar_slug: text(2, 60),
-  event_text: z.string().trim().max(1500).nullable()
+  event_text: z.string().trim().max(1500).nullable(),
+  /** project briefing from the studio (mode, filmed SKU, ice-cream source, recipe) — optional */
+  brief: z.string().trim().max(1500).nullable().optional()
 });
 function parseDraft(input) {
   const r = ContentDraftSchema.safeParse(input);
@@ -256,6 +258,7 @@ function buildPrompt(input) {
     `Formato: ${input.format === "thought" ? "Pensamento do Dia" : "V\xEDdeo principal"} (${min}\u2013${max}s).`,
     b ? "" : `Pilar editorial: ${input.pillarName}.`,
     input.eventText ? `${b ? "Situa\xE7\xE3o real da empresa hoje" : "Acontecimento real de hoje contado pelo criador"} (transforme em conte\xFAdo, preserve os fatos): "${input.eventText}"` : b ? "Sem acontecimento espec\xEDfico: parta de uma dor real do cliente." : "Sem acontecimento espec\xEDfico: parta de uma situa\xE7\xE3o comum e concreta do dia dele.",
+    input.brief ? `Briefing do projeto (siga \xE0 risca; dados do equipamento s\xF3 os daqui): ${input.brief}` : "",
     input.format === "main_video" ? "Inclua em 'versions' varia\xE7\xF5es de 15s, 30s e 60s quando fizer sentido." : "Em 'versions' inclua no m\xE1ximo uma varia\xE7\xE3o de at\xE9 15s.",
     input.recentSummaries.length ? `Conte\xFAdos recentes (n\xE3o repita assunto, frase, met\xE1fora, gancho, CTA nem estrutura):
 ${input.recentSummaries.map((s) => `- ${s}`).join("\n")}` : "",
@@ -469,6 +472,20 @@ function mentionsPrice(d) {
   return texts.some((t) => PRICE.test(t));
 }
 
+// ../../packages/domain/src/studio.ts
+function pendingClaimsIn(text2, pendingClaims) {
+  const t = norm(text2);
+  const hits = pendingClaims.filter((c) => {
+    const words = norm(c).split(" ").filter((w) => w.length > 3 || /\d/.test(w));
+    const key = words.filter((w) => /\d/.test(w));
+    if (key.length) return key.some((k) => t.includes(k.replace(/\./g, "")) || t.includes(k));
+    const found = words.filter((w) => t.includes(w)).length;
+    return found >= 2 && found / words.length >= 0.5;
+  });
+  return hits;
+}
+var norm = (s) => s.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase().replace(/[^a-z0-9. ]/g, " ").replace(/\s+/g, " ").trim();
+
 // src/edge.ts
 import { createClient as createClient2 } from "npm:@supabase/supabase-js@2";
 
@@ -586,7 +603,7 @@ async function generateContent(req, llm, memory) {
   const avoided = [];
   let fallback = null;
   for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
-    const prompt = buildPrompt({ profile, pillarName, format: req.format, eventText: req.event_text, recentSummaries: summaries, avoid });
+    const prompt = buildPrompt({ profile, pillarName, format: req.format, eventText: req.event_text, brief: req.brief ?? null, recentSummaries: summaries, avoid });
     const started = Date.now();
     let raw;
     try {
@@ -604,6 +621,12 @@ async function generateContent(req, llm, memory) {
     if (profile.business?.noPrice && profile.kind === "empresa" && mentionsPrice(draft)) {
       await memory.saveRun({ ...base, accepted: false, rejectionReason: "price", repetition: null });
       avoid = "A vers\xE3o anterior falou pre\xE7o/valor/parcela. PROIBIDO: reescreva sem nenhum pre\xE7o.";
+      continue;
+    }
+    const unproven = profile.kind === "empresa" ? pendingClaimsIn([draft.script, draft.cta, ...draft.hook_options].join(" "), profile.business?.pendingClaims ?? []) : [];
+    if (unproven.length) {
+      await memory.saveRun({ ...base, accepted: false, rejectionReason: "claim_sem_prova", repetition: null });
+      avoid = `A vers\xE3o anterior afirmou alega\xE7\xE3o SEM PROVA (${unproven.join("; ")}). Reescreva sem ela e sem n\xFAmeros n\xE3o comprovados.`;
       continue;
     }
     const report = checkRepetition(fingerprintsFor(draft), recent);

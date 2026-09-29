@@ -54,6 +54,8 @@ export const GenerateRequestSchema = z.object({
   format: z.enum(["thought", "main_video"]),
   pillar_slug: text(2, 60),
   event_text: z.string().trim().max(1500).nullable(),
+  /** project briefing from the studio (mode, filmed SKU, ice-cream source, recipe) — optional */
+  brief: z.string().trim().max(1500).nullable().optional(),
 });
 export type GenerateRequest = z.infer<typeof GenerateRequestSchema>;
 
