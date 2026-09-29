@@ -1,16 +1,17 @@
-import { useCallback, useEffect, useReducer, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import { router, useLocalSearchParams } from "expo-router";
 import { useKeepAwake } from "expo-keep-awake";
 import * as Brightness from "expo-brightness";
-import { Camera, useCameraDevice, useCameraPermission, useMicrophonePermission, type VideoFile } from "react-native-vision-camera";
+import { Camera, useCameraDevice, useCameraPermission, useMicrophonePermission, useSkiaFrameProcessor, type VideoFile } from "react-native-vision-camera";
+import { makeBeautyPaint } from "../src/beauty";
 import {
   PRESET_LABEL, availablePresets, buildSegments, initialTeleprompter, pickFormat, segmentProgress, supportedFps, teleprompterReducer,
   type ResolutionPreset, type ScriptSegment,
 } from "@postai/domain";
 import { getContent, getTask, latestTakesBySegment, registerTake, runTaskAction, requireWorkspace, updateSettings, type Take } from "../src/db/repo";
 import { freeDiskBytes, persistRecording } from "../src/media";
-import { newId } from "../src/config";
+import { config, newId } from "../src/config";
 import { syncNow } from "../src/sync/engine";
 import { reportError } from "../src/telemetry";
 import { Teleprompter } from "../src/components/Teleprompter";
@@ -34,6 +35,17 @@ export default function RecordScreen() {
   const [fps, setFps] = useState(30);
   // "Luz": front = screen ring light (bright frame + max brightness), back = torch
   const [light, setLight] = useState<LightMode>("off");
+  // live "retoque leve" on the preview (GPU). Off in E2E builds: emulator GPUs are software-only.
+  const [beauty, setBeauty] = useState(!config.e2e);
+  const beautyPaint = useMemo(() => makeBeautyPaint(0.7), []);
+  const beautyProcessor = useSkiaFrameProcessor(
+    (frame) => {
+      "worklet";
+      if (beautyPaint) frame.render(beautyPaint);
+      else frame.render();
+    },
+    [beautyPaint],
+  );
   const [prompterOn, setPrompterOn] = useState(params.prompter === "1" || params.partes === "1");
   // gravação por partes: only the current part is on the teleprompter; recorded parts disappear
   const [segments, setSegments] = useState<ScriptSegment[] | null>(null);
@@ -258,6 +270,7 @@ export default function RecordScreen() {
           video
           audio={mic.hasPermission}
           torch={position === "back" && light !== "off" ? "on" : "off"}
+          frameProcessor={beauty && beautyPaint ? beautyProcessor : undefined}
           resizeMode="cover"
         />
       </View>
@@ -292,6 +305,7 @@ export default function RecordScreen() {
               {fpsOptions.map((f) => <Pill key={f} label={`${f}fps`} selected={f === effectiveFps} onPress={() => { setFps(f); savePrefs({ fps: f }); }} />)}
             </View>
             <View style={st.row}>
+              <Pill label={beauty ? "✨ Retoque ON" : "✨ Retoque OFF"} selected={beauty} onPress={() => setBeauty(!beauty)} hint="Retoque leve na imagem" testID="toggle-beauty" />
               <Pill label={LIGHT_LABEL[light]} selected={light !== "off"} onPress={() => setLight(NEXT_LIGHT[light])} hint="Luz para gravar" testID="toggle-light" />
               <Pill label={prompterOn ? "Prompter ON" : "Prompter OFF"} selected={prompterOn} onPress={() => setPrompterOn(!prompterOn)} testID="toggle-prompter" />
               {[0, 3, 5].map((c) => <Pill key={c} label={c ? `${c}s` : "sem contagem"} selected={tp.countdownSeconds === c} onPress={() => dispatch({ type: "setCountdown", seconds: c })} testID={`countdown-${c}`} />)}
