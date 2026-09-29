@@ -1,7 +1,7 @@
 import { Directory, File, Paths } from "expo-file-system";
 import type { EditPlan } from "@postai/domain";
 import { getDb } from "./db/database";
-import { latestTakesBySegment } from "./db/repo";
+import { latestTakesBySegment, listTakes } from "./db/repo";
 import { newId } from "./config";
 import { supabase } from "./supabase";
 
@@ -10,9 +10,10 @@ export interface RenderJob { id: string; status: "queued" | "rendering" | "done"
 /** Montagem final: the server rebuilds the plan from synced data and renders with FFmpeg. */
 export async function requestFinalRender(workspaceId: string, contentId: string, plan: EditPlan): Promise<{ ok: true } | { ok: false; reason: string }> {
   if (!supabase) return { ok: false, reason: "A montagem final precisa da nuvem configurada (modo local grava as partes, mas não monta)." };
-  const takes = await latestTakesBySegment(contentId);
-  const pending = [...takes.values()].filter((t) => t.media.state !== "uploaded_original").length;
-  if (pending) return { ok: false, reason: `Aguardando ${pending} parte(s) terminarem de sincronizar. Conecte na internet e tente de novo.` };
+  const parts = [...(await latestTakesBySegment(contentId)).values()];
+  const takes = parts.length ? parts : (await listTakes({ contentItemId: contentId })).slice(0, 1);
+  const pending = takes.filter((t) => t.media.state !== "uploaded_original").length;
+  if (pending) return { ok: false, reason: `Aguardando ${pending} vídeo(s) terminarem de sincronizar. Conecte na internet e tente de novo.` };
   const { error } = await supabase.from("render_jobs").insert({ id: newId(), workspace_id: workspaceId, content_item_id: contentId, plan });
   if (error) return { ok: false, reason: `Não consegui pedir a montagem: ${error.message}` };
   return { ok: true };
