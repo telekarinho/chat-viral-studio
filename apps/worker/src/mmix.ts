@@ -122,8 +122,16 @@ export async function forwardOne(db: SupabaseClient, cfg: MmixConfig): Promise<b
   return true;
 }
 
+/** Credential check without a linked profile yet: how many recording orders are open. */
+export async function countOpenOrders(cfg: MmixConfig): Promise<number> {
+  const list = await call(cfg, "gravacao_solicitacoes_listar", { limit: "100" });
+  if (list.ok !== true) throw new Error(`listar ordens: ${String(list.erro ?? "falhou")}`);
+  return ((list.solicitacoes ?? []) as OrdemResumo[]).filter((o) => ACTIVE.has(o.status)).length;
+}
+
+/** workspaceId may be empty: then only the credential is checked. */
 export function mmixConfigFromEnv(env: NodeJS.ProcessEnv): MmixConfig | null {
   const token = env.MMIX_ADMIN_TOKEN || env.MMIX_API_KEY;
-  if (!token || !env.POSTAI_MMIX_WORKSPACE_ID) return null;
-  return { baseUrl: env.MMIX_API_URL || "https://mmix.com.br/api-fabrica.php", token, kind: env.MMIX_ADMIN_TOKEN ? "bearer" : "key", workspaceId: env.POSTAI_MMIX_WORKSPACE_ID };
+  if (!token) return null;
+  return { baseUrl: env.MMIX_API_URL || "https://mmix.com.br/api-fabrica.php", token, kind: env.MMIX_ADMIN_TOKEN ? "bearer" : "key", workspaceId: env.POSTAI_MMIX_WORKSPACE_ID ?? "" };
 }

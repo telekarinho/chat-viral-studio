@@ -1,5 +1,5 @@
 import { createClient } from "@supabase/supabase-js";
-import { forwardOne, mmixConfigFromEnv, syncOrders } from "./mmix";
+import { countOpenOrders, forwardOne, mmixConfigFromEnv, syncOrders } from "./mmix";
 
 const MAX_SENDS_PER_RUN = 10;
 

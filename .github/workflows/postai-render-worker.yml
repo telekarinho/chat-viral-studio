@@ -67,7 +67,7 @@ jobs:
       - name: Configured?
         id: cfg
         run: |
-          if { [ -z "$MMIX_ADMIN_TOKEN" ] && [ -z "$MMIX_API_KEY" ]; } || [ -z "$POSTAI_MMIX_WORKSPACE_ID" ] || [ -z "$SUPABASE_SERVICE_ROLE_KEY" ]; then
+          if { [ -z "$MMIX_ADMIN_TOKEN" ] && [ -z "$MMIX_API_KEY" ]; } || [ -z "$SUPABASE_SERVICE_ROLE_KEY" ]; then
             echo "Ponte MMIX não configurada — nada a fazer."; echo "on=0" >> "$GITHUB_OUTPUT"
           else echo "on=1" >> "$GITHUB_OUTPUT"; fi
       - uses: actions/checkout@v4
