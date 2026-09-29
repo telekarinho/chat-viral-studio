@@ -20,6 +20,9 @@ export const SEGMENT_LABEL: Record<SegmentRole, string> = {
   free: "Trecho",
 };
 
+/** Sales scripts reuse E/MAS/POR ISSO as dor → objeção → prova. */
+export const BUSINESS_SEGMENT_LABEL: Partial<Record<SegmentRole, string>> = { e: "A dor do cliente", mas: "A objeção respondida", por_isso: "A prova" };
+
 const MIN_WORDS = 3;
 
 /**
@@ -27,7 +30,7 @@ const MIN_WORDS = 3;
  * Generated scripts use the structure (gancho → E → MAS → POR ISSO → CTA + fechamento);
  * scripts edited by the user are split by paragraph.
  */
-export function buildSegments(draft: ContentDraft, opts: { selectedHook: number; userEdited: boolean; closingPhrase: string }): ScriptSegment[] {
+export function buildSegments(draft: ContentDraft, opts: { selectedHook: number; userEdited: boolean; closingPhrase: string; business?: boolean }): ScriptSegment[] {
   const hook = draft.hook_options[opts.selectedHook] ?? draft.hook_options[0] ?? "";
   const closing = opts.closingPhrase.trim();
   let parts: { role: SegmentRole; text: string }[];
@@ -56,7 +59,7 @@ export function buildSegments(draft: ContentDraft, opts: { selectedHook: number;
     if (prev && p.role !== "closing" && wordCount(prev.text) < MIN_WORDS) prev.text = `${prev.text} ${p.text}`.trim();
     else merged.push({ role: p.role, text: p.text.trim() });
   }
-  return merged.map((p, index) => ({ index, role: p.role, label: SEGMENT_LABEL[p.role], text: p.text }));
+  return merged.map((p, index) => ({ index, role: p.role, label: (opts.business && BUSINESS_SEGMENT_LABEL[p.role]) || SEGMENT_LABEL[p.role], text: p.text }));
 }
 
 export interface SegmentProgress {

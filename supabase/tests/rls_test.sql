@@ -109,5 +109,22 @@ select set_config('request.jwt.claims', '{"sub":"bbbbbbbb-0000-4000-8000-0000000
 do $$ declare n int; begin
   select count(*) into n from render_jobs; if n <> 0 then raise exception 'B sees A render jobs'; end if;
 end $$;
+-- multiple profiles: A adds a business profile; B cannot take it over by id
+select set_config('request.jwt.claims', '{"sub":"aaaaaaaa-0000-4000-8000-000000000001","role":"authenticated"}', true);
+insert into ctx values ('wsA2', public.create_profile('abababab-0000-4000-8000-0000000000a2', 'Empresa A',
+  '{"displayName":"Empresa A","tone":{"kind":"empresa","business":{"brand":"A","noPrice":true}}}', '[{"slug":"educacao","name":"Educação","targetPercent":100}]', '[]'));
+do $$ declare n int; begin
+  if public.create_profile('abababab-0000-4000-8000-0000000000a2', 'x', '{}', '[]', '[]') <> 'abababab-0000-4000-8000-0000000000a2' then raise exception 'create_profile not idempotent'; end if;
+  select count(*) into n from workspaces; if n <> 2 then raise exception 'A should see 2 profiles, sees %', n; end if;
+  if (select tone->>'kind' from creator_profiles where workspace_id = 'abababab-0000-4000-8000-0000000000a2') <> 'empresa' then raise exception 'kind not stored'; end if;
+end $$;
+select set_config('request.jwt.claims', '{"sub":"bbbbbbbb-0000-4000-8000-000000000002","role":"authenticated"}', true);
+do $$ begin
+  perform public.create_profile('abababab-0000-4000-8000-0000000000a2', 'hijack', '{}', '[]', '[]');
+  raise exception 'B took over A profile id';
+exception when insufficient_privilege then null; end $$;
+do $$ declare n int; begin
+  select count(*) into n from workspaces; if n <> 1 then raise exception 'B sees A profiles'; end if;
+end $$;
 select 'RLS OK: user B cannot read/write user A data, anon blocked, pillar sum enforced' as result;
 rollback;

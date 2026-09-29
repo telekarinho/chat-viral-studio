@@ -1,7 +1,7 @@
-import { checkRepetition, describeAvoidance, fingerprintsFor, generateLocal, parseDraft, parseManualResponse, type ContentDraft, type Fingerprint, type GenerationMeta } from "@postai/domain";
+import { checkRepetition, describeAvoidance, fingerprintsFor, generateLocal, isBusiness, mentionsPrice, parseDraft, parseManualResponse, type ContentDraft, type Fingerprint, type GenerationMeta } from "@postai/domain";
 import { config, generateEndpoint } from "./config";
 import { currentSession } from "./supabase";
-import { getContent, recentFingerprints, requireWorkspace, saveDraft, type ContentItem } from "./db/repo";
+import { getContent, recentFingerprints, saveDraft, workspaceById, type ContentItem } from "./db/repo";
 
 const API_TIMEOUT_MS = 45_000;
 
@@ -39,14 +39,14 @@ export async function generateForContent(contentId: string, eventText: string | 
   const content = await getContent(contentId);
   if (!content) throw new Error("Conteúdo não encontrado");
   if (content.format !== "thought" && content.format !== "main_video") throw new Error("Formato sem roteiro");
-  const ws = await requireWorkspace();
+  const ws = await workspaceById(content.workspaceId);
   const remote = await viaApi(content, eventText);
   if (remote) return saveDraft(contentId, remote.draft, { ...remote.meta, notices: remote.notices }, remote.fingerprints);
 
   const pillar = ws.pillars.find((p) => p.slug === content.pillarSlug);
   const local = generateLocal({
     profile: ws.profile, pillarSlug: content.pillarSlug, pillarName: pillar?.name ?? content.pillarSlug, format: content.format, eventText,
-    recent: (await recentFingerprints()).filter((f) => f.contentItemId !== contentId),
+    recent: (await recentFingerprints(ws.id)).filter((f) => f.contentItemId !== contentId),
   });
   const notices = [...local.notices];
   if (generateEndpoint) notices.unshift("IA indisponível agora (sem internet ou não configurada): usei o gerador offline.");
@@ -55,15 +55,20 @@ export async function generateForContent(contentId: string, eventText: string | 
 
 /** Paste-back from the user's own ChatGPT/Claude app. */
 export async function importManualDraft(contentId: string, pasted: string): Promise<{ ok: true; content: ContentItem } | { ok: false; errors: string[] }> {
-  const ws = await requireWorkspace();
+  const content = await getContent(contentId);
+  if (!content) return { ok: false, errors: ["Conteúdo não encontrado"] };
+  const ws = await workspaceById(content.workspaceId);
   const r = parseManualResponse(pasted, ws.profile);
   if (!r.ok) return r;
-  const draft = { ...r.draft, format: (await getContent(contentId))?.format ?? r.draft.format };
+  const draft = { ...r.draft, format: content.format };
+  if (isBusiness(ws.profile) && ws.profile.business.noPrice && mentionsPrice(draft)) {
+    return { ok: false, errors: ["O roteiro fala preço/valor. Neste perfil de empresa preço não aparece no vídeo — peça para o assistente reescrever sem preço."] };
+  }
   const fps = fingerprintsFor(draft);
-  const report = checkRepetition(fps, (await recentFingerprints()).filter((f) => f.contentItemId !== contentId));
+  const report = checkRepetition(fps, (await recentFingerprints(ws.id)).filter((f) => f.contentItemId !== contentId));
   const notices = report.repeated ? describeAvoidance(report).map((n) => n.replace("Evitei repetir", "Atenção: parece repetir")) : [];
-  const content = await saveDraft(contentId, draft, { source: "local", model: "manual-assistant", prompt_version: r.promptVersion, attempts: 1, avoided: [], notices }, fps);
-  return { ok: true, content };
+  const saved = await saveDraft(contentId, draft, { source: "local", model: "manual-assistant", prompt_version: r.promptVersion, attempts: 1, avoided: [], notices }, fps);
+  return { ok: true, content: saved };
 }
 
 /** User edits are first-class feedback: saved as user_edited without changing memory fingerprints. */

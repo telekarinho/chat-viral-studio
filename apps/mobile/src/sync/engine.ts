@@ -55,9 +55,10 @@ async function flushOutbox(): Promise<void> {
           if (error) throw error;
         }
         if (!payload.update && payload.rows.length > 0) {
-          const q = payload.replaceFor ? supabase.from(item.table_name).insert(payload.rows) : supabase.from(item.table_name).upsert(payload.rows, payload.onConflict ? { onConflict: payload.onConflict } : undefined);
+          const q = payload.replaceFor || payload.insertOnly ? supabase.from(item.table_name).insert(payload.rows) : supabase.from(item.table_name).upsert(payload.rows, payload.onConflict ? { onConflict: payload.onConflict } : undefined);
           const { error } = await q;
-          if (error) throw error;
+          // insert-only rows (queues the client may create but not change): a replay of an already-sent row is fine
+          if (error && !(payload.insertOnly && error.code === "23505")) throw error;
         }
         await deleteOutbox(item.seq);
       } catch (e) {

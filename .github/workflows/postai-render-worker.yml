@@ -51,3 +51,35 @@ jobs:
           FONT_FILE: ${{ runner.temp }}/CaveatBrush-Regular.ttf
         run: |
           for i in $(seq 1 10); do npx tsx apps/worker/src/main.ts --once; done
+
+  # Gravar patrimônio: mirrors MMIX recording orders into the linked business profile and forwards queued takes.
+  # The MMIX credential (MMIX_API_KEY = CP_KEY, or MMIX_ADMIN_TOKEN) exists only here (never in the app). Inactive until the secret and the variable are set.
+  mmix:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      SUPABASE_URL: ${{ secrets.POSTAI_SUPABASE_URL }}
+      SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.POSTAI_SUPABASE_SERVICE_ROLE_KEY }}
+      MMIX_ADMIN_TOKEN: ${{ secrets.MMIX_ADMIN_TOKEN }}
+      MMIX_API_KEY: ${{ secrets.MMIX_API_KEY }}
+      POSTAI_MMIX_WORKSPACE_ID: ${{ vars.POSTAI_MMIX_WORKSPACE_ID }}
+    steps:
+      - name: Configured?
+        id: cfg
+        run: |
+          if { [ -z "$MMIX_ADMIN_TOKEN" ] && [ -z "$MMIX_API_KEY" ]; } || [ -z "$SUPABASE_SERVICE_ROLE_KEY" ]; then
+            echo "Ponte MMIX não configurada — nada a fazer."; echo "on=0" >> "$GITHUB_OUTPUT"
+          else echo "on=1" >> "$GITHUB_OUTPUT"; fi
+      - uses: actions/checkout@v4
+        if: steps.cfg.outputs.on == '1'
+      - uses: actions/setup-node@v4
+        if: steps.cfg.outputs.on == '1'
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: package-lock.json
+      - if: steps.cfg.outputs.on == '1'
+        run: npm ci --workspace @postai/worker --workspace @postai/domain --ignore-scripts
+      - name: Sync orders + send takes
+        if: steps.cfg.outputs.on == '1'
+        run: npx tsx apps/worker/src/mmix-cli.ts

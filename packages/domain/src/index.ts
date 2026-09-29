@@ -11,3 +11,4 @@ export * from "./ai/localGenerator";
 export * from "./ai/manual";
 export * from "./segments";
 export * from "./editPlan";
+export * from "./profiles";

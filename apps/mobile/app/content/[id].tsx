@@ -2,8 +2,8 @@ import { useCallback, useEffect, useState } from "react";
 import { Text, TextInput, View } from "react-native";
 import * as Clipboard from "expo-clipboard";
 import { router, useFocusEffect, useLocalSearchParams } from "expo-router";
-import { FORMAT_LABEL, PLATFORMS, PLATFORM_LABEL, buildEditPlan, buildSegments, wholeTakeSegment, type EditPlan, type Platform, type ScriptSegment } from "@postai/domain";
-import { completeContent, getContent, latestTakesBySegment, listTakes, listTasks, requireWorkspace, selectHook, type ContentItem, type Take } from "../../src/db/repo";
+import { FORMAT_LABEL, PLATFORMS, PLATFORM_LABEL, buildEditPlan, buildSegments, isBusiness, wholeTakeSegment, type EditPlan, type Platform, type ScriptSegment } from "@postai/domain";
+import { completeContent, getContent, latestTakesBySegment, listTakes, listTasks, workspaceById, selectHook, type ContentItem, type Take } from "../../src/db/repo";
 import { generateForContent, saveUserEdit } from "../../src/generate";
 import { reportError } from "../../src/telemetry";
 import { downloadFinal, latestRenderJob, localFinal, requestFinalRender, type RenderJob } from "../../src/finalRender";
@@ -29,8 +29,8 @@ export default function ContentScreen() {
     setTakes(await listTakes({ contentItemId: id }));
     if (item) setTaskId((await listTasks(item.date)).find((t) => t.contentItemId === id && t.status === "pending")?.id ?? null);
     if (item?.draft) {
-      const ws = await requireWorkspace();
-      const segments = buildSegments(item.draft, { selectedHook: item.selectedHook ?? 0, userEdited: Boolean(item.meta?.userEdited), closingPhrase: ws.profile.closingPhrase });
+      const ws = await workspaceById(item.workspaceId);
+      const segments = buildSegments(item.draft, { selectedHook: item.selectedHook ?? 0, userEdited: Boolean(item.meta?.userEdited), closingPhrase: ws.profile.closingPhrase, business: isBusiness(ws.profile) });
       const chosen = await latestTakesBySegment(item.id);
       const recorded = segments.filter((sg) => chosen.has(sg.index)).map((sg) => sg.index);
       const whole = recorded.length === 0 ? (await listTakes({ contentItemId: item.id })).find((t) => t.segmentIndex === null && !t.tags.includes("descartado")) : undefined;

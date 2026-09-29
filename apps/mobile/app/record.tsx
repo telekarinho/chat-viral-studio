@@ -6,10 +6,10 @@ import { useVideoPlayer, VideoView } from "expo-video";
 import * as Brightness from "expo-brightness";
 import { Camera, useCameraDevice, useCameraPermission, useMicrophonePermission, type VideoFile } from "react-native-vision-camera";
 import {
-  PRESET_LABEL, availablePresets, buildSegments, initialTeleprompter, pickFormat, segmentProgress, supportedFps, teleprompterReducer,
+  PRESET_LABEL, availablePresets, buildSegments, initialTeleprompter, isBusiness, pickFormat, segmentProgress, supportedFps, teleprompterReducer,
   type ResolutionPreset, type ScriptSegment,
 } from "@postai/domain";
-import { getContent, getTask, latestTakesBySegment, registerTake, runTaskAction, requireWorkspace, updateSettings, updateTakeMeta, type Take } from "../src/db/repo";
+import { getContent, getTask, latestTakesBySegment, registerTake, requireWorkspace, queuePatrimonio, runTaskAction, workspaceById, updateSettings, updateTakeMeta, type Take } from "../src/db/repo";
 import { freeDiskBytes, persistRecording } from "../src/media";
 import { newId } from "../src/config";
 import { syncNow } from "../src/sync/engine";
@@ -24,18 +24,20 @@ const VIDEO_MBPS: Record<ResolutionPreset, number> = { "1080p": 5, "2k": 9, "4k"
 
 export default function RecordScreen() {
   useKeepAwake();
-  const params = useLocalSearchParams<{ taskId?: string; contentId?: string; prompter?: string; partes?: string }>();
+  const params = useLocalSearchParams<{ taskId?: string; contentId?: string; prompter?: string; partes?: string; ordem?: string; clipe?: string; instrucao?: string }>();
+  // Gravar patrimônio: real footage for a MMIX factory order clip (rear camera, no speech)
+  const patrimonio = params.ordem ? { ordem: Number(params.ordem), clipe: Number(params.clipe || 1) } : null;
   const taskId = params.taskId || null;
   const contentId = params.contentId || null;
   const cam = useCameraPermission();
   const mic = useMicrophonePermission();
-  const [position, setPosition] = useState<"front" | "back">("front");
+  const [position, setPosition] = useState<"front" | "back">(patrimonio ? "back" : "front");
   const device = useCameraDevice(position);
   const [preset, setPreset] = useState<ResolutionPreset>("1080p");
   const [fps, setFps] = useState(30);
   // "Luz": front = screen ring light (bright frame + max brightness), back = torch
   const [light, setLight] = useState<LightMode>("off");
-  const [prompterOn, setPrompterOn] = useState(params.prompter === "1" || params.partes === "1");
+  const [prompterOn, setPrompterOn] = useState(params.prompter === "1" || params.partes === "1" || Boolean(params.instrucao));
   // gravação por partes: only the current part is on the teleprompter; recorded parts disappear
   const [segments, setSegments] = useState<ScriptSegment[] | null>(null);
   const [segIndex, setSegIndex] = useState<number | null>(null);
@@ -62,9 +64,11 @@ export default function RecordScreen() {
       if (t.mirrored) dispatch({ type: "toggleMirror" });
       const task = taskId ? await getTask(taskId) : null;
       const content = contentId ? await getContent(contentId) : null;
-      setCategory(task?.kind ?? content?.format ?? "livre");
+      setCategory(params.ordem ? "patrimonio" : task?.kind ?? content?.format ?? "livre");
+      if (params.instrucao) setScript(params.instrucao);
       if (content?.draft && params.partes === "1") {
-        const segs = buildSegments(content.draft, { selectedHook: content.selectedHook ?? 0, userEdited: Boolean(content.meta?.userEdited), closingPhrase: ws.profile.closingPhrase });
+        const owner = await workspaceById(content.workspaceId);
+        const segs = buildSegments(content.draft, { selectedHook: content.selectedHook ?? 0, userEdited: Boolean(content.meta?.userEdited), closingPhrase: owner.profile.closingPhrase, business: isBusiness(owner.profile) });
         const recorded = [...(await latestTakesBySegment(content.id)).keys()];
         const next = segmentProgress(segs.length, recorded).next ?? 0;
         setSegments(segs);
@@ -78,7 +82,7 @@ export default function RecordScreen() {
         setScript(`${task.title}${task.hint ? `\n\n${task.hint}` : ""}`);
       }
     })().catch((e) => reportError(e, "record init"));
-  }, [taskId, contentId, params.partes]);
+  }, [taskId, contentId, params.partes, params.ordem, params.instrucao]);
 
   useEffect(() => {
     if (light === "off" || position !== "front") return;
@@ -174,6 +178,10 @@ export default function RecordScreen() {
         const t = await getTask(taskId);
         if (t?.status === "pending") await runTaskAction(taskId, { type: "done", takeId: saved.id });
       }
+      if (patrimonio) {
+        await queuePatrimonio(saved.id, patrimonio.ordem, patrimonio.clipe);
+        void syncNow();
+      }
       if (contentId) router.replace(`/content/${contentId}`);
       else router.back();
     } catch (e) {
@@ -244,7 +252,7 @@ export default function RecordScreen() {
       <Screen testID="saved-screen">
         <Text style={{ fontSize: 22, fontWeight: "900", color: colors.good }} testID="saved-local">Salvo no aparelho ✓ — assista e decida</Text>
         <ReviewPlayer uri={saved.media.localUri} />
-        <Button label={taskId ? "✓ FICOU BOM — MARCAR FEITO" : "✓ FICOU BOM"} onPress={attachAndDone} testID="attach-done" />
+        <Button label={patrimonio ? "✓ FICOU BOM — ENVIAR PARA A FÁBRICA" : taskId ? "✓ FICOU BOM — MARCAR FEITO" : "✓ FICOU BOM"} onPress={attachAndDone} testID="attach-done" />
         <Button variant="secondary" label="↺ GRAVAR DE NOVO" onPress={() => void discardAndRetake(saved, null)} testID="record-again" />
         <Text style={s.muted}>{`${Math.round((saved.media.durationMs ?? 0) / 1000)}s · ${(saved.media.sizeBytes / 1_048_576).toFixed(1)} MB · o original fica guardado no celular e sobe para a nuvem sozinho.`}</Text>
       </Screen>

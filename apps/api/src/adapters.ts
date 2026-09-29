@@ -67,6 +67,9 @@ export function supabaseMemory(db: SupabaseClient, userId: string): MemoryStore 
         signature: data.signature ?? data.handle ?? "",
         closingPhrase: data.closing_phrase ?? "",
         voiceRules: data.voice_rules?.length ? data.voice_rules : RODRIGO_PROFILE.voiceRules,
+        // kind + sales strategy of a business profile live in creator_profiles.tone
+        kind: data.tone?.kind === "empresa" ? "empresa" : "pessoal",
+        business: data.tone?.kind === "empresa" ? data.tone.business : undefined,
       } satisfies CreatorProfile;
     },
     async pillarName(ws, slug) {

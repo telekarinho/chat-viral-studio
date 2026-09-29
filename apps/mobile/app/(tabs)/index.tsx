@@ -10,7 +10,8 @@ import { reportError } from "../../src/telemetry";
 import { useApp } from "../../src/app-state";
 import { TodayView } from "../../src/components/TodayView";
 import { UpdateBanner } from "../../src/components/UpdateBanner";
-import { ErrorBox, Loading, Screen } from "../../src/ui";
+import { ProfileSwitcher } from "../../src/components/ProfileSwitcher";
+import { Button, ErrorBox, Loading, Screen } from "../../src/ui";
 
 export default function Today() {
   const { workspace } = useApp();
@@ -76,6 +77,10 @@ export default function Today() {
   return (
     <Screen testID="today-screen">
       <UpdateBanner />
+      <ProfileSwitcher />
+      {workspace?.profile.kind === "empresa" && workspace.cloud ? (
+        <Button compact variant="secondary" label="🎬 GRAVAR PATRIMÔNIO PARA A FÁBRICA" onPress={() => router.push("/patrimonio")} testID="open-patrimonio" />
+      ) : null}
       {error ? <ErrorBox message={error} onRetry={load} /> : null}
       {state ? (
         <TodayView

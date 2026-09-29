@@ -1,7 +1,7 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import request from "supertest";
 import type { INestApplication } from "@nestjs/common";
-import { RODRIGO_PROFILE, fingerprintsFor, generateLocal, type ContentDraft, type Fingerprint } from "@postai/domain";
+import { CONTROLPOT_PROFILE, RODRIGO_PROFILE, fingerprintsFor, generateLocal, type ContentDraft, type Fingerprint } from "@postai/domain";
 import { createApp } from "../src/app";
 import { generateContent, LlmUnavailableError, type LlmClient, type MemoryStore } from "../src/generation.service";
 
@@ -9,11 +9,11 @@ const WS = "11111111-1111-4111-8111-111111111111";
 const sample = (pillarSlug: string, recent: Fingerprint[] = []) =>
   generateLocal({ profile: RODRIGO_PROFILE, pillarSlug, pillarName: pillarSlug, format: "main_video", eventText: null, recent }).draft;
 
-function fakeMemory(recent: Fingerprint[] = []) {
+function fakeMemory(recent: Fingerprint[] = [], profile = RODRIGO_PROFILE) {
   const runs: { accepted: boolean; rejectionReason: string | null }[] = [];
   const mem: MemoryStore = {
     canWrite: async () => true,
-    profile: async () => RODRIGO_PROFILE,
+    profile: async () => profile,
     pillarName: async (_ws, slug) => slug,
     recentFingerprints: async () => recent,
     recentSummaries: async () => [],
@@ -47,6 +47,18 @@ describe("generateContent (IA estruturada)", () => {
     expect(res.meta).toMatchObject({ source: "openai", model: "fake-model", attempts: 1 });
     expect(res.fingerprints.length).toBeGreaterThan(4);
     expect(runs).toEqual([expect.objectContaining({ accepted: true })]);
+  });
+
+  it("perfil empresa: roteiro que fala preço é rejeitado e a IA reescreve sem preço", async () => {
+    const { mem, runs } = fakeMemory([], CONTROLPOT_PROFILE);
+    const biz = generateLocal({ profile: CONTROLPOT_PROFILE, pillarSlug: "oferta", pillarName: "Oferta", format: "main_video", eventText: null, recent: [] }).draft;
+    const llm = scriptedLlm([{ ...biz, cta: "Leve hoje por R$ 1.990 em 10x" }, biz]);
+    const res = await generateContent({ ...body, pillar_slug: "oferta" } as never, llm, mem);
+    expect(res.meta.attempts).toBe(2);
+    expect(runs[0]).toMatchObject({ accepted: false, rejectionReason: "price" });
+    expect(llm.prompts[1]).toContain("PROIBIDO");
+    expect(res.draft.cta).not.toContain("R$");
+    expect(res.draft.script).not.toContain("E se der certo");
   });
 
   it("rejeita JSON fora do schema e tenta de novo", async () => {
