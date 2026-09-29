@@ -26,7 +26,7 @@ export async function buildServerPlan(db: SupabaseClient, job: RenderJobRow): Pr
     db.from("content_items").select("id, workspace_id, structured_payload").eq("id", job.content_item_id).single(),
     db.from("scripts").select("draft, user_edited").eq("content_item_id", job.content_item_id).order("updated_at", { ascending: false }).limit(1).maybeSingle(),
     db.from("creator_profiles").select("signature, closing_phrase").eq("workspace_id", job.workspace_id).single(),
-    db.from("takes").select("id, workspace_id, segment_index, created_at, media_files(storage_key, duration_ms, state)").eq("content_item_id", job.content_item_id).order("created_at", { ascending: false }),
+    db.from("takes").select("id, workspace_id, segment_index, tags, created_at, media_files(storage_key, duration_ms, state)").eq("content_item_id", job.content_item_id).order("created_at", { ascending: false }),
   ]);
   const err = content.error ?? script.error ?? profile.error ?? takes.error;
   if (err) throw new Error(err.message);
@@ -39,8 +39,8 @@ export async function buildServerPlan(db: SupabaseClient, job: RenderJobRow): Pr
     userEdited: Boolean(script.data?.user_edited),
     closingPhrase: profile.data.closing_phrase ?? "",
   });
-  type TakeRow = { id: string; workspace_id: string; segment_index: number | null; media_files: { storage_key: string | null; duration_ms: number | null; state: string } | null };
-  const own = ((takes.data ?? []) as unknown as TakeRow[]).filter((t) => t.workspace_id === job.workspace_id);
+  type TakeRow = { id: string; workspace_id: string; segment_index: number | null; tags: string[] | null; media_files: { storage_key: string | null; duration_ms: number | null; state: string } | null };
+  const own = ((takes.data ?? []) as unknown as TakeRow[]).filter((t) => t.workspace_id === job.workspace_id && !(t.tags ?? []).includes("descartado"));
   const latest = new Map<number, TakeRow>();
   for (const t of own) {
     if (t.segment_index !== null && !latest.has(t.segment_index)) latest.set(t.segment_index, t);

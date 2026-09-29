@@ -11,7 +11,7 @@ export interface RenderJob { id: string; status: "queued" | "rendering" | "done"
 export async function requestFinalRender(workspaceId: string, contentId: string, plan: EditPlan): Promise<{ ok: true } | { ok: false; reason: string }> {
   if (!supabase) return { ok: false, reason: "A montagem final precisa da nuvem configurada (modo local grava as partes, mas não monta)." };
   const parts = [...(await latestTakesBySegment(contentId)).values()];
-  const takes = parts.length ? parts : (await listTakes({ contentItemId: contentId })).slice(0, 1);
+  const takes = parts.length ? parts : (await listTakes({ contentItemId: contentId })).filter((t) => !t.tags.includes("descartado")).slice(0, 1);
   const pending = takes.filter((t) => t.media.state !== "uploaded_original").length;
   if (pending) return { ok: false, reason: `Aguardando ${pending} vídeo(s) terminarem de sincronizar. Conecte na internet e tente de novo.` };
   const { error } = await supabase.from("render_jobs").insert({ id: newId(), workspace_id: workspaceId, content_item_id: contentId, plan });

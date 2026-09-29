@@ -33,7 +33,7 @@ export default function ContentScreen() {
       const segments = buildSegments(item.draft, { selectedHook: item.selectedHook ?? 0, userEdited: Boolean(item.meta?.userEdited), closingPhrase: ws.profile.closingPhrase });
       const chosen = await latestTakesBySegment(item.id);
       const recorded = segments.filter((sg) => chosen.has(sg.index)).map((sg) => sg.index);
-      const whole = recorded.length === 0 ? (await listTakes({ contentItemId: item.id })).find((t) => t.segmentIndex === null) : undefined;
+      const whole = recorded.length === 0 ? (await listTakes({ contentItemId: item.id })).find((t) => t.segmentIndex === null && !t.tags.includes("descartado")) : undefined;
       const plan = recorded.length === segments.length
         ? buildEditPlan({ segments, signature: ws.profile.signature, takes: segments.map((sg) => ({ segmentIndex: sg.index, takeId: chosen.get(sg.index)!.id, durationMs: chosen.get(sg.index)!.media.durationMs ?? 0 })) })
         : whole

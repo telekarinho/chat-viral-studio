@@ -2,13 +2,14 @@ import { useCallback, useEffect, useReducer, useRef, useState } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import { router, useLocalSearchParams } from "expo-router";
 import { useKeepAwake } from "expo-keep-awake";
+import { useVideoPlayer, VideoView } from "expo-video";
 import * as Brightness from "expo-brightness";
 import { Camera, useCameraDevice, useCameraPermission, useMicrophonePermission, type VideoFile } from "react-native-vision-camera";
 import {
   PRESET_LABEL, availablePresets, buildSegments, initialTeleprompter, pickFormat, segmentProgress, supportedFps, teleprompterReducer,
   type ResolutionPreset, type ScriptSegment,
 } from "@postai/domain";
-import { getContent, getTask, latestTakesBySegment, registerTake, runTaskAction, requireWorkspace, updateSettings, type Take } from "../src/db/repo";
+import { getContent, getTask, latestTakesBySegment, registerTake, runTaskAction, requireWorkspace, updateSettings, updateTakeMeta, type Take } from "../src/db/repo";
 import { freeDiskBytes, persistRecording } from "../src/media";
 import { newId } from "../src/config";
 import { syncNow } from "../src/sync/engine";
@@ -205,24 +206,35 @@ export default function RecordScreen() {
     dispatch({ type: "restart" });
   }
 
+  /** "Ficou ruim": keep the file (never lose footage) but take it out of the edit, then record again. */
+  async function discardAndRetake(take: Take, part: number | null) {
+    await updateTakeMeta(take.id, { tags: [...take.tags, "descartado"] });
+    if (part !== null) setRecordedParts((r) => r.filter((i) => i !== part));
+    if (part !== null) goToPart(part);
+    else {
+      setSaved(null);
+      setPhase("ready");
+      dispatch({ type: "restart" });
+    }
+  }
+
   if (phase === "saved" && saved && segments && segIndex !== null) {
     const prog = segmentProgress(segments.length, recordedParts);
     return (
       <Screen testID="saved-screen">
-        <Text style={{ fontSize: 26, fontWeight: "900", color: colors.good }} testID="saved-local">{`Parte ${segIndex + 1} salva no aparelho ✓`}</Text>
-        <Text style={s.muted}>{prog.recorded.length} de {segments.length} partes gravadas · {(saved.media.sizeBytes / 1_048_576).toFixed(1)} MB</Text>
-        {segments.map((seg) => (
-          <Text key={seg.index} style={{ color: prog.recorded.includes(seg.index) ? colors.good : colors.muted, fontWeight: "700" }}>
-            {prog.recorded.includes(seg.index) ? "✓" : "○"} Parte {seg.index + 1} · {seg.label}
-          </Text>
-        ))}
-        {prog.next !== null ? (
-          <Button label={`GRAVAR PARTE ${prog.next + 1} — ${segments[prog.next]!.label.toUpperCase()}`} onPress={() => goToPart(prog.next!)} testID="next-part" />
-        ) : (
-          <Button label="TODAS AS PARTES GRAVADAS — CONCLUIR" onPress={attachAndDone} testID="attach-done" />
-        )}
-        <Button variant="secondary" label={`REGRAVAR PARTE ${segIndex + 1}`} onPress={() => goToPart(segIndex)} testID="retake-part" />
-        <Text style={s.muted}>Pode fechar a qualquer momento: as partes ficam salvas e você continua de onde parou.</Text>
+        <Text style={{ fontSize: 22, fontWeight: "900", color: colors.good }} testID="saved-local">{`Parte ${segIndex + 1} salva ✓ — assista e decida`}</Text>
+        <ReviewPlayer uri={saved.media.localUri} />
+        <View style={[s.row, { justifyContent: "space-between" }]}>
+          <View style={{ flex: 1 }}>
+            {prog.next !== null ? (
+              <Button label={`✓ FICOU BOM — PARTE ${prog.next + 1}`} onPress={() => goToPart(prog.next!)} testID="next-part" />
+            ) : (
+              <Button label="✓ FICOU BOM — CONCLUIR" onPress={attachAndDone} testID="attach-done" />
+            )}
+          </View>
+        </View>
+        <Button variant="secondary" label={`↺ GRAVAR DE NOVO A PARTE ${segIndex + 1}`} onPress={() => void discardAndRetake(saved, segIndex)} testID="retake-part" />
+        <Text style={s.muted}>{`${prog.recorded.length} de ${segments.length} partes boas · ${segments.map((sg) => (prog.recorded.includes(sg.index) ? "✓" : "○")).join(" ")}`}</Text>
       </Screen>
     );
   }
@@ -230,14 +242,11 @@ export default function RecordScreen() {
   if (phase === "saved" && saved) {
     return (
       <Screen testID="saved-screen">
-        <Text style={{ fontSize: 30, fontWeight: "900", color: colors.good }} testID="saved-local">Salvo no aparelho ✓</Text>
-        <Text style={s.body}>
-          {(saved.media.sizeBytes / 1_048_576).toFixed(1)} MB · {Math.round((saved.media.durationMs ?? 0) / 1000)}s · verificação {saved.media.checksum.slice(0, 8)}
-        </Text>
-        <Text style={s.muted}>O vídeo original está guardado no celular. Se estiver sem internet, ele vai para a nuvem sozinho quando a conexão voltar.</Text>
-        {taskId ? <Button label="ANEXAR E MARCAR FEITO" onPress={attachAndDone} testID="attach-done" /> : <Button label="CONCLUIR" onPress={attachAndDone} testID="attach-done" />}
-        <Button variant="secondary" label="GRAVAR OUTRO TAKE" onPress={() => { setSaved(null); setPhase("ready"); dispatch({ type: "restart" }); }} testID="record-again" />
-        <Button variant="ghost" label="VER TAKE" onPress={() => router.push(`/take/${saved.id}`)} />
+        <Text style={{ fontSize: 22, fontWeight: "900", color: colors.good }} testID="saved-local">Salvo no aparelho ✓ — assista e decida</Text>
+        <ReviewPlayer uri={saved.media.localUri} />
+        <Button label={taskId ? "✓ FICOU BOM — MARCAR FEITO" : "✓ FICOU BOM"} onPress={attachAndDone} testID="attach-done" />
+        <Button variant="secondary" label="↺ GRAVAR DE NOVO" onPress={() => void discardAndRetake(saved, null)} testID="record-again" />
+        <Text style={s.muted}>{`${Math.round((saved.media.durationMs ?? 0) / 1000)}s · ${(saved.media.sizeBytes / 1_048_576).toFixed(1)} MB · o original fica guardado no celular e sobe para a nuvem sozinho.`}</Text>
       </Screen>
     );
   }
@@ -323,6 +332,23 @@ export default function RecordScreen() {
         {busy ? <Text style={st.meta}>Salvando no aparelho…</Text> : null}
       </View>
     </View>
+  );
+}
+
+/** Plays the take right after recording, looping, with sound — to judge it on the spot. */
+function ReviewPlayer({ uri }: { uri: string }) {
+  const player = useVideoPlayer(uri, (p) => {
+    p.loop = true;
+    p.play();
+  });
+  return (
+    <VideoView
+      player={player}
+      style={{ width: "72%", alignSelf: "center", aspectRatio: 9 / 16, borderRadius: 18, backgroundColor: "#000" }}
+      nativeControls
+      contentFit="cover"
+      testID="review-player"
+    />
   );
 }
 

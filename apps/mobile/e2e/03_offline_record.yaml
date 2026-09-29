@@ -74,6 +74,9 @@ appId: me.rodrigoserra.postai
       id: saved-local
     timeout: 60000
 - takeScreenshot: 05_salvo_offline
+- scrollUntilVisible:
+    element:
+      id: attach-done
 - tapOn:
     id: attach-done
 - extendedWaitUntil:
