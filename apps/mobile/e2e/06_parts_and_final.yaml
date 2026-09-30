@@ -37,7 +37,11 @@ appId: me.rodrigoserra.postai
 - assertNotVisible: "E se der certo!"
 - takeScreenshot: 07c_parte1_teleprompter
 - tapOn:
+    id: open-settings
+- tapOn:
     id: countdown-0
+- tapOn:
+    id: open-settings
 - tapOn:
     id: record-button
 - extendedWaitUntil:
@@ -49,25 +53,38 @@ appId: me.rodrigoserra.postai
     visible: "Parte 1 salva.*"
     timeout: 60000
 - takeScreenshot: 08_parte1_salva
+# CONCLUIR pode estar abaixo da dobra: rola antes de decidir se ainda há partes
 - scrollUntilVisible:
     element:
-      id: next-part
+      id: "next-part|attach-done"
     timeout: 60000
-- tapOn:
-    id: next-part
-- extendedWaitUntil:
-    visible: "E se der certo!"
-    timeout: 20000
-- tapOn:
-    id: record-button
-- extendedWaitUntil:
-    visible: "● REC ([3-9]|[1-9][0-9]+)s"
-    timeout: 20000
-- tapOn:
-    id: record-button
-- extendedWaitUntil:
-    visible: "Parte 2 salva.*"
-    timeout: 60000
+# as outras partes (mensagem, fechamento…): grava uma a uma até aparecer CONCLUIR
+- repeat:
+    while:
+      notVisible:
+        id: attach-done
+    times: 6
+    commands:
+      - tapOn:
+          id: next-part
+      - extendedWaitUntil:
+          visible:
+            id: teleprompter-text
+          timeout: 20000
+      - tapOn:
+          id: record-button
+      - extendedWaitUntil:
+          visible: "● REC ([3-9]|[1-9][0-9]+)s"
+          timeout: 20000
+      - tapOn:
+          id: record-button
+      - extendedWaitUntil:
+          visible: "Parte [0-9]+ salva.*"
+          timeout: 60000
+      - scrollUntilVisible:
+          element:
+            id: "next-part|attach-done"
+          timeout: 60000
 - scrollUntilVisible:
     element:
       id: attach-done

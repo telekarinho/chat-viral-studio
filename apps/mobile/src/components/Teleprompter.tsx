@@ -68,7 +68,7 @@ export function Teleprompter({ text, state, dispatch, visible }: Props) {
 }
 
 const st = StyleSheet.create({
-  wrap: { position: "absolute", top: 70, left: 12, right: 12, height: "42%", backgroundColor: "rgba(0,0,0,0.45)", borderRadius: 16, paddingHorizontal: 14, flexDirection: "row" },
+  wrap: { position: "absolute", top: 70, left: 12, right: 78, height: "42%", backgroundColor: "rgba(0,0,0,0.45)", borderRadius: 16, paddingHorizontal: 14, flexDirection: "row" },
   text: { color: "#FFFFFF", fontWeight: "700", textShadowColor: "rgba(0,0,0,0.6)", textShadowRadius: 4 },
   manual: { justifyContent: "center", gap: 10, paddingLeft: 6 },
   arrow: { width: 44, height: 44, borderRadius: 22, backgroundColor: "rgba(255,255,255,0.2)", alignItems: "center", justifyContent: "center" },

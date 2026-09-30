@@ -40,6 +40,9 @@ appId: me.rodrigoserra.postai
     timeout: 30000
 - assertVisible:
     id: teleprompter
+# ajustes do texto ficam no painel "Ajustes" (trilho lateral, estilo TikTok)
+- tapOn:
+    id: open-settings
 - tapOn:
     id: font-plus
 - tapOn:
@@ -54,6 +57,8 @@ appId: me.rodrigoserra.postai
     id: prompter-back
 - tapOn:
     id: countdown-3
+- tapOn:
+    id: open-settings
 - takeScreenshot: 04_teleprompter
 - tapOn:
     id: record-button
