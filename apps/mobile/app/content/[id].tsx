@@ -271,7 +271,6 @@ ${owner?.ws.profile.signature ?? ""}`.trim())} />
                     <Text key={c.segmentIndex} style={s.muted}>{c.segmentIndex + 1}. {EFFECT_LABEL[c.effect.kind]} · {(c.durationMs / 1000).toFixed(1)}s · {c.captions.length} {c.captions.length === 1 ? "legenda" : "legendas"}</Text>
                   ))}
                   <Text style={s.muted}>{`Assinatura ${parts.plan.signature}. A montagem (juntar, efeitos, legenda da sua fala e música) roda no servidor de edição.`}</Text>
-                  <FinishOptions value={c.edit} pillarSlug={c.pillarSlug} business={business} onChange={(v) => void setEditChoices(c.id, v).then(setC)} />
                   {autoMsg ? <Text style={{ color: colors.info, fontWeight: "700" }} testID="auto-render-status">{autoMsg}</Text> : null}
                   {describeResult(result ?? job?.result) ? <Text style={{ color: colors.good, fontWeight: "700" }}>{describeResult(result ?? job?.result)}</Text> : null}
                   {(result ?? job?.result)?.warnings?.map((w) => <Text key={w} style={{ color: colors.warn, fontWeight: "700" }}>{`⚠ ${w}`}</Text>)}
@@ -316,6 +315,8 @@ ${owner?.ws.profile.signature ?? ""}`.trim())} />
                       })} />
                     </>
                   )}
+                  <Text style={s.label}>Quer mudar algo? Escolha e toque em REFAZER.</Text>
+                  <FinishOptions value={c.edit} pillarSlug={c.pillarSlug} business={business} onChange={(v) => void setEditChoices(c.id, v).then(setC)} />
                 </Card>
               ) : null}
             </>

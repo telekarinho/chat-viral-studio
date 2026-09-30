@@ -114,11 +114,15 @@ appId: me.rodrigoserra.postai
       - tapOn:
           id: download-final
           optional: true
-      - extendedWaitUntil:
-          visible:
+      - scrollUntilVisible:
+          element:
             id: open-final
-          timeout: 5000
+          timeout: 8000
           optional: true
+- scrollUntilVisible:
+    element:
+      id: open-final
+    timeout: 60000
 - tapOn:
     id: open-final
 - extendedWaitUntil:
