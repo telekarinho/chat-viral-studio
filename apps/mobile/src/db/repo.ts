@@ -1,7 +1,7 @@
 import {
   applyTaskAction, buildDayPlan, toLocalDateKey, type ContentDraft, type ContentFormat, type CreatorProfile, type Fingerprint,
   type FingerprintType, type GenerationMeta, type MediaRecord, type MediaState, type Pillar, type RecordingTask, type ResolutionPreset,
-  type RoutineBlock, type TaskAction, type TaskStatus, type ClipMeta, type ProjectInfo, type UseTarget, PRODUCTION_MODES, type EditChoices, watermarkCorner,
+  type RoutineBlock, type TaskAction, type TaskStatus, type ClipMeta, type ProjectInfo, type UseTarget, PRODUCTION_MODES, type EditChoices, type PostMetrics, watermarkCorner,
 } from "@postai/domain";
 import { config, newId, nowIso } from "../config";
 import { getDb } from "./database";
@@ -50,6 +50,7 @@ export interface ContentItem {
   derivedFrom?: string | null;
   precisaRevisao?: string | null;
   edit?: EditChoices | null;
+  metrics?: PostMetrics | null;
 }
 
 export interface Take {
@@ -328,7 +329,7 @@ export async function runTaskAction(taskId: string, action: TaskAction): Promise
 type ContentRow = {
   id: string; workspace_id: string; date: string; format: string; pillar_slug: string; title: string; status: string; scheduled_for: string;
   draft: string | null; meta: string | null; selected_hook: number | null;
-  project?: string | null; derived_from?: string | null; precisa_revisao?: string | null; edit?: string | null;
+  project?: string | null; derived_from?: string | null; precisa_revisao?: string | null; edit?: string | null; metrics?: string | null;
 };
 
 const toContent = (r: ContentRow): ContentItem => ({
@@ -337,11 +338,12 @@ const toContent = (r: ContentRow): ContentItem => ({
   meta: r.meta ? JSON.parse(r.meta) : null, selectedHook: r.selected_hook,
   project: r.project ? JSON.parse(r.project) : null, derivedFrom: r.derived_from ?? null, precisaRevisao: r.precisa_revisao ?? null,
   edit: r.edit ? JSON.parse(r.edit) : null,
+  metrics: r.metrics ? JSON.parse(r.metrics) : null,
 });
 
 const contentServerRow = (c: Omit<ContentItem, "draft" | "meta"> & { draft: ContentDraft | null; meta: ContentItem["meta"] }) => ({
   id: c.id, workspace_id: c.workspaceId, pillar_slug: c.pillarSlug, plan_date: c.date, scheduled_for: c.scheduledFor, format: c.format,
-  title: c.title, duration_seconds: c.draft?.duration_seconds ?? null, status: c.status, structured_payload: { selected_hook: c.selectedHook, project: c.project ?? null, edit: c.edit ?? null },
+  title: c.title, duration_seconds: c.draft?.duration_seconds ?? null, status: c.status, structured_payload: { selected_hook: c.selectedHook, project: c.project ?? null, edit: c.edit ?? null, metrics: c.metrics ?? null },
   derived_from: c.derivedFrom ?? null, precisa_revisao: c.precisaRevisao ?? null, updated_at: nowIso(),
 });
 
@@ -410,6 +412,21 @@ export async function setEditChoices(contentId: string, edit: EditChoices): Prom
   const c = (await getContent(contentId))!;
   await enqueue(await workspaceById(c.workspaceId), "content_items", contentId, { rows: [contentServerRow(c)] });
   return c;
+}
+
+/** Números do post (visualizações, curtidas…) anotados pelo criador; vão junto para a nuvem. */
+export async function setContentMetrics(contentId: string, metrics: PostMetrics): Promise<ContentItem> {
+  const db = await getDb();
+  await db.runAsync("UPDATE content_items SET metrics = ?, updated_at = ? WHERE id = ?", JSON.stringify(metrics), nowIso(), contentId);
+  const c = (await getContent(contentId))!;
+  await enqueue(await workspaceById(c.workspaceId), "content_items", contentId, { rows: [contentServerRow(c)] });
+  return c;
+}
+
+/** Conteúdos do perfil ativo que já têm números anotados (mais recentes primeiro). */
+export async function listContentWithMetrics(limit = 120): Promise<ContentItem[]> {
+  const db = await getDb();
+  return (await db.getAllAsync<ContentRow>("SELECT * FROM content_items WHERE workspace_id = ? AND metrics IS NOT NULL ORDER BY date DESC LIMIT ?", await activeId(), limit)).map(toContent);
 }
 
 /** Linha do servidor do conteúdo (para gravar direto antes de pedir a montagem). */

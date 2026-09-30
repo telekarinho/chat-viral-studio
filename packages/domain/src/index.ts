@@ -17,3 +17,4 @@ export * from "./music";
 export * from "./captions";
 export * from "./cuts";
 export * from "./watermark";
+export * from "./metrics";

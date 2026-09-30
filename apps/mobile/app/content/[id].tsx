@@ -10,6 +10,7 @@ import { FREE_SPEECH_MODEL } from "../../src/freeSpeech";
 import { generateForContent, saveUserEdit } from "../../src/generate";
 import { reportError } from "../../src/telemetry";
 import { setContentOnScreen } from "../../src/renderWatch";
+import { MetricsCard } from "../../src/components/MetricsCard";
 import { describeResult, downloadFinal, latestRenderJob, localFinal, localResult, requestFinalRender, type RenderJob, type RenderResult } from "../../src/finalRender";
 import { Button, Card, Chip, ErrorBox, Eyebrow, H1, Loading, Screen, Section, colors, s } from "../../src/ui";
 
@@ -343,6 +344,8 @@ ${owner?.ws.profile.signature ?? ""}`.trim())} />
               </Text>
             </Card>
           ))}
+
+          {finalUri ? <MetricsCard content={c} onSaved={setC} /> : null}
 
           <View style={{ gap: 10, marginTop: 8 }}>
             {c.status !== "done" ? (
