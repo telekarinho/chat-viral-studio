@@ -25,6 +25,8 @@ export default function ContentScreen() {
   const [parts, setParts] = useState<{ segments: ScriptSegment[]; recorded: number[]; plan: EditPlan | null } | null>(null);
   const [job, setJob] = useState<RenderJob | null>(null);
   const [finalUri, setFinalUri] = useState<string | null>(null);
+  // id do job cujo download automático falhou: só então aparece o botão BAIXAR (antes, um toque disputava com o download automático)
+  const [dlFailedJob, setDlFailedJob] = useState<string | null>(null);
   const [owner, setOwner] = useState<{ ws: Workspace; takes: Take[] } | null>(null);
   const [business, setBusiness] = useState(false);
 
@@ -115,7 +117,10 @@ export default function ContentScreen() {
   useEffect(() => {
     if (!c || job?.status !== "done" || finalUri) return;
     void downloadFinal(c.id, job).then((uri) => { setFinalUri(uri); setResult(job.result); })
-      .catch((e: unknown) => setAutoMsg(`O vídeo está pronto, mas não consegui baixar: ${e instanceof Error ? e.message : String(e)}. Toque em BAIXAR VÍDEO FINAL.`));
+      .catch((e: unknown) => {
+        setDlFailedJob(job.id);
+        setAutoMsg(`O vídeo está pronto, mas não consegui baixar: ${e instanceof Error ? e.message : String(e)}. Toque em BAIXAR VÍDEO FINAL.`);
+      });
   }, [c, job, finalUri]);
 
   async function run(label: string, fn: () => Promise<unknown>) {
@@ -295,6 +300,8 @@ ${owner?.ws.profile.signature ?? ""}`.trim())} />
                         )
                       ) : null}
                     </>
+                  ) : job?.status === "done" && dlFailedJob !== job.id ? (
+                    <Text style={{ color: colors.info, fontWeight: "800" }}>Vídeo pronto! Baixando para o celular…</Text>
                   ) : job?.status === "done" ? (
                     <Button compact label="BAIXAR VÍDEO FINAL" onPress={() => run("baixar", async () => { await downloadFinal(c.id, job); router.push(`/final/${c.id}`); })} loading={busy === "baixar"} testID="download-final" />
                   ) : job && (job.status === "queued" || job.status === "rendering") ? (
