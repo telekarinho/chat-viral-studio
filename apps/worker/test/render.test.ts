@@ -4,10 +4,10 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
 import { describe, expect, it } from "vitest";
-import { RODRIGO_PROFILE, buildAss, buildEditPlan, buildSegments, generateLocal } from "@postai/domain";
+import { RODRIGO_PROFILE, assignBroll, buildAss, buildEditPlan, buildSegments, generateLocal, withClips, type SpokenWord } from "@postai/domain";
 import { writeFileSync } from "node:fs";
 import { escapeDrawtext, ffmpegArgs, filterPath, zoomExpr } from "../src/render";
-import { editChoices } from "../src/job";
+import { editChoices, editFromSpeech, jobVariant } from "../src/job";
 import { probe, render } from "../src/ffmpeg";
 
 const run = promisify(execFile);
@@ -66,6 +66,48 @@ describe("renderizador (comando)", () => {
     expect(editChoices(null, "demonstracao", true, "c").retouch).toBe("leve");
     expect(editChoices({ edit: { retouch: "rosa-choque", stabilize: "x" } }, "academia", false, "c")).toMatchObject({ retouch: "forte", stabilize: true });
   });
+  it("corte automático vira select/aselect, voz limpa e cena de apoio por cima", () => {
+    const clips = plan.clips.map((c, i) => (i === 0 ? { ...c, durationMs: 1800, keep: [{ startMs: 300, endMs: 1200 }, { startMs: 1900, endMs: 2800 }] } : i === 1 ? { ...c, broll: { takeId: "cafe", atMs: 900, durationMs: 1200 } } : c));
+    const p = withClips({ ...plan, voiceClean: true }, clips);
+    const args = ffmpegArgs({ plan: { ...p, music: { trackId: "mixkit-32", mood: "motivacional", volume: 0.22 } }, inputs: ["a.mp4", "b.mp4", "c.mp4"], hasAudio: [true, true, true], fontFile: "f.ttf", output: "o.mp4", brollFiles: { cafe: "cafe.mp4" }, musicFile: "m.mp3" });
+    const graph = args[args.indexOf("-filter_complex") + 1]!;
+    expect(graph).toContain(String.raw`[0:v]fps=30,select='between(t\,0.300\,1.200)+between(t\,1.900\,2.800)',setpts=N/(30*TB)`);
+    expect(graph).toContain(String.raw`aselect='between(t\,0.300\,1.200)+between(t\,1.900\,2.800)',asetpts=N/SR/TB`);
+    expect(graph).toContain("highpass=f=90,afftdn=nr=10:nf=-28,equalizer=f=3200");
+    expect(graph).toContain("acompressor=");
+    expect(graph).toContain("[3:v]trim=start=0.15:duration=1.200,setpts=PTS-STARTPTS+0.900/TB");
+    expect(graph).toContain(String.raw`[z1][br1]overlay=enable='between(t\,0.900\,2.100)'`);
+    expect(graph).toContain("[4:a]aresample=48000"); // música vem depois da cena de apoio
+    expect(args.filter((a) => a === "-i")).toHaveLength(5);
+    // cena de apoio sem arquivo baixado é ignorada (não quebra a montagem)
+    const semArquivo = ffmpegArgs({ plan: p, inputs: ["a.mp4", "b.mp4", "c.mp4"], hasAudio: [true, true, true], fontFile: "f.ttf", output: "o.mp4" });
+    expect(semArquivo[semArquivo.indexOf("-filter_complex") + 1]).not.toContain("overlay=enable");
+  });
+  it("edição pela fala: corta pausa e repetição, legenda segue a fala, sem transcrição não corta", async () => {
+    const say = (txt: string, t0: number): SpokenWord[] => txt.split(" ").map((w, i) => ({ text: w, startMs: t0 + i * 300, endMs: t0 + i * 300 + 260 }));
+    const choices = editChoices(null, "academia", false, "c");
+    const fake = async (file: string) => (file === "a.mp4" ? [...say("hoje eu quero", 100), ...say("hoje eu quero treinar", 1200)] : file === "b.mp4" ? null : say("bora", 300));
+    const r = await editFromSpeech({ plan, choices, prompt: "" }, ["a.mp4", "b.mp4", "c.mp4"], ".", fake);
+    expect(r.cuts.repeats).toBe(1);
+    expect(r.plan.clips[0]!.keep!.length).toBeGreaterThanOrEqual(1);
+    expect(r.plan.clips[0]!.keep![0]!.startMs).toBeGreaterThanOrEqual(plan.clips[0]!.trimStartMs); // tempo do arquivo original
+    expect(r.plan.clips[0]!.durationMs).toBeLessThan(plan.clips[0]!.durationMs);
+    expect(r.plan.clips[0]!.captions.map((c) => c.text).join(" ")).toBe("HOJE EU QUERO TREINAR");
+    expect(r.plan.clips[1]).toEqual(plan.clips[1]); // sem fala reconhecida: intacto
+    expect(r.spoken).toBe(false);
+    expect(r.transcript).toBe("hoje eu quero treinar bora");
+    expect(r.plan.totalMs).toBeLessThan(plan.totalMs);
+    const semCorte = await editFromSpeech({ plan, choices: { ...choices, autoCut: false }, prompt: "" }, ["a.mp4", "b.mp4", "c.mp4"], ".", fake);
+    expect(semCorte.plan.clips[0]!.keep).toBeUndefined();
+    expect(semCorte.plan.totalMs).toBe(plan.totalMs);
+  });
+  it("versão curta só quando pedida; opções novas ligadas por padrão e validadas", () => {
+    expect(jobVariant({ plan: { variant: "curto" } })).toBe("curto");
+    expect(jobVariant({ plan: { variant: "'; drop" } })).toBe("completo");
+    expect(jobVariant({ plan: null })).toBe("completo");
+    expect(editChoices(null, "x", false, "c")).toMatchObject({ autoCut: true, voiceClean: true, broll: true, hook: true });
+    expect(editChoices({ edit: { autoCut: false, broll: "sim" } }, "x", false, "c")).toMatchObject({ autoCut: false, broll: true });
+  });
   it("legenda ASS sobre o vídeo montado e música com ducking sob a voz", () => {
     const withMusic = { ...plan, music: { trackId: "mixkit-32", mood: "motivacional" as const, volume: 0.22 } };
     const args = ffmpegArgs({ plan: withMusic, inputs: ["a.mp4", "b.mp4", "c.mp4"], hasAudio: [true, true, true], fontFile: "f.ttf", output: "o.mp4", assFile: String.raw`C:\tmp\leg.ass`, fontsDir: String.raw`C:\fonts`, musicFile: "m.mp3" });
@@ -101,11 +143,17 @@ describe.skipIf(!hasFfmpeg || !FONT)("renderizador (FFmpeg real)", () => {
     const takes = await Promise.all(inputs.map(async (f, i) => ({ segmentIndex: segments[i]!.index, takeId: `t${i}`, durationMs: (await probe(f)).durationMs })));
     const music = join(dir, "music.mp3");
     await run("ffmpeg", ["-y", "-loglevel", "error", "-f", "lavfi", "-i", "sine=frequency=220:duration=4", "-c:a", "libmp3lame", music]);
-    const plan = buildEditPlan({ segments, takes, signature: "RodrigoSerra.me", captionStyle: "destaque", retouch: "forte", stabilize: true, music: { trackId: "mixkit-32", mood: "motivacional", volume: 0.22 } });
+    const broll = join(dir, "broll.mp4");
+    await run("ffmpeg", ["-y", "-loglevel", "error", "-f", "lavfi", "-i", "smptebars=size=1280x720:rate=30:duration=3", "-c:v", "libx264", "-pix_fmt", "yuv420p", broll]);
+    const base = buildEditPlan({ segments, takes, signature: "RodrigoSerra.me", captionStyle: "destaque", retouch: "forte", stabilize: true, voiceClean: true, hookText: "Treino de hoje", music: { trackId: "mixkit-32", mood: "motivacional", volume: 0.22 } });
+    // parte 1 com corte no meio; parte 3 com cena de apoio (horizontal, vira 9:16)
+    const cut = base.clips.map((c, i) => (i === 0 ? { ...c, durationMs: 1600, keep: [{ startMs: 300, endMs: 1100 }, { startMs: 1700, endMs: 2500 }] } : i === 2 ? { ...c, broll: { takeId: "b", atMs: 600, durationMs: 1200 } } : c));
+    const plan = withClips(base, cut);
+    expect(assignBroll(base.clips, [{ takeId: "b", durationMs: 3000 }]).filter((c) => c.broll)).toHaveLength(0); // partes de 3s são curtas demais para b-roll automático
     const assFile = join(dir, "legendas.ass");
     writeFileSync(assFile, buildAss(plan), "utf8");
     const out = join(dir, "final.mp4");
-    const res = await render({ plan, inputs, fontFile: FONT, output: out, assFile, musicFile: music });
+    const res = await render({ plan, inputs, fontFile: FONT, output: out, assFile, musicFile: music, brollFiles: { b: broll } });
     expect(res.width).toBe(1080);
     expect(res.height).toBe(1920);
     expect(res.hasAudio).toBe(true);

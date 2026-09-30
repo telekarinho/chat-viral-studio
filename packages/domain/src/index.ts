@@ -15,3 +15,4 @@ export * from "./profiles";
 export * from "./studio";
 export * from "./music";
 export * from "./captions";
+export * from "./cuts";

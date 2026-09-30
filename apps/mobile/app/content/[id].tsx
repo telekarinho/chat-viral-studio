@@ -2,13 +2,14 @@ import { useCallback, useEffect, useState } from "react";
 import { Text, TextInput, View } from "react-native";
 import * as Clipboard from "expo-clipboard";
 import { router, useFocusEffect, useLocalSearchParams } from "expo-router";
-import { FORMAT_LABEL, PLATFORMS, PLATFORM_LABEL, buildEditPlan, buildSegments, isBusiness, wholeTakeSegment, type EditPlan, type Platform, type ScriptSegment } from "@postai/domain";
+import { FORMAT_LABEL, PLATFORMS, PLATFORM_LABEL, SHORT_ROLES, buildEditPlan, buildSegments, isBusiness, wholeTakeSegment, type EditPlan, type Platform, type ScriptSegment } from "@postai/domain";
 import { completeContent, getContent, latestTakesBySegment, listTakes, listTasks, setEditChoices, workspaceById, selectHook, type ContentItem, type Take, type Workspace } from "../../src/db/repo";
 import { ProjectPanel } from "../../src/components/ProjectPanel";
 import { FinishOptions } from "../../src/components/FinishOptions";
+import { FREE_SPEECH_MODEL } from "../../src/freeSpeech";
 import { generateForContent, saveUserEdit } from "../../src/generate";
 import { reportError } from "../../src/telemetry";
-import { downloadFinal, latestRenderJob, localFinal, requestFinalRender, type RenderJob } from "../../src/finalRender";
+import { describeResult, downloadFinal, latestRenderJob, localFinal, localResult, requestFinalRender, type RenderJob, type RenderResult } from "../../src/finalRender";
 import { Button, Card, Chip, ErrorBox, Eyebrow, H1, Loading, Screen, Section, colors, s } from "../../src/ui";
 
 export default function ContentScreen() {
@@ -52,7 +53,18 @@ export default function ContentScreen() {
           : null;
       setParts({ segments, recorded, plan });
       setFinalUri(await localFinal(item.id));
-      if (plan) setJob(await latestRenderJob(item.id).catch(() => null));
+      setResult(await localResult(item.id));
+      const shortUri = await localFinal(item.id, "curto");
+      if (plan) {
+        try {
+          setJob(await latestRenderJob(item.id));
+          setShort({ job: await latestRenderJob(item.id, "curto"), uri: shortUri });
+          setJobKnown(true);
+        } catch {
+          // sem internet: não dá para saber se já existe montagem — não pede outra às cegas
+          setJobKnown(false);
+        }
+      }
     }
   }, [id]);
   useFocusEffect(useCallback(() => void load().catch((e) => setError(String(e))), [load]));
@@ -61,31 +73,49 @@ export default function ContentScreen() {
   const pendingJob = job?.status === "queued" || job?.status === "rendering";
   useEffect(() => {
     if (!pendingJob || !c) return;
-    const t = setInterval(() => void latestRenderJob(c.id).then(setJob).catch(() => undefined), 20_000);
+    const t = setInterval(() => void latestRenderJob(c.id).then((j) => { setJob(j); setAutoMsg(null); }).catch(() => setAutoMsg("Sem internet para acompanhar a montagem. Ela continua no servidor.")), 20_000);
     return () => clearInterval(t);
   }, [pendingJob, c]);
 
   // tudo automático: quando todas as partes estão gravadas e na nuvem, a montagem começa sozinha
   const [autoMsg, setAutoMsg] = useState<string | null>(null);
-  const readyToAuto = Boolean(c && parts?.plan && !finalUri && !job);
+  const [jobKnown, setJobKnown] = useState(false);
+  const [short, setShort] = useState<{ job: RenderJob | null; uri: string | null }>({ job: null, uri: null });
+  const [result, setResult] = useState<RenderResult | null>(null);
+  const readyToAuto = Boolean(c && parts?.plan && !finalUri && !job && jobKnown);
   useEffect(() => {
     if (!readyToAuto || !c || !parts?.plan) return;
     const plan = parts.plan;
     const attempt = () => void requestFinalRender(c.workspaceId, c.id, plan).then((r) => {
       if (r.ok) {
         setAutoMsg(null);
-        void latestRenderJob(c.id).then(setJob);
+        void latestRenderJob(c.id).then(setJob).catch(() => setAutoMsg("Montagem pedida. Sem internet para acompanhar agora."));
       } else setAutoMsg(r.reason);
-    }).catch(() => undefined);
+    }).catch((e: unknown) => setAutoMsg(e instanceof Error ? e.message : String(e)));
     attempt();
     const t = setInterval(attempt, 20_000);
     return () => clearInterval(t);
   }, [readyToAuto, c, parts]);
 
+  // versão curta: acompanha e baixa sozinha
+  const shortPending = short.job?.status === "queued" || short.job?.status === "rendering";
+  useEffect(() => {
+    if (!c || !shortPending) return;
+    const t = setInterval(() => void latestRenderJob(c.id, "curto").then((j) => setShort((sh) => ({ ...sh, job: j }))).catch(() => undefined), 20_000);
+    return () => clearInterval(t);
+  }, [c, shortPending]);
+  useEffect(() => {
+    if (!c || short.job?.status !== "done" || short.uri) return;
+    const j = short.job;
+    void downloadFinal(c.id, j).then((uri) => setShort({ job: j, uri }))
+      .catch((e: unknown) => setAutoMsg(`A versão curta está pronta, mas não consegui baixar: ${e instanceof Error ? e.message : String(e)}`));
+  }, [c, short]);
+
   // ...e quando fica pronta, baixa sozinha para o aparelho
   useEffect(() => {
     if (!c || job?.status !== "done" || finalUri) return;
-    void downloadFinal(c.id, job).then(setFinalUri).catch(() => undefined);
+    void downloadFinal(c.id, job).then((uri) => { setFinalUri(uri); setResult(job.result); })
+      .catch((e: unknown) => setAutoMsg(`O vídeo está pronto, mas não consegui baixar: ${e instanceof Error ? e.message : String(e)}. Toque em BAIXAR VÍDEO FINAL.`));
   }, [c, job, finalUri]);
 
   async function run(label: string, fn: () => Promise<unknown>) {
@@ -110,6 +140,8 @@ export default function ContentScreen() {
   if (!c) return <Screen><Loading /></Screen>;
   const d = c.draft;
   const recordParams = { contentId: c.id, taskId: taskId ?? "" };
+  const free = c.meta?.model === FREE_SPEECH_MODEL;
+  const canShort = Boolean(parts && parts.recorded.length > 1 && parts.segments.filter((sg) => SHORT_ROLES.includes(sg.role)).length >= 2);
 
   return (
     <Screen testID="content-screen">
@@ -137,6 +169,22 @@ export default function ContentScreen() {
             {c.meta?.userEdited ? " · editado por você" : ""}
           </Text>
 
+          {free ? (
+            <Card style={{ gap: 8 }}>
+              <Text style={s.body}>Fala livre: grave do seu jeito. O app corta erros e pausas, legenda pelo que você disser, põe música e deixa pronto.</Text>
+              {takes.length === 0 ? <Button label="GRAVAR" onPress={() => router.push({ pathname: "/record", params: recordParams })} testID="record-free" /> : null}
+              {result?.transcript ? (
+                <>
+                  <Text style={s.label}>O que você disse (use como legenda do post)</Text>
+                  <Text style={s.body} selectable>{result.transcript}</Text>
+                  <Button compact variant="secondary" label={copied === "fala" ? "COPIADO ✓" : "COPIAR TEXTO"} onPress={() => copy("fala", `${result.transcript}
+
+${owner?.ws.profile.signature ?? ""}`.trim())} />
+                </>
+              ) : null}
+            </Card>
+          ) : null}
+          {free ? null : (<>
           <Button label={parts && parts.recorded.length > 0 && parts.recorded.length < parts.segments.length ? `CONTINUAR POR PARTES (${parts.recorded.length}/${parts.segments.length})` : "GRAVAR POR PARTES"} onPress={() => router.push({ pathname: "/record", params: { ...recordParams, partes: "1" } })} testID="record-parts" />
           <View style={s.row}>
             <Button variant="secondary" label="TELEPROMPTER + GRAVAR TUDO" onPress={() => router.push({ pathname: "/record", params: { ...recordParams, prompter: "1" } })} testID="open-teleprompter" />
@@ -204,6 +252,7 @@ export default function ContentScreen() {
             <Text style={s.body} selectable testID="caption-text">{d.caption[platform]}</Text>
             <Button compact label={copied === platform ? "LEGENDA COPIADA ✓" : `COPIAR LEGENDA ${PLATFORM_LABEL[platform].toUpperCase()}`} onPress={() => copy(platform, d.caption[platform])} testID="copy-caption" />
           </Card>
+          </>)}
 
           {parts ? (
             <>
@@ -223,14 +272,32 @@ export default function ContentScreen() {
                   ))}
                   <Text style={s.muted}>{`Assinatura ${parts.plan.signature}. A montagem (juntar, efeitos, legenda da sua fala e música) roda no servidor de edição.`}</Text>
                   <FinishOptions value={c.edit} pillarSlug={c.pillarSlug} business={business} onChange={(v) => void setEditChoices(c.id, v).then(setC)} />
+                  {autoMsg ? <Text style={{ color: colors.info, fontWeight: "700" }} testID="auto-render-status">{autoMsg}</Text> : null}
+                  {describeResult(result ?? job?.result) ? <Text style={{ color: colors.good, fontWeight: "700" }}>{describeResult(result ?? job?.result)}</Text> : null}
+                  {(result ?? job?.result)?.warnings?.map((w) => <Text key={w} style={{ color: colors.warn, fontWeight: "700" }}>{`⚠ ${w}`}</Text>)}
                   {finalUri ? (
                     <>
                       <Button compact label="VER VÍDEO FINAL / POSTAR" onPress={() => router.push(`/final/${c.id}`)} testID="open-final" />
-                      <Button compact variant="secondary" label="REFAZER COM ESTA LEGENDA / MÚSICA" loading={busy === "montar"} onPress={() => run("montar", async () => {
+                      <Button compact variant="secondary" label="REFAZER COM ESTAS OPÇÕES" loading={busy === "montar"} onPress={() => run("montar", async () => {
                         const r = await requestFinalRender(c.workspaceId, c.id, parts.plan!);
                         if (!r.ok) throw new Error(r.reason);
                         setFinalUri(null);
                       })} />
+                      {canShort ? (
+                        short.uri ? (
+                          <Button compact variant="secondary" label="VER VERSÃO CURTA / POSTAR" onPress={() => router.push({ pathname: "/final/[id]", params: { id: c.id, v: "curto" } })} testID="open-short" />
+                        ) : short.job && (short.job.status === "queued" || short.job.status === "rendering") ? (
+                          <Text style={{ color: colors.info, fontWeight: "800" }}>Montando a versão curta…</Text>
+                        ) : (
+                          <>
+                            {short.job?.status === "failed" ? <Text style={{ color: colors.bad }}>A versão curta falhou: {short.job.error}</Text> : null}
+                            <Button compact variant="secondary" label="GERAR VERSÃO CURTA (gancho + virada + chamada)" loading={busy === "curta"} testID="request-short" onPress={() => run("curta", async () => {
+                              const r = await requestFinalRender(c.workspaceId, c.id, parts.plan!, "curto");
+                              if (!r.ok) throw new Error(r.reason);
+                            })} />
+                          </>
+                        )
+                      ) : null}
                     </>
                   ) : job?.status === "done" ? (
                     <Button compact label="BAIXAR VÍDEO FINAL" onPress={() => run("baixar", async () => { await downloadFinal(c.id, job); router.push(`/final/${c.id}`); })} loading={busy === "baixar"} testID="download-final" />
@@ -242,7 +309,7 @@ export default function ContentScreen() {
                   ) : (
                     <>
                       {job?.status === "failed" ? <Text style={{ color: colors.bad }}>A montagem falhou: {job.error}</Text> : null}
-                      {!job && autoMsg ? <Text style={{ color: colors.info, fontWeight: "700" }} testID="auto-render-status">{`Montagem automática: ${autoMsg}`}</Text> : null}
+                      {!job && !jobKnown ? <Text style={s.muted}>Sem internet: a montagem começa sozinha quando a conexão voltar.</Text> : null}
                       <Button compact label="MELHORAR E FINALIZAR (retoque + legenda + música)" loading={busy === "montar"} testID="request-final" onPress={() => run("montar", async () => {
                         const r = await requestFinalRender(c.workspaceId, c.id, parts.plan!);
                         if (!r.ok) throw new Error(r.reason);

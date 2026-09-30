@@ -36,6 +36,6 @@ describe.skipIf(!ready)("transcrição da fala (Whisper)", () => {
 
     const cues = cuesFromWords(words!, "manuscrito", 5500);
     expect(cues.length).toBeGreaterThanOrEqual(2);
-    expect(cues[0]!.text).toMatch(/^PORQUE EU SOU CONTIGO/);
+    expect(cues[0]!.text).toMatch(/^POR ?QUE EU SOU CONTIGO/); // voz sintética: o Whisper pode ouvir como pergunta
   }, 600_000);
 });

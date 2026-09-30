@@ -6,7 +6,7 @@ import { File } from "expo-file-system";
 import { supabase } from "../supabase";
 import { fileExists } from "../media";
 import {
-  deleteOutbox, enqueue, failOutbox, getWorkspace, listMedia, listOutbox, mediaServerRow, outboxCount, saveMedia, type MediaRow, type OutboxPayload,
+  deleteOutbox, enqueue, failOutbox, stuckOutbox, getWorkspace, listMedia, listOutbox, mediaServerRow, outboxCount, saveMedia, type MediaRow, type OutboxPayload,
 } from "../db/repo";
 
 export interface SyncStatus {
@@ -15,11 +15,13 @@ export interface SyncStatus {
   pendingRows: number;
   pendingMedia: number;
   failedMedia: number;
+  /** linhas que o servidor recusou várias vezes (não é falta de internet) */
+  stuckRows: number;
   lastRunAt: string | null;
   lastError: string | null;
 }
 
-let status: SyncStatus = { running: false, online: true, pendingRows: 0, pendingMedia: 0, failedMedia: 0, lastRunAt: null, lastError: null };
+let status: SyncStatus = { running: false, online: true, pendingRows: 0, pendingMedia: 0, failedMedia: 0, stuckRows: 0, lastRunAt: null, lastError: null };
 const listeners = new Set<(s: SyncStatus) => void>();
 const emit = (patch: Partial<SyncStatus>) => {
   status = { ...status, ...patch };
@@ -152,7 +154,10 @@ export function syncNow(): Promise<void> {
 
 export async function refreshCounts(): Promise<void> {
   const media = await listMedia();
+  const stuck = await stuckOutbox();
   emit({
+    stuckRows: stuck.count,
+    ...(stuck.count ? { lastError: `${stuck.table}: ${stuck.error}` } : {}),
     pendingRows: await outboxCount(),
     pendingMedia: media.filter((m) => m.state === "queued" || m.state === "uploading").length,
     failedMedia: media.filter((m) => m.state === "dead_letter").length,

@@ -33,6 +33,10 @@ export interface EditClip {
   durationMs: number;
   effect: ClipEffect;
   captions: CaptionCue[]; // relative to clip start (after trim)
+  /** trechos do ORIGINAL que entram (corte automático de pausas/erros); ausente = trim simples */
+  keep?: { startMs: number; endMs: number }[];
+  /** cena de apoio (B-roll) por cima da imagem enquanto a voz continua */
+  broll?: { takeId: string; atMs: number; durationMs: number };
 }
 
 /** Transição entre partes (FFmpeg xfade), escolhida sozinha pelo papel da parte seguinte. */
@@ -71,6 +75,10 @@ export interface EditPlan {
   retouch: Retouch;
   /** tira o tremido de quem grava andando */
   stabilize?: boolean;
+  /** limpa a voz: ruído de rua/vento e volume mais uniforme */
+  voiceClean?: boolean;
+  /** texto grande nos 3 primeiros segundos (gancho na tela) */
+  hookText?: string | null;
   signature: string;
   /** cor do destaque da legenda (#RRGGBB) */
   accentColor?: string;
@@ -99,6 +107,8 @@ export interface PlanInput {
   captionStyle?: CaptionStyle;
   retouch?: Retouch;
   stabilize?: boolean;
+  voiceClean?: boolean;
+  hookText?: string | null;
   signature: string;
   accentColor?: string;
   music?: PlanMusic | null;
@@ -199,7 +209,8 @@ export function buildEditPlan(input: PlanInput): EditPlan {
     durationMs: Math.max(0, Math.min(TRANSITION_MS, Math.floor(Math.min(clips[k]!.durationMs, c.durationMs) / 4))),
   }));
   return {
-    version: "edit-v1", width: 1080, height: 1920, fps: 30, captionStyle: style, retouch: input.retouch ?? "leve", stabilize: input.stabilize ?? false, signature: input.signature,
+    version: "edit-v1", width: 1080, height: 1920, fps: 30, captionStyle: style, retouch: input.retouch ?? "leve", stabilize: input.stabilize ?? false,
+    voiceClean: input.voiceClean ?? false, hookText: input.hookText ?? null, signature: input.signature,
     ...(input.accentColor ? { accentColor: input.accentColor } : {}), music: input.music ?? null, clips, transitions,
     totalMs: clips.reduce((a, c) => a + c.durationMs, 0) - transitions.reduce((a, t) => a + t.durationMs, 0),
   };
@@ -213,6 +224,45 @@ export interface EditChoices {
   musicVolume?: number;
   retouch?: Retouch;
   stabilize?: boolean;
+  /** cortar pausas, repetições e muletas sozinho */
+  autoCut?: boolean;
+  voiceClean?: boolean;
+  /** usar as cenas de apoio gravadas no dia por cima da fala */
+  broll?: boolean;
+  /** gancho escrito na tela nos 3 primeiros segundos */
+  hook?: boolean;
 }
 
-export const DEFAULT_EDIT_CHOICES: EditChoices = { captionStyle: "manuscrito", music: "auto", musicVolume: 0.22, retouch: "forte", stabilize: true };
+export const DEFAULT_EDIT_CHOICES: EditChoices = {
+  captionStyle: "manuscrito", music: "auto", musicVolume: 0.22, retouch: "forte", stabilize: true, autoCut: true, voiceClean: true, broll: true, hook: true,
+};
+
+/** Versão do vídeo: completo ou curto (gancho + virada/aprendizado + chamada). */
+export type RenderVariant = "completo" | "curto";
+export const SHORT_ROLES: readonly SegmentRole[] = ["hook", "por_isso", "cta", "closing"];
+
+/** Recalcula transições e duração total depois de mexer nas partes (cortes, B-roll). */
+export function withClips(plan: EditPlan, clips: EditClip[]): EditPlan {
+  const transitions: Transition[] = clips.slice(1).map((c, k) => ({
+    kind: chooseTransition(c.role, k),
+    durationMs: Math.max(0, Math.min(TRANSITION_MS, Math.floor(Math.min(clips[k]!.durationMs, c.durationMs) / 4))),
+  }));
+  return { ...plan, clips, transitions, totalMs: clips.reduce((a, c) => a + c.durationMs, 0) - transitions.reduce((a, t) => a + t.durationMs, 0) };
+}
+
+const BROLL_ROLES: readonly SegmentRole[] = ["e", "por_isso", "free"];
+const BROLL_MIN_CLIP_MS = 4000;
+const BROLL_MAX_MS = 3200;
+
+/** Distribui as cenas de apoio: entra depois do começo da parte (o rosto abre), some antes do fim. */
+export function assignBroll(clips: readonly EditClip[], brolls: ReadonlyArray<{ takeId: string; durationMs: number }>): EditClip[] {
+  const pool = brolls.filter((b) => b.durationMs >= 1200);
+  let next = 0;
+  return clips.map((c) => {
+    if (next >= pool.length || !BROLL_ROLES.includes(c.role) || c.durationMs < BROLL_MIN_CLIP_MS) return { ...c };
+    const b = pool[next++]!;
+    const durationMs = Math.round(Math.min(BROLL_MAX_MS, b.durationMs - 300, c.durationMs * 0.45));
+    if (durationMs < 1000) return { ...c };
+    return { ...c, broll: { takeId: b.takeId, atMs: Math.round(c.durationMs * 0.35), durationMs } };
+  });
+}

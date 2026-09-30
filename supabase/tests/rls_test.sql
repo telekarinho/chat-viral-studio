@@ -111,6 +111,13 @@ do $$ declare n int; begin
 end $$;
 -- multiple profiles: A adds a business profile; B cannot take it over by id
 select set_config('request.jwt.claims', '{"sub":"aaaaaaaa-0000-4000-8000-000000000001","role":"authenticated"}', true);
+-- one active render per content+variant: the app asks by itself and must never duplicate
+do $$ begin
+  insert into render_jobs(workspace_id, content_item_id, plan) select v, 'cccccccc-0000-4000-8000-00000000000a', '{"variant":"completo"}' from ctx where k='wsA';
+  raise exception 'duplicate active render job accepted';
+exception when unique_violation then null; end $$;
+insert into render_jobs(workspace_id, content_item_id, plan) select v, 'cccccccc-0000-4000-8000-00000000000a', '{"variant":"curto"}' from ctx where k='wsA';
+
 insert into ctx values ('wsA2', public.create_profile('abababab-0000-4000-8000-0000000000a2', 'Empresa A',
   '{"displayName":"Empresa A","tone":{"kind":"empresa","business":{"brand":"A","noPrice":true}}}', '[{"slug":"educacao","name":"Educação","targetPercent":100}]', '[]'));
 do $$ declare n int; begin

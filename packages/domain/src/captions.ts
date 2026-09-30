@@ -64,6 +64,7 @@ export function assColor(hex: string, alpha = 0): string {
 export const CAPTION_FONTS = { manuscrito: "Caveat Brush", destaque: "Anton", limpo: "DejaVu Sans" } as const;
 export const CAPTION_CREAM = "#F3E6CF"; // preset "Manuscrito" do print do Rodrigo
 export const DEFAULT_ACCENT = "#FFD23F";
+export const HOOK_MS = 3000;
 
 function assTime(ms: number): string {
   const cs = Math.max(0, Math.round(ms / 10));
@@ -79,7 +80,7 @@ export function assText(s: string): string {
 }
 
 /** Arquivo .ass do vídeo inteiro (tempos globais, depois de juntar as partes). */
-export function buildAss(plan: Pick<EditPlan, "clips" | "captionStyle" | "width" | "height" | "transitions"> & { accentColor?: string }): string {
+export function buildAss(plan: Pick<EditPlan, "clips" | "captionStyle" | "width" | "height" | "transitions"> & { accentColor?: string; hookText?: string | null; totalMs?: number }): string {
   const style = plan.captionStyle;
   const accent = assColor(plan.accentColor ?? DEFAULT_ACCENT);
   const white = assColor("#FFFFFF");
@@ -92,10 +93,14 @@ export function buildAss(plan: Pick<EditPlan, "clips" | "captionStyle" | "width"
     `Style: manuscrito,${CAPTION_FONTS.manuscrito},108,${assColor(CAPTION_CREAM)},${assColor(CAPTION_CREAM)},${assColor("#1A1A1A")},${assColor("#000000", 0x78)},0,0,0,0,100,100,2,0,1,3,3,2,70,70,${marginV},1`,
     `Style: destaque,${CAPTION_FONTS.destaque},124,${white},${white},${assColor("#000000")},${assColor("#000000", 0x80)},0,0,0,0,100,100,1,0,1,6,0,2,70,70,${marginV},1`,
     `Style: limpo,${CAPTION_FONTS.limpo},64,${white},${white},${assColor("#000000")},${assColor("#000000", 0x90)},-1,0,0,0,100,100,0,0,1,3,1,2,70,70,${marginV},1`,
+    // gancho na tela: grande, no alto, caixa escura para ler em qualquer fundo
+    `Style: gancho,${CAPTION_FONTS.destaque},88,${white},${white},${assColor("#000000", 0x30)},${assColor("#000000", 0x30)},0,0,0,0,100,100,1,0,3,18,0,8,80,80,${Math.round(plan.height * 0.11)},1`,
     "", "[Events]", "Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text",
   ];
-  if (style === "nenhuma") return header.join("\n") + "\n";
   const events: string[] = [];
+  const hook = plan.hookText?.trim();
+  if (hook) events.push(`Dialogue: 1,${assTime(0)},${assTime(Math.min(HOOK_MS, plan.totalMs ?? HOOK_MS))},gancho,,0,0,0,,{\\fad(120,200)}${assText(hook.toLocaleUpperCase("pt-BR"))}`);
+  if (style === "nenhuma") return [...header, ...events].join("\n") + "\n";
   const starts = clipStartsMs(plan);
   for (const [k, clip] of plan.clips.entries()) {
     const offset = starts[k]!;

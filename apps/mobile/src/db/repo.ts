@@ -213,6 +213,16 @@ export async function failOutbox(seq: number, error: string) {
   await db.runAsync("UPDATE outbox SET attempts = attempts + 1, last_error = ? WHERE seq = ?", error.slice(0, 300), seq);
 }
 
+const STUCK_ATTEMPTS = 5;
+
+/** Linhas recusadas pelo servidor repetidas vezes: precisam aparecer para o usuário, não ficar escondidas. */
+export async function stuckOutbox(): Promise<{ count: number; table: string; error: string }> {
+  const db = await getDb();
+  const n = (await db.getFirstAsync<{ n: number }>("SELECT COUNT(*) AS n FROM outbox WHERE attempts >= ?", STUCK_ATTEMPTS))?.n ?? 0;
+  const first = n ? await db.getFirstAsync<{ table_name: string; last_error: string | null }>("SELECT table_name, last_error FROM outbox WHERE attempts >= ? ORDER BY seq LIMIT 1", STUCK_ATTEMPTS) : null;
+  return { count: n, table: first?.table_name ?? "", error: first?.last_error ?? "" };
+}
+
 export async function outboxCount(): Promise<number> {
   const db = await getDb();
   return (await db.getFirstAsync<{ n: number }>("SELECT COUNT(*) AS n FROM outbox"))?.n ?? 0;

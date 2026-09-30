@@ -13,6 +13,15 @@ export interface RenderInput {
   fontsDir?: string | null;
   /** faixa de música já baixada e conferida (sha256) */
   musicFile?: string | null;
+  /** cenas de apoio baixadas: takeId → arquivo local (só as usadas em plan.clips[].broll) */
+  brollFiles?: Record<string, string>;
+}
+
+const BROLL_SKIP_S = 0.15; // pula o toque no botão no começo da cena de apoio
+
+/** Expressão select/aselect com os trechos que ficam (tempo do arquivo original, em segundos). */
+export function keepExpr(keep: readonly { startMs: number; endMs: number }[]): string {
+  return keep.map((k) => `between(t\\,${sec(k.startMs)}\\,${sec(k.endMs)})`).join("+");
 }
 
 const SIGNATURE_MS = 2000;
@@ -82,12 +91,18 @@ export function ffmpegArgs(r: RenderInput): string[] {
   const parts: string[] = [];
   const concatIn: string[] = [];
 
+  const brollOrder = plan.clips.filter((c) => c.broll && r.brollFiles?.[c.broll.takeId]).map((c) => c.broll!.takeId);
+  const brollIndex = (takeId: string) => r.inputs.length + brollOrder.indexOf(takeId);
+  // voz limpa (leve): corta ronco de vento/carro, reduz ruído de fundo, dá um pouco de clareza e nivela o volume
+  const voice = plan.voiceClean ? ",highpass=f=90,afftdn=nr=10:nf=-28,equalizer=f=3200:t=q:w=1.5:g=2,acompressor=threshold=-20dB:ratio=2.5:attack=8:release=160:makeup=1.5" : "";
+
   plan.clips.forEach((clip, i) => {
     const start = sec(clip.trimStartMs);
     const end = sec(clip.trimStartMs + clip.durationMs);
+    const cut = clip.keep?.length ? clip.keep : null;
     const pre = [
-      `trim=start=${start}:end=${end}`,
-      "setpts=PTS-STARTPTS",
+      // corte automático (pausas/erros): só os trechos bons do original, colados
+      ...(cut ? [`fps=${plan.fps}`, `select='${keepExpr(cut)}'`, `setpts=N/(${plan.fps}*TB)`] : [`trim=start=${start}:end=${end}`, "setpts=PTS-STARTPTS"]),
       // gravado andando: tira o tremido (as bordas espelhadas somem no zoom do enquadramento)
       ...(plan.stabilize ? ["deshake=rx=32:ry=32:edge=mirror"] : []),
       `scale=${W}:${H}:force_original_aspect_ratio=increase`,
@@ -96,9 +111,20 @@ export function ffmpegArgs(r: RenderInput): string[] {
     ];
     parts.push(`[${i}:v]${pre.join(",")}[p${i}]`);
     parts.push(...beautyGraph(`p${i}`, `b${i}`, plan.retouch));
-    parts.push(`[b${i}]zoompan=z='${zoomExpr(clip, plan.fps)}':x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':d=1:s=${W}x${H}:fps=${plan.fps},setsar=1,format=yuv420p[v${i}]`);
+    const broll = clip.broll && r.brollFiles?.[clip.broll.takeId] ? clip.broll : null;
+    parts.push(`[b${i}]zoompan=z='${zoomExpr(clip, plan.fps)}':x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':d=1:s=${W}x${H}:fps=${plan.fps},setsar=1,format=yuv420p[${broll ? `z${i}` : `v${i}`}]`);
+    if (broll) {
+      // cena de apoio por cima da imagem; a voz da parte continua
+      const at = sec(broll.atMs);
+      parts.push(
+        `[${brollIndex(broll.takeId)}:v]trim=start=${BROLL_SKIP_S}:duration=${sec(broll.durationMs)},setpts=PTS-STARTPTS+${at}/TB,` +
+          `scale=${W}:${H}:force_original_aspect_ratio=increase,crop=${W}:${H},fps=${plan.fps},setsar=1,format=yuv420p[br${i}]`,
+      );
+      parts.push(`[z${i}][br${i}]overlay=enable='between(t\\,${at}\\,${sec(broll.atMs + broll.durationMs)})':eof_action=pass,format=yuv420p[v${i}]`);
+    }
     if (r.hasAudio[i]) {
-      parts.push(`[${i}:a]atrim=start=${start}:end=${end},asetpts=PTS-STARTPTS,aresample=48000,aformat=channel_layouts=stereo[a${i}]`);
+      const a = cut ? `aselect='${keepExpr(cut)}',asetpts=N/SR/TB` : `atrim=start=${start}:end=${end},asetpts=PTS-STARTPTS`;
+      parts.push(`[${i}:a]${a},aresample=48000,aformat=channel_layouts=stereo${voice}[a${i}]`);
     } else {
       parts.push(`anullsrc=channel_layout=stereo:sample_rate=48000,atrim=duration=${sec(clip.durationMs)}[a${i}]`);
     }
@@ -142,7 +168,7 @@ export function ffmpegArgs(r: RenderInput): string[] {
     const T = total / 1000;
     const vol = Math.min(0.6, Math.max(0.05, plan.music!.volume));
     parts.push(
-      `[${r.inputs.length}:a]aresample=48000,aformat=channel_layouts=stereo,atrim=duration=${T.toFixed(3)},asetpts=PTS-STARTPTS,volume=${vol.toFixed(2)},` +
+      `[${r.inputs.length + brollOrder.length}:a]aresample=48000,aformat=channel_layouts=stereo,atrim=duration=${T.toFixed(3)},asetpts=PTS-STARTPTS,volume=${vol.toFixed(2)},` +
         `afade=t=in:d=${MUSIC_FADE_IN_S},afade=t=out:st=${Math.max(0, T - MUSIC_FADE_OUT_S).toFixed(3)}:d=${MUSIC_FADE_OUT_S}[mus]`,
     );
     parts.push("[ac]asplit=2[voice][key]");
@@ -155,6 +181,7 @@ export function ffmpegArgs(r: RenderInput): string[] {
   return [
     "-y", "-hide_banner", "-loglevel", "error",
     ...r.inputs.flatMap((p) => ["-i", p]),
+    ...brollOrder.flatMap((id) => ["-i", r.brollFiles![id]!]),
     ...(withMusic ? ["-stream_loop", "-1", "-i", r.musicFile!] : []),
     "-filter_complex", parts.join(";"),
     "-map", "[vout]", "-map", "[aout]",

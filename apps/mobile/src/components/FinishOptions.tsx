@@ -4,6 +4,13 @@ import { Chip, s } from "../ui";
 
 const RETOUCH_LABEL: Record<Retouch, string> = { forte: "✨ Forte (tipo câmera do iPhone)", leve: "Natural", off: "Desligado" };
 
+const AUTO: { key: "autoCut" | "voiceClean" | "broll" | "hook"; label: string }[] = [
+  { key: "autoCut", label: "Cortar erros, pausas e repetições" },
+  { key: "voiceClean", label: "Voz limpa (menos ruído)" },
+  { key: "broll", label: "Usar cenas de apoio do dia" },
+  { key: "hook", label: "Gancho escrito na tela" },
+];
+
 const CAPTION_LABEL: Record<CaptionStyle, string> = {
   manuscrito: "✍️ Manuscrito (creme, pincel)", destaque: "🔆 Destaque (palavra acende)", limpo: "Limpo", nenhuma: "Sem legenda",
 };
@@ -24,6 +31,12 @@ export function FinishOptions({ value, onChange, pillarSlug, business }: {
           <Chip key={k} label={RETOUCH_LABEL[k]} selected={retouch === k} onPress={() => set({ retouch: k })} testID={`retouch-${k}`} />
         ))}
         <Chip label={v.stabilize === false ? "Tirar tremido: não" : "✓ Tirar tremido (gravei andando)"} selected={v.stabilize !== false} onPress={() => set({ stabilize: v.stabilize === false })} testID="stabilize" />
+      </View>
+      <Text style={s.label}>Edição automática (tudo ligado — desligue o que não quiser)</Text>
+      <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8 }}>
+        {AUTO.map((o) => (
+          <Chip key={o.key} label={`${v[o.key] === false ? "○" : "✓"} ${o.label}`} selected={v[o.key] !== false} onPress={() => set({ [o.key]: v[o.key] === false })} testID={`auto-${o.key}`} />
+        ))}
       </View>
       <Text style={s.label}>Legenda (sincronizada com a sua fala)</Text>
       <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8 }}>
