@@ -6,7 +6,7 @@ import { useVideoPlayer, VideoView } from "expo-video";
 import * as Brightness from "expo-brightness";
 import { Camera, useCameraDevice, useCameraPermission, useMicrophonePermission, type VideoFile } from "react-native-vision-camera";
 import {
-  DEFAULT_EDIT_CHOICES, PRESET_LABEL, PRODUCTION_MODES, SHOT_LIBRARY, availablePresets, buildSegments, initialTeleprompter, isBusiness, type ProjectInfo, type ShotKey, pickFormat, segmentProgress, supportedFps, teleprompterReducer,
+  DEFAULT_EDIT_CHOICES, PRESET_LABEL, PRODUCTION_MODES, RECORDING_CHECKLIST, RECORDING_TIPS, SHOT_LIBRARY, availablePresets, buildSegments, initialTeleprompter, isBusiness, type ProjectInfo, type ShotKey, pickFormat, segmentProgress, supportedFps, teleprompterReducer,
   type ResolutionPreset, type Retouch, type ScriptSegment,
 } from "@postai/domain";
 import { getContent, getTask, latestTakesBySegment, registerTake, requireWorkspace, queuePatrimonio, runTaskAction, setEditChoices, workspaceById, updateSettings, updateTakeMeta, type ContentItem, type Take } from "../src/db/repo";
@@ -293,6 +293,10 @@ export default function RecordScreen() {
     void setEditChoices(content.id, { ...DEFAULT_EDIT_CHOICES, ...content.edit, retouch: r }).then(setContent).catch((e) => reportError(e, "retouch"));
   }
   const nextCountdown = tp.countdownSeconds === 0 ? 3 : tp.countdownSeconds === 3 ? 5 : 0;
+  // dica de gravação da parte atual; antes da 1ª parte, o básico de luz/enquadramento
+  const role = segments && segIndex !== null ? segments[segIndex]?.role : null;
+  const firstPart = !segments || recordedParts.length === 0;
+  const tip = role && !firstPart ? RECORDING_TIPS[role] : `${RECORDING_CHECKLIST}. ${RECORDING_TIPS[role ?? "hook"]}`;
   return (
     <View style={[st.root, ringLight && { backgroundColor: RING_COLOR[light] }]} testID="record-screen">
       <View style={st.frame}>
@@ -361,8 +365,11 @@ export default function RecordScreen() {
 
       <View style={st.bottom}>
         {message ? <Text style={st.message} accessibilityRole="alert">{message}</Text> : null}
-        {!recording && content && retouch !== "off" && !settingsOpen ? (
-          <Text style={st.hint}>{`✨ Embelezamento ${RETOUCH_SHORT[retouch].toLowerCase()} entra no vídeo final (a câmera mostra sem filtro)`}</Text>
+        {!recording && !settingsOpen && !patrimonio ? (
+          <View style={st.tip} testID="recording-tip">
+            <Text style={st.tipText}>{`💡 ${tip}`}</Text>
+            {content && retouch !== "off" ? <Text style={st.tipSub}>{`✨ Embelezamento ${RETOUCH_SHORT[retouch].toLowerCase()} entra no vídeo final (a câmera mostra sem filtro)`}</Text> : null}
+          </View>
         ) : null}
         {settingsOpen && !recording ? (
           <View style={st.sheet} testID="settings-sheet">
@@ -515,7 +522,9 @@ const st = StyleSheet.create({
   pill: { minHeight: 44, minWidth: 44, paddingHorizontal: 12, borderRadius: 22, backgroundColor: "rgba(255,255,255,0.14)", alignItems: "center", justifyContent: "center" },
   pillText: { color: "#FFFFFF", fontWeight: "800", fontSize: 13 },
   meta: { color: "#FFFFFF", fontWeight: "700", fontSize: 13 },
-  hint: { color: "#FFFFFF", fontWeight: "700", fontSize: 12, backgroundColor: "rgba(0,0,0,0.45)", paddingHorizontal: 12, paddingVertical: 6, borderRadius: 12, overflow: "hidden" },
+  tip: { alignSelf: "stretch", backgroundColor: "rgba(0,0,0,0.5)", paddingHorizontal: 12, paddingVertical: 8, borderRadius: 14, gap: 4 },
+  tipText: { color: "#FFFFFF", fontWeight: "700", fontSize: 13, lineHeight: 18 },
+  tipSub: { color: "#FFFFFF", fontWeight: "600", fontSize: 11, opacity: 0.8 },
   rec: { color: "#FF4D4D", fontWeight: "900", fontSize: 16, backgroundColor: "rgba(0,0,0,0.45)", paddingHorizontal: 14, paddingVertical: 8, borderRadius: 18, overflow: "hidden" },
   message: { color: "#FFFFFF", backgroundColor: "rgba(180,35,24,0.85)", padding: 10, borderRadius: 10, fontWeight: "700" },
   recBtn: { width: 84, height: 84, borderRadius: 42, borderWidth: 5, borderColor: "#FFFFFF", alignItems: "center", justifyContent: "center" },

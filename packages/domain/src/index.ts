@@ -18,3 +18,4 @@ export * from "./captions";
 export * from "./cuts";
 export * from "./watermark";
 export * from "./metrics";
+export * from "./recordingTips";

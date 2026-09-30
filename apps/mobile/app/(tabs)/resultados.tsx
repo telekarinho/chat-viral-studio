@@ -1,7 +1,7 @@
 import { useCallback, useState } from "react";
 import { Pressable, Text, View } from "react-native";
 import { router, useFocusEffect } from "expo-router";
-import { engagementRate, metricsInsights, pillarBalance } from "@postai/domain";
+import { engagementRate, metricsInsights, pillarBalance, sharesPer1k } from "@postai/domain";
 import { useApp } from "../../src/app-state";
 import { donePillarSlugs, history, listContentWithMetrics, type ContentItem, type DayHistory } from "../../src/db/repo";
 import { Card, Empty, Eyebrow, H1, Screen, Section, colors, s } from "../../src/ui";
@@ -48,10 +48,11 @@ export default function Resultados() {
               <Card style={{ gap: 4 }}>
                 <Text style={s.label}>Melhor post</Text>
                 <Text style={{ fontWeight: "800", color: colors.ink }}>{insights.best.title}</Text>
-                <Text style={s.muted}>{`${fmt(insights.best.metrics.views)} visualizações · engajamento ${(engagementRate(insights.best.metrics) * 100).toFixed(1)}%`}</Text>
+                <Text style={s.muted}>{`${fmt(insights.best.metrics.views)} visualizações · engajamento ${(engagementRate(insights.best.metrics) * 100).toFixed(1)}% · ${sharesPer1k(insights.best.metrics).toFixed(1)} envios a cada mil`}</Text>
               </Card>
             </Pressable>
           ) : null}
+          <Text style={s.muted}>O que mais faz um vídeo chegar em gente nova é alguém mandar para outra pessoa: fique de olho nos “envios a cada mil”.</Text>
           <Card style={{ gap: 6 }}>
             <Text style={s.label}>Média por tema</Text>
             {insights.byPillar.map((p) => (
