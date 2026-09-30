@@ -9,6 +9,7 @@ import { FinishOptions } from "../../src/components/FinishOptions";
 import { FREE_SPEECH_MODEL } from "../../src/freeSpeech";
 import { generateForContent, saveUserEdit } from "../../src/generate";
 import { reportError } from "../../src/telemetry";
+import { setContentOnScreen } from "../../src/renderWatch";
 import { describeResult, downloadFinal, latestRenderJob, localFinal, localResult, requestFinalRender, type RenderJob, type RenderResult } from "../../src/finalRender";
 import { Button, Card, Chip, ErrorBox, Eyebrow, H1, Loading, Screen, Section, colors, s } from "../../src/ui";
 
@@ -70,6 +71,11 @@ export default function ContentScreen() {
     }
   }, [id]);
   useFocusEffect(useCallback(() => void load().catch((e) => setError(String(e))), [load]));
+  // esta tela já acompanha e baixa o vídeo sozinha: sem aviso duplicado enquanto ela está aberta
+  useFocusEffect(useCallback(() => {
+    setContentOnScreen(id);
+    return () => setContentOnScreen(null);
+  }, [id]));
 
   // montagem na fila: acompanha sozinho até ficar pronta
   const pendingJob = job?.status === "queued" || job?.status === "rendering";
