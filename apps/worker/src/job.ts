@@ -6,7 +6,7 @@ import { promisify } from "node:util";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import {
   CAPTION_STYLES, MOOD_LABEL, RETOUCH_LEVELS, SHORT_ROLES, assignBroll, buildAss, buildEditPlan, buildSegments, cuesFromWords, moodForPillar, parseDraft, pickTrack,
-  planCuts, trackById, wholeTakeSegment, withClips,
+  planCuts, trackById, watermarkCorner, wholeTakeSegment, withClips,
   type CaptionStyle, type EditClip, type EditPlan, type MusicMood, type PlanMusic, type RenderVariant, type Retouch,
 } from "@postai/domain";
 import { fetchTrack, transcribeClip } from "./media-extras";
@@ -103,14 +103,15 @@ export async function buildServerPlan(db: SupabaseClient, job: RenderJobRow): Pr
   if (content.data.workspace_id !== job.workspace_id) throw new Error("conteúdo de outro workspace");
   const parsed = parseDraft(script.data?.draft);
   if (!parsed.ok) throw new Error("roteiro inválido ou ausente");
-  const business = (profile.data.tone as { kind?: string } | null)?.kind === "empresa";
+  const tone = profile.data.tone as { kind?: string; watermark?: unknown } | null;
+  const business = tone?.kind === "empresa";
   const choices = editChoices(content.data.structured_payload, content.data.pillar_slug ?? "", business, job.content_item_id);
   const variant = jobVariant(job);
   const freeSpeech = script.data?.model === "fala-livre";
   const prompt = freeSpeech ? "" : parsed.draft.script.slice(0, 600);
   const hookText = choices.hook && !freeSpeech ? parsed.draft.screen_text.trim() || null : null;
   const signature = profile.data.signature ?? "";
-  const planOpts = { signature, hookText, captionStyle: choices.captionStyle, accentColor: choices.accentColor, music: choices.music, retouch: choices.retouch, stabilize: choices.stabilize, voiceClean: choices.voiceClean };
+  const planOpts = { signature, watermark: watermarkCorner(tone?.watermark), hookText, captionStyle: choices.captionStyle, accentColor: choices.accentColor, music: choices.music, retouch: choices.retouch, stabilize: choices.stabilize, voiceClean: choices.voiceClean };
 
   const brolls = choices.broll && variant === "completo" ? await findBrolls(db, job.workspace_id, content.data.plan_date as string | null) : [];
   const own = ((takes.data ?? []) as unknown as TakeRow[]).filter((t) => t.workspace_id === job.workspace_id && !(t.tags ?? []).includes("descartado"));

@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { Text, TextInput, View } from "react-native";
 import { router } from "expo-router";
-import { PROFILE_TEMPLATES, isBusiness, type BusinessStrategy, type ProfileTemplate } from "@postai/domain";
+import { PROFILE_TEMPLATES, WATERMARK_CORNERS, WATERMARK_LABEL, isBusiness, watermarkCorner, type BusinessStrategy, type ProfileTemplate, type WatermarkCorner } from "@postai/domain";
 import { activateWorkspace, listWorkspaces, updateProfile, type Workspace } from "../src/db/repo";
 import { createProfile } from "../src/workspace-setup";
 import { useApp } from "../src/app-state";
@@ -58,17 +58,43 @@ export default function Perfis() {
           onPress={() => void run(async () => { await createProfile(template, name.trim()); router.back(); })} />
       </Card>
 
+      {workspace ? (
+        <SignatureEditor key={`sig-${workspace.id}`} ws={workspace} busy={busy}
+          onSave={(sig, corner) => void run(() => updateProfile({ ...workspace.profile, signature: sig, handle: sig, watermark: corner }, workspace.name))} />
+      ) : null}
       {workspace && isBusiness(workspace.profile) ? (
-        <StrategyEditor key={workspace.id} ws={workspace} busy={busy} onSave={(b, sig) => void run(() => updateProfile({ ...workspace.profile, signature: sig, handle: sig, business: b }, workspace.name))} />
+        <StrategyEditor key={workspace.id} ws={workspace} busy={busy} onSave={(b) => void run(() => updateProfile({ ...workspace.profile, business: b }, workspace.name))} />
       ) : null}
     </Screen>
   );
 }
 
-function StrategyEditor({ ws, busy, onSave }: { ws: Workspace; busy: boolean; onSave: (b: BusinessStrategy, signature: string) => void }) {
+/** Assinatura do perfil: vai no fim das legendas do post e no vídeo (num canto o tempo todo + no centro no final). */
+function SignatureEditor({ ws, busy, onSave }: { ws: Workspace; busy: boolean; onSave: (signature: string, corner: WatermarkCorner) => void }) {
+  const [sig, setSig] = useState(ws.profile.signature);
+  const [corner, setCorner] = useState<WatermarkCorner>(watermarkCorner(ws.profile.watermark));
+  return (
+    <>
+      <Section>Assinatura no vídeo — {ws.name}</Section>
+      <Card style={{ gap: 10 }} testID="signature-card">
+        <Text style={s.muted}>Aparece pequena no canto durante o vídeo todo e grande no final. Também fecha a legenda do post. Cada perfil tem a sua.</Text>
+        <Field label="Assinatura (ex.: RodrigoSerra.me, ControlPot)" value={sig} onChange={setSig} testID="signature-input" />
+        <Text style={s.label}>Em qual canto do vídeo</Text>
+        <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8 }}>
+          {WATERMARK_CORNERS.map((c) => (
+            <Chip key={c} label={WATERMARK_LABEL[c]} selected={c === corner} onPress={() => setCorner(c)} testID={`corner-${c}`} />
+          ))}
+        </View>
+        <Button label="SALVAR ASSINATURA" loading={busy} disabled={!sig.trim()} testID="signature-save" onPress={() => onSave(sig.trim(), corner)} />
+      </Card>
+    </>
+  );
+}
+
+function StrategyEditor({ ws, busy, onSave }: { ws: Workspace; busy: boolean; onSave: (b: BusinessStrategy) => void }) {
   const b = ws.profile.business!;
   const [f, setF] = useState({
-    product: b.product, audience: b.audience, signature: ws.profile.signature, pains: lines(b.pains), desires: lines(b.desires),
+    product: b.product, audience: b.audience, pains: lines(b.pains), desires: lines(b.desires),
     objections: lines(b.objections.map((o) => `${o.objection} | ${o.answer}`)), proofs: lines(b.proofs), differentiators: lines(b.differentiators), pendingClaims: lines(b.pendingClaims ?? []), ctas: lines(b.ctas),
   });
   const set = (k: keyof typeof f) => (v: string) => setF({ ...f, [k]: v });
@@ -85,7 +111,6 @@ function StrategyEditor({ ws, busy, onSave }: { ws: Workspace; busy: boolean; on
         <Text style={s.muted}>A IA usa isso para decidir cada vídeo: UMA dor, UMA objeção, UMA prova. Nunca inventa número nem preço.</Text>
         <Field label="Produto" value={f.product} onChange={set("product")} />
         <Field label="Cliente: alguém que…" value={f.audience} onChange={set("audience")} />
-        <Field label="Assinatura nas legendas" value={f.signature} onChange={set("signature")} />
         <Field label="Dores do cliente (uma por linha)" value={f.pains} onChange={set("pains")} multiline />
         <Field label="Desejos (uma por linha)" value={f.desires} onChange={set("desires")} multiline />
         <Field label="Objeções: objeção | resposta (uma por linha)" value={f.objections} onChange={set("objections")} multiline />
@@ -98,7 +123,7 @@ function StrategyEditor({ ws, busy, onSave }: { ws: Workspace; busy: boolean; on
           onPress={() => onSave({
             ...b, product: f.product.trim(), audience: f.audience.trim(), pains: parseLines(f.pains), desires: parseLines(f.desires), objections,
             proofs: parseLines(f.proofs), differentiators: parseLines(f.differentiators), pendingClaims: parseLines(f.pendingClaims), ctas: parseLines(f.ctas), noPrice: true,
-          }, f.signature.trim() || ws.name)} />
+          })} />
       </Card>
     </>
   );

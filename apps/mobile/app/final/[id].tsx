@@ -8,6 +8,7 @@ import { PLATFORMS, PLATFORM_LABEL, type Platform } from "@postai/domain";
 import { getContent, type ContentItem } from "../../src/db/repo";
 import { describeResult, localCover, localFinal, localResult, type RenderResult } from "../../src/finalRender";
 import { FREE_SPEECH_MODEL } from "../../src/freeSpeech";
+import { MetricsCard } from "../../src/components/MetricsCard";
 import { SHARE_TARGETS, shareVideoTo, type ShareTarget } from "../../src/share";
 import { reportError } from "../../src/telemetry";
 import { Button, Card, Chip, Eyebrow, H1, Loading, Screen, colors, s } from "../../src/ui";
@@ -90,6 +91,7 @@ export default function FinalScreen() {
         <Text style={s.body} selectable>{caption}</Text>
       </Card>
       <Button variant="ghost" label={copied ? "LEGENDA COPIADA ✓" : "COPIAR ESTA LEGENDA"} onPress={async () => { await Clipboard.setStringAsync(caption); setCopied(true); }} />
+      <MetricsCard content={c} onSaved={setC} />
     </Screen>
   );
 }

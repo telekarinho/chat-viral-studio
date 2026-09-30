@@ -58,5 +58,7 @@ O APK beta é assinado com a chave de debug (instalação manual). Para Play Sto
 ## 5. Privacidade (LGPD)
 - Exportação: app → Configurações → Exportar meus dados (local + `export_my_data()` no servidor).
 - Exclusão: app → Configurações → Apagar meus dados e conta → cria `privacy_requests(delete_account)` e apaga o local.
-  **Pendente de operação**: o worker de exclusão (service role) que apaga `auth.users`, workspace e objetos do Storage — processar manualmente no beta pelo painel do Supabase em até 15 dias.
+  O worker (`apps/worker/src/privacy.ts`, workflow *Post.ai Render Worker*, a cada 5 min) atende o pedido: apaga os arquivos do Storage
+  (inclusive `finals/`), os workspaces que só a pessoa usa e a conta em `auth.users`; registra `privacy.delete_done` em `audit_logs`.
+  Workspace com outros membros continua para eles. Teste: `apps/worker/test/privacy.integration.test.ts` (CI).
 - Revisão jurídica brasileira necessária antes do lançamento público.

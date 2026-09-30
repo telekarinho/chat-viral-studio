@@ -50,6 +50,8 @@ export function getDb(): Promise<SQLite.SQLiteDatabase> {
       if (!ccols.some((c) => c.name === "project")) await db.execAsync("ALTER TABLE content_items ADD COLUMN project TEXT; ALTER TABLE content_items ADD COLUMN derived_from TEXT; ALTER TABLE content_items ADD COLUMN precisa_revisao TEXT;");
       // v4: legenda e música escolhidas para a montagem final
       if (!ccols.some((c) => c.name === "edit")) await db.execAsync("ALTER TABLE content_items ADD COLUMN edit TEXT");
+      // v5: números do post anotados pelo criador
+      if (!ccols.some((c) => c.name === "metrics")) await db.execAsync("ALTER TABLE content_items ADD COLUMN metrics TEXT");
       return db;
     })();
   }

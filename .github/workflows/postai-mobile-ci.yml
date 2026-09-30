@@ -84,7 +84,7 @@ jobs:
           eval "$(supabase status -o env | sed 's/^/export /')"
           export SUPABASE_URL="$API_URL" SUPABASE_ANON_KEY="$ANON_KEY" SUPABASE_SERVICE_ROLE_KEY="$SERVICE_ROLE_KEY"
           (cd apps/api && npx vitest run test/rls.integration.test.ts --reporter verbose)
-          (cd apps/worker && npx vitest run test/worker.integration.test.ts test/mmix.integration.test.ts test/estudio.integration.test.ts --reporter verbose)
+          (cd apps/worker && npx vitest run test/worker.integration.test.ts test/mmix.integration.test.ts test/estudio.integration.test.ts test/privacy.integration.test.ts --reporter verbose)
       - name: Edge Function `generate` boots in Deno (auth + config guards)
         run: |
           eval "$(supabase status -o env | sed 's/^/export /')"

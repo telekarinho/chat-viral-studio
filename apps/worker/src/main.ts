@@ -1,5 +1,6 @@
 import { createClient } from "@supabase/supabase-js";
 import { runOnce } from "./job";
+import { processDeletionRequest } from "./privacy";
 
 const IDLE_MS = 5_000;
 
@@ -20,9 +21,19 @@ async function main() {
   else if (stale.data) process.stdout.write(JSON.stringify({ level: "warn", msg: "stale.failed", jobs: stale.data }) + "\n");
   for (;;) {
     let worked = false;
+    // LGPD: pedidos de exclusão de conta antes da fila de montagem
     try {
-      worked = await runOnce(db, font);
-      if (worked) process.stdout.write(JSON.stringify({ level: "info", msg: "render.done", at: new Date().toISOString() }) + "\n");
+      if (await processDeletionRequest(db)) {
+        worked = true;
+        process.stdout.write(JSON.stringify({ level: "info", msg: "privacy.deleted", at: new Date().toISOString() }) + "\n");
+      }
+    } catch (e) {
+      process.stdout.write(JSON.stringify({ level: "error", msg: "privacy.failed", error: e instanceof Error ? e.message : String(e) }) + "\n");
+    }
+    try {
+      const rendered = await runOnce(db, font);
+      worked ||= rendered;
+      if (rendered) process.stdout.write(JSON.stringify({ level: "info", msg: "render.done", at: new Date().toISOString() }) + "\n");
     } catch (e) {
       process.stdout.write(JSON.stringify({ level: "error", msg: "render.failed", error: e instanceof Error ? e.message : String(e) }) + "\n");
     }

@@ -1,19 +1,24 @@
 import { useCallback, useState } from "react";
-import { Text, View } from "react-native";
-import { useFocusEffect } from "expo-router";
-import { pillarBalance } from "@postai/domain";
+import { Pressable, Text, View } from "react-native";
+import { router, useFocusEffect } from "expo-router";
+import { engagementRate, metricsInsights, pillarBalance } from "@postai/domain";
 import { useApp } from "../../src/app-state";
-import { donePillarSlugs, history, type DayHistory } from "../../src/db/repo";
+import { donePillarSlugs, history, listContentWithMetrics, type ContentItem, type DayHistory } from "../../src/db/repo";
 import { Card, Empty, Eyebrow, H1, Screen, Section, colors, s } from "../../src/ui";
 
 export default function Resultados() {
   const { workspace } = useApp();
   const [days, setDays] = useState<DayHistory[]>([]);
   const [recent, setRecent] = useState<string[]>([]);
+  const [posts, setPosts] = useState<ContentItem[]>([]);
   useFocusEffect(useCallback(() => {
     void history(14).then(setDays);
     void donePillarSlugs(60).then(setRecent);
+    void listContentWithMetrics().then(setPosts);
   }, []));
+  const pillarName = (slug: string) => workspace?.pillars.find((p) => p.slug === slug)?.name ?? slug;
+  const insights = metricsInsights(posts.map((p) => ({ id: p.id, title: p.draft?.title ?? p.title, pillarSlug: p.pillarSlug, metrics: p.metrics! })), pillarName);
+  const fmt = (n: number) => n.toLocaleString("pt-BR");
 
   const totalDone = days.reduce((a, d) => a + d.done, 0);
   const streak = (() => {
@@ -27,9 +32,36 @@ export default function Resultados() {
 
   return (
     <Screen testID="resultados-screen">
-      <Eyebrow>Histórico básico</Eyebrow>
+      <Eyebrow>O que está funcionando</Eyebrow>
       <H1>Resultados</H1>
-      <Text style={s.muted}>Métricas das redes entram numa próxima versão. Aqui você vê a sua constância.</Text>
+      <Text style={s.muted}>Anote os números de cada post (na tela do vídeo final, em “Como foi este post?”) e o app compara os temas para você.</Text>
+
+      <Section>Seus posts</Section>
+      {insights.posts === 0 ? <Empty title="Nenhum número anotado ainda" body="Abra um vídeo final e preencha “Como foi este post?”." /> : (
+        <>
+          <View style={s.row}>
+            <Card style={{ flex: 1 }}><Text style={{ fontSize: 28, fontWeight: "900", color: colors.ink }}>{fmt(insights.totalViews)}</Text><Text style={s.muted}>visualizações em {insights.posts} post(s)</Text></Card>
+          </View>
+          {insights.tip ? <Card testID="metrics-tip"><Text style={{ fontWeight: "800", color: colors.good }}>{`💡 ${insights.tip}`}</Text></Card> : null}
+          {insights.best ? (
+            <Pressable onPress={() => router.push(`/content/${insights.best!.id}`)} accessibilityRole="button">
+              <Card style={{ gap: 4 }}>
+                <Text style={s.label}>Melhor post</Text>
+                <Text style={{ fontWeight: "800", color: colors.ink }}>{insights.best.title}</Text>
+                <Text style={s.muted}>{`${fmt(insights.best.metrics.views)} visualizações · engajamento ${(engagementRate(insights.best.metrics) * 100).toFixed(1)}%`}</Text>
+              </Card>
+            </Pressable>
+          ) : null}
+          <Card style={{ gap: 6 }}>
+            <Text style={s.label}>Média por tema</Text>
+            {insights.byPillar.map((p) => (
+              <Text key={p.pillarSlug} style={s.body}>{`${pillarName(p.pillarSlug)}: ${fmt(p.avgViews)} visualizações · ${(p.avgEngagement * 100).toFixed(1)}% engajamento (${p.posts} post${p.posts > 1 ? "s" : ""})`}</Text>
+            ))}
+          </Card>
+        </>
+      )}
+
+      <Section>Constância</Section>
       <View style={s.row}>
         <Card style={{ flex: 1 }}><Text style={{ fontSize: 28, fontWeight: "900", color: colors.ink }}>{totalDone}</Text><Text style={s.muted}>missões feitas (14 dias)</Text></Card>
         <Card style={{ flex: 1 }}><Text style={{ fontSize: 28, fontWeight: "900", color: colors.ink }}>{streak}</Text><Text style={s.muted}>dias seguidos com algo gravado</Text></Card>

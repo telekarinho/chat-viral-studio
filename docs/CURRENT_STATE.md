@@ -1,22 +1,31 @@
-# Post.ai — estado atual (2026-09-28)
+# Post.ai — estado atual (2026-09-30)
 
-**Status: BLOQUEADO PARA HOMOLOGAÇÃO** — falta só o smoke test no celular do Rodrigo (+ worker/OpenAI opcionais).
-APK com nuvem: https://github.com/telekarinho/chat-viral-studio/releases/tag/postai-beta-f4a9bf1 (Supabase `postai`, ref `knmndlvoavxgzttjuncv`, São Paulo, plano Free). Relatório completo: comentário "Relatório de homologação" no PR #53 e [HOMOLOGACAO.md](HOMOLOGACAO.md).
+**Status: BETA EM USO pelo Rodrigo.** App Android por GitHub Releases (`postai-beta-<sha>`, botão ATUALIZAR no app),
+Supabase de produção `postai` (ref `knmndlvoavxgzttjuncv`, São Paulo), montagem no workflow *Post.ai Render Worker* (a cada 5 min, grátis).
 
-## Pronto e verificado
-- Loop diário completo no app (Hoje → roteiro → teleprompter → gravar → salvar local → concluir → legenda → próximo).
-- Gravação por partes + plano de edição + montagem final FFmpeg (worker).
-- Offline: gravar sem rede, matar app, reabrir, reconectar, MD5 remoto = local (E2E).
-- RLS por workspace testado contra Supabase real (local) e em SQL.
+## Pronto e verificado (CI: lint, unit, integração com Supabase local, E2E Android no emulador)
+- Loop diário (Hoje → roteiro → teleprompter → gravar → legenda → próximo), gravação por partes, offline completo.
+- Edição automática no servidor: legenda da fala (Whisper), cortes de erros/pausas, voz limpa, música com ducking,
+  embelezamento só na pele, tirar tremido, cenas de apoio, gancho na tela, capa, versão curta. Ver [CAPTION_STYLES.md](CAPTION_STYLES.md).
+- Vídeo final baixa sozinho; botão BAIXAR só aparece se o download automático falhar.
+- Postar em 1 toque (TikTok, Instagram, YouTube Shorts, WhatsApp, outros).
+- Perfis pessoal/empresa, estúdio da fábrica, catálogo ControlPot, curso. Ver [ESTUDIO_FABRICA.md](ESTUDIO_FABRICA.md).
+- **30/09**: assinatura por perfil no canto do vídeo (canto escolhido em Perfis; guardado em `creator_profiles.tone.watermark`);
+  aviso no celular quando o vídeo fica pronto/falha (com o app aberto ou ao voltar para ele — não há push do servidor);
+  números dos posts (“Como foi este post?”, em `structured_payload.metrics`) e comparação por tema em Resultados;
+  exclusão de conta LGPD processada pelo worker (`apps/worker/src/privacy.ts`).
+- Produção: migration `202609300001_render_result_recovery` aplicada e função `generate` publicada em 30/09.
 
-## Falta (externo)
-1. ~~Supabase de produção~~ ✅ feito (migrations, RLS testado em produção, Site URL `postai://login`, secrets no GitHub).
-2. `OPENAI_API_KEY` + deploy `apps/api` + secret `POSTAI_API_URL` → sem isso: gerador offline / modo "meu ChatGPT/Claude".
-3. Deploy `apps/worker` (service role) → sem isso a montagem final fica na fila.
-4. Smoke test no celular do Rodrigo (roteiro de 10 min).
+## Limites conhecidos (não implementado)
+- Embelezamento ao vivo na câmera e aviso de luz/enquadramento (exigem processador de quadros nativo — quebrou o app no teste).
+- Teleprompter que segue a voz / comandos de voz (Android não divide o microfone entre gravar e reconhecer fala).
+- Publicar/agendar direto nas redes (API e aprovação de cada rede). Números dos posts são anotados à mão.
+- Aviso de vídeo pronto com o app totalmente fechado (exige push via FCM configurado).
+- Gravação horizontal 16:9 para aulas (câmera travada em retrato; a montagem gera só 9:16).
+- iPhone (conta Apple Developer).
 
 ## Próximos passos técnicos
-- M3: legenda Manuscrito com fonte final validada, corte de silêncio/retake por transcrição, embelezamento leve opcional.
-- Worker de exclusão LGPD (processar `privacy_requests`).
+- Push de "vídeo pronto" com o app fechado (FCM + token por aparelho + envio pelo worker).
+- Gravação e montagem 16:9 para o curso.
+- Importar números das redes quando houver API oficial liberada.
 - PostHog (M4). Convite de membros com consentimento.
-- UX: mostrar nome do pilar (hoje mostra o slug) nos cards de Hoje.
