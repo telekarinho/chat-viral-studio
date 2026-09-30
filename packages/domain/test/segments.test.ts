@@ -13,10 +13,18 @@ describe("gravação por partes", () => {
     expect(segs[5]!.text).toBe("E se der certo!");
     expect(segs.map((s) => s.index)).toEqual([0, 1, 2, 3, 4, 5]);
   });
-  it("pensamento do dia tem frase + fechamento, sem repetir o fechamento", () => {
+  it("pensamento do dia: gancho (1ª frase) → mensagem → fechamento, sem repetir o fechamento", () => {
     const segs = buildSegments(thought, opts);
-    expect(segs).toHaveLength(2);
-    expect(segs[0]!.text).not.toMatch(/E se der certo!$/);
+    expect(segs.at(-1)!.text).toBe("E se der certo!");
+    expect(segs.slice(0, -1).map((s) => s.text).join(" ")).not.toMatch(/E se der certo!/);
+    const t = { ...thought, script: "Nem sempre o que marca custa dinheiro. Às vezes é só sentar, ouvir e estar ali de verdade. Eles esquecem o presente, mas lembram de você. E se der certo!" };
+    expect(buildSegments(t, opts).map((s) => [s.label, s.text])).toEqual([
+      ["Gancho", "Nem sempre o que marca custa dinheiro."],
+      ["Mensagem", "Às vezes é só sentar, ouvir e estar ali de verdade. Eles esquecem o presente, mas lembram de você."],
+      ["Fechamento", "E se der certo!"],
+    ]);
+    // uma frase só: gancho + fechamento
+    expect(buildSegments({ ...thought, script: "Hoje eu escolhi ficar em casa com eles. E se der certo!" }, opts).map((s) => s.label)).toEqual(["Gancho", "Fechamento"]);
   });
   it("roteiro editado divide por parágrafo e junta fragmentos curtos", () => {
     const segs = buildSegments({ ...main, script: "Oi.\n\nHoje eu quero te contar uma coisa.\n\nFoi difícil mas valeu a pena.\n\nE se der certo!" }, { ...opts, userEdited: true });

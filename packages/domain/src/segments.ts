@@ -33,11 +33,12 @@ const MIN_WORDS = 3;
 export function buildSegments(draft: ContentDraft, opts: { selectedHook: number; userEdited: boolean; closingPhrase: string; business?: boolean }): ScriptSegment[] {
   const hook = draft.hook_options[opts.selectedHook] ?? draft.hook_options[0] ?? "";
   const closing = opts.closingPhrase.trim();
-  let parts: { role: SegmentRole; text: string }[];
+  let parts: { role: SegmentRole; text: string; label?: string }[];
 
   if (draft.format === "thought") {
-    const body = stripClosing(draft.script, closing);
-    parts = [{ role: "hook", text: body }, { role: "closing", text: closing }];
+    // gancho = 1ª frase (o que prende); o resto é a mensagem; fechamento sozinho
+    const [first, ...rest] = sentences(stripClosing(draft.script, closing));
+    parts = [{ role: "hook", text: first ?? "" }, { role: "free", text: rest.join(" "), label: "Mensagem" }, { role: "closing", text: closing }];
   } else if (opts.userEdited) {
     parts = paragraphs(stripClosing(draft.script, closing)).map((text) => ({ role: "free" as const, text }));
     parts.push({ role: "closing", text: closing });
@@ -52,14 +53,14 @@ export function buildSegments(draft: ContentDraft, opts: { selectedHook: number;
     ];
   }
 
-  const merged: { role: SegmentRole; text: string }[] = [];
+  const merged: { role: SegmentRole; text: string; label?: string }[] = [];
   for (const p of parts.filter((p) => p.text.trim())) {
     const prev = merged[merged.length - 1];
     // "E se der certo!" alone is a legit short part; other tiny fragments ride with the next/previous one
     if (prev && p.role !== "closing" && wordCount(prev.text) < MIN_WORDS) prev.text = `${prev.text} ${p.text}`.trim();
-    else merged.push({ role: p.role, text: p.text.trim() });
+    else merged.push({ ...p, text: p.text.trim() });
   }
-  return merged.map((p, index) => ({ index, role: p.role, label: (opts.business && BUSINESS_SEGMENT_LABEL[p.role]) || SEGMENT_LABEL[p.role], text: p.text }));
+  return merged.map((p, index) => ({ index, role: p.role, label: p.label ?? ((opts.business && BUSINESS_SEGMENT_LABEL[p.role]) || SEGMENT_LABEL[p.role]), text: p.text }));
 }
 
 export interface SegmentProgress {
@@ -83,6 +84,12 @@ export function segmentProgress(total: number, recordedIndexes: readonly number[
 
 export function wordCount(s: string): number {
   return s.trim().split(/\s+/).filter(Boolean).length;
+}
+
+/** Frases terminadas em . ! ? ou reticências (o que sobrar sem pontuação vira a última frase). */
+function sentences(s: string): string[] {
+  const flat = s.replace(/\s+/g, " ").trim();
+  return (flat.match(/[^.!?…]+(?:[.!?…]+["”']?|$)/g) ?? []).map((x) => x.trim()).filter(Boolean);
 }
 
 function paragraphs(s: string): string[] {
