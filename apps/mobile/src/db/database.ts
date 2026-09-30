@@ -48,6 +48,8 @@ export function getDb(): Promise<SQLite.SQLiteDatabase> {
       if (!cols.some((c) => c.name === "meta")) await db.execAsync("ALTER TABLE takes ADD COLUMN meta TEXT");
       const ccols = await db.getAllAsync<{ name: string }>("PRAGMA table_info(content_items)");
       if (!ccols.some((c) => c.name === "project")) await db.execAsync("ALTER TABLE content_items ADD COLUMN project TEXT; ALTER TABLE content_items ADD COLUMN derived_from TEXT; ALTER TABLE content_items ADD COLUMN precisa_revisao TEXT;");
+      // v4: legenda e música escolhidas para a montagem final
+      if (!ccols.some((c) => c.name === "edit")) await db.execAsync("ALTER TABLE content_items ADD COLUMN edit TEXT");
       return db;
     })();
   }

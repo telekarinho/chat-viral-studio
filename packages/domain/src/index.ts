@@ -13,3 +13,6 @@ export * from "./segments";
 export * from "./editPlan";
 export * from "./profiles";
 export * from "./studio";
+export * from "./music";
+export * from "./captions";
+export * from "./cuts";

@@ -285,6 +285,8 @@ export default function RecordScreen() {
           format={format ?? undefined}
           fps={effectiveFps}
           videoBitRate={VIDEO_MBPS[presets.includes(preset) ? preset : "1080p"]}
+          // estabilização do próprio celular (a melhor que o formato suportar) — ajuda muito gravando andando
+          videoStabilizationMode={(["cinematic-extended", "cinematic", "standard", "auto"] as const).find((m) => format?.videoStabilizationModes?.includes(m))}
           isActive={phase !== "saving"}
           video
           audio={mic.hasPermission}

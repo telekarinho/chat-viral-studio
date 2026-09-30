@@ -14,6 +14,10 @@ async function main() {
   const db = createClient(required("SUPABASE_URL"), required("SUPABASE_SERVICE_ROLE_KEY"), { auth: { persistSession: false } });
   const font = required("FONT_FILE");
   const once = process.argv.includes("--once");
+  // jobs travados sem tentativas sobrando viram falha visível (o app mostra e deixa pedir de novo)
+  const stale = await db.rpc("fail_stale_jobs");
+  if (stale.error) process.stdout.write(JSON.stringify({ level: "error", msg: "stale.check_failed", error: stale.error.message }) + "\n");
+  else if (stale.data) process.stdout.write(JSON.stringify({ level: "warn", msg: "stale.failed", jobs: stale.data }) + "\n");
   for (;;) {
     let worked = false;
     try {

@@ -21,6 +21,7 @@ appId: me.rodrigoserra.postai
 - scrollUntilVisible:
     element:
       id: hook-2
+    timeout: 60000
 - assertVisible:
     id: hook-0
 - assertVisible:
@@ -28,6 +29,7 @@ appId: me.rodrigoserra.postai
 - scrollUntilVisible:
     element:
       id: narrative-POR ISSO
+    timeout: 60000
 - assertVisible:
     id: narrative-E
 - assertVisible:
@@ -35,15 +37,18 @@ appId: me.rodrigoserra.postai
 - scrollUntilVisible:
     element:
       text: ".*E se der certo!.*"
+    timeout: 60000
 - takeScreenshot: 02_roteiro
 - scrollUntilVisible:
     element:
       id: platform-tiktok
+    timeout: 60000
 - tapOn:
     id: platform-tiktok
 - scrollUntilVisible:
     element:
       id: copy-caption
+    timeout: 60000
 - assertVisible:
     id: caption-text
     text: ".*RodrigoSerra.me.*"
@@ -54,6 +59,7 @@ appId: me.rodrigoserra.postai
 - scrollUntilVisible:
     element:
       id: back-today
+    timeout: 60000
 - tapOn:
     id: back-today
 - extendedWaitUntil:

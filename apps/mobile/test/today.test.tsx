@@ -73,7 +73,7 @@ describe("Tela Hoje", () => {
   });
 
   it("rótulo de sincronização", () => {
-    const base = { running: false, online: true, pendingRows: 0, pendingMedia: 0, failedMedia: 0, lastRunAt: null, lastError: null };
+    const base = { running: false, online: true, pendingRows: 0, pendingMedia: 0, failedMedia: 0, stuckRows: 0, lastRunAt: null, lastError: null };
     expect(syncLabel(base, false)).toBe("Modo local");
     expect(syncLabel({ ...base, online: false, pendingMedia: 2 }, true)).toMatch(/2 vídeo/);
     expect(syncLabel(base, true)).toBe("Sincronizado ✓");

@@ -1,3 +1,4 @@
+import type { MusicMood } from "./music";
 import type { ScriptSegment, SegmentRole } from "./segments";
 
 /**
@@ -18,6 +19,8 @@ export interface CaptionCue {
   startMs: number;
   endMs: number;
   text: string;
+  /** palavras com o tempo REAL da fala (transcrição) — ativa o destaque palavra a palavra */
+  words?: { text: string; startMs: number; endMs: number }[];
 }
 
 export interface EditClip {
@@ -30,9 +33,37 @@ export interface EditClip {
   durationMs: number;
   effect: ClipEffect;
   captions: CaptionCue[]; // relative to clip start (after trim)
+  /** trechos do ORIGINAL que entram (corte automático de pausas/erros); ausente = trim simples */
+  keep?: { startMs: number; endMs: number }[];
+  /** cena de apoio (B-roll) por cima da imagem enquanto a voz continua */
+  broll?: { takeId: string; atMs: number; durationMs: number };
 }
 
-export type CaptionStyle = "manuscrito" | "limpo" | "nenhuma";
+/** Transição entre partes (FFmpeg xfade), escolhida sozinha pelo papel da parte seguinte. */
+export type TransitionKind = "fade" | "fadefast" | "smoothleft" | "smoothup" | "zoomin";
+export interface Transition { kind: TransitionKind; durationMs: number }
+export const TRANSITION_MS = 300;
+
+export function chooseTransition(to: SegmentRole, index: number): TransitionKind {
+  if (to === "mas") return "zoomin"; // a virada ganha um "empurrão"
+  if (to === "closing") return "fade"; // fechamento respira
+  if (to === "cta") return "smoothup";
+  return index % 2 === 0 ? "smoothleft" : "fadefast";
+}
+
+export type Retouch = "off" | "leve" | "forte";
+export const RETOUCH_LEVELS: readonly Retouch[] = ["forte", "leve", "off"];
+
+export type CaptionStyle = "manuscrito" | "destaque" | "limpo" | "nenhuma";
+export const CAPTION_STYLES: readonly CaptionStyle[] = ["manuscrito", "destaque", "limpo", "nenhuma"];
+
+/** Música de fundo: faixa da biblioteca (music.ts), abaixa sozinha quando há fala. */
+export interface PlanMusic {
+  trackId: string;
+  mood: MusicMood;
+  /** volume da música sob a voz, 0–1 (padrão 0.22) */
+  volume: number;
+}
 
 export interface EditPlan {
   version: "edit-v1";
@@ -40,11 +71,33 @@ export interface EditPlan {
   height: 1920;
   fps: 30;
   captionStyle: CaptionStyle;
-  /** light skin retouch on the final (never on the original): "leve" ≈ TikTok/WhatsApp beauty, subtle */
-  retouch: "off" | "leve";
+  /** embelezamento no FINAL (o original nunca muda): "leve" = natural, "forte" = tipo câmera do iPhone/WhatsApp */
+  retouch: Retouch;
+  /** tira o tremido de quem grava andando */
+  stabilize?: boolean;
+  /** limpa a voz: ruído de rua/vento e volume mais uniforme */
+  voiceClean?: boolean;
+  /** texto grande nos 3 primeiros segundos (gancho na tela) */
+  hookText?: string | null;
   signature: string;
+  /** cor do destaque da legenda (#RRGGBB) */
+  accentColor?: string;
+  music?: PlanMusic | null;
   clips: EditClip[];
+  /** transitions[k] liga clips[k] → clips[k+1] (a sobreposição encurta o total) */
+  transitions?: Transition[];
   totalMs: number;
+}
+
+/** Início de cada parte na linha do tempo final (descontando as sobreposições das transições). */
+export function clipStartsMs(plan: Pick<EditPlan, "clips" | "transitions">): number[] {
+  const out: number[] = [];
+  let t = 0;
+  plan.clips.forEach((c, k) => {
+    out.push(t);
+    t += c.durationMs - (plan.transitions?.[k]?.durationMs ?? 0);
+  });
+  return out;
 }
 
 export interface PlanInput {
@@ -52,8 +105,13 @@ export interface PlanInput {
   /** chosen (latest) take per segment index */
   takes: ReadonlyArray<{ segmentIndex: number; takeId: string; durationMs: number }>;
   captionStyle?: CaptionStyle;
-  retouch?: "off" | "leve";
+  retouch?: Retouch;
+  stabilize?: boolean;
+  voiceClean?: boolean;
+  hookText?: string | null;
   signature: string;
+  accentColor?: string;
+  music?: PlanMusic | null;
 }
 
 // tap on the record button is audible/visible at both ends of each part
@@ -116,7 +174,7 @@ export function buildCaptions(text: string, durationMs: number, style: CaptionSt
   let t = 0;
   return chunks.map((c, i) => {
     const len = i === chunks.length - 1 ? durationMs - t : Math.round((c.length / total) * durationMs);
-    const cue = { startMs: t, endMs: t + len, text: style === "manuscrito" ? c.toUpperCase() : c };
+    const cue = { startMs: t, endMs: t + len, text: style === "limpo" ? c : c.toLocaleUpperCase("pt-BR") };
     t += len;
     return cue;
   });
@@ -145,5 +203,66 @@ export function buildEditPlan(input: PlanInput): EditPlan {
       captions: buildCaptions(seg.text, durationMs, style),
     };
   });
-  return { version: "edit-v1", width: 1080, height: 1920, fps: 30, captionStyle: style, retouch: input.retouch ?? "leve", signature: input.signature, clips, totalMs: clips.reduce((a, c) => a + c.durationMs, 0) };
+  // transições automáticas entre as partes (curtas o bastante para nunca comer a fala)
+  const transitions: Transition[] = clips.slice(1).map((c, k) => ({
+    kind: chooseTransition(c.role, k),
+    durationMs: Math.max(0, Math.min(TRANSITION_MS, Math.floor(Math.min(clips[k]!.durationMs, c.durationMs) / 4))),
+  }));
+  return {
+    version: "edit-v1", width: 1080, height: 1920, fps: 30, captionStyle: style, retouch: input.retouch ?? "leve", stabilize: input.stabilize ?? false,
+    voiceClean: input.voiceClean ?? false, hookText: input.hookText ?? null, signature: input.signature,
+    ...(input.accentColor ? { accentColor: input.accentColor } : {}), music: input.music ?? null, clips, transitions,
+    totalMs: clips.reduce((a, c) => a + c.durationMs, 0) - transitions.reduce((a, t) => a + t.durationMs, 0),
+  };
+}
+
+/** Escolhas do criador para a montagem final (vão em content_items.structured_payload.edit; validadas no servidor). */
+export interface EditChoices {
+  captionStyle: CaptionStyle;
+  /** "auto" = clima do pilar · "none" = sem música · um clima (MusicMood) · ou o id de uma faixa */
+  music: string;
+  musicVolume?: number;
+  retouch?: Retouch;
+  stabilize?: boolean;
+  /** cortar pausas, repetições e muletas sozinho */
+  autoCut?: boolean;
+  voiceClean?: boolean;
+  /** usar as cenas de apoio gravadas no dia por cima da fala */
+  broll?: boolean;
+  /** gancho escrito na tela nos 3 primeiros segundos */
+  hook?: boolean;
+}
+
+export const DEFAULT_EDIT_CHOICES: EditChoices = {
+  captionStyle: "manuscrito", music: "auto", musicVolume: 0.22, retouch: "forte", stabilize: true, autoCut: true, voiceClean: true, broll: true, hook: true,
+};
+
+/** Versão do vídeo: completo ou curto (gancho + virada/aprendizado + chamada). */
+export type RenderVariant = "completo" | "curto";
+export const SHORT_ROLES: readonly SegmentRole[] = ["hook", "por_isso", "cta", "closing"];
+
+/** Recalcula transições e duração total depois de mexer nas partes (cortes, B-roll). */
+export function withClips(plan: EditPlan, clips: EditClip[]): EditPlan {
+  const transitions: Transition[] = clips.slice(1).map((c, k) => ({
+    kind: chooseTransition(c.role, k),
+    durationMs: Math.max(0, Math.min(TRANSITION_MS, Math.floor(Math.min(clips[k]!.durationMs, c.durationMs) / 4))),
+  }));
+  return { ...plan, clips, transitions, totalMs: clips.reduce((a, c) => a + c.durationMs, 0) - transitions.reduce((a, t) => a + t.durationMs, 0) };
+}
+
+const BROLL_ROLES: readonly SegmentRole[] = ["e", "por_isso", "free"];
+const BROLL_MIN_CLIP_MS = 4000;
+const BROLL_MAX_MS = 3200;
+
+/** Distribui as cenas de apoio: entra depois do começo da parte (o rosto abre), some antes do fim. */
+export function assignBroll(clips: readonly EditClip[], brolls: ReadonlyArray<{ takeId: string; durationMs: number }>): EditClip[] {
+  const pool = brolls.filter((b) => b.durationMs >= 1200);
+  let next = 0;
+  return clips.map((c) => {
+    if (next >= pool.length || !BROLL_ROLES.includes(c.role) || c.durationMs < BROLL_MIN_CLIP_MS) return { ...c };
+    const b = pool[next++]!;
+    const durationMs = Math.round(Math.min(BROLL_MAX_MS, b.durationMs - 300, c.durationMs * 0.45));
+    if (durationMs < 1000) return { ...c };
+    return { ...c, broll: { takeId: b.takeId, atMs: Math.round(c.durationMs * 0.35), durationMs } };
+  });
 }

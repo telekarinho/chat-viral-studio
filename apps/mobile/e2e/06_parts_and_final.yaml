@@ -20,6 +20,7 @@ appId: me.rodrigoserra.postai
 - scrollUntilVisible:
     element:
       id: open-thought
+    timeout: 60000
 - tapOn:
     id: open-thought
 - extendedWaitUntil:
@@ -51,6 +52,7 @@ appId: me.rodrigoserra.postai
 - scrollUntilVisible:
     element:
       id: next-part
+    timeout: 60000
 - tapOn:
     id: next-part
 - extendedWaitUntil:
@@ -69,6 +71,7 @@ appId: me.rodrigoserra.postai
 - scrollUntilVisible:
     element:
       id: attach-done
+    timeout: 60000
 - tapOn:
     id: attach-done
 - extendedWaitUntil:
@@ -78,41 +81,57 @@ appId: me.rodrigoserra.postai
 - scrollUntilVisible:
     element:
       id: edit-plan
+    timeout: 60000
 - takeScreenshot: 09_plano_edicao
-# parts may still be syncing: keep asking until the job is accepted
+# deixa a linha de status/botões da montagem inteira na tela (fica logo acima deste texto)
+- scrollUntilVisible:
+    element:
+      text: "Quer mudar algo.*"
+    centerElement: true
+    timeout: 60000
+# the final is requested AUTOMATICALLY when all parts are in the cloud (the button stays as a fallback)
 - repeat:
     while:
-      notVisible: "Na fila de montagem….*|Montando o vídeo…|BAIXAR VÍDEO FINAL"
+      notVisible: "Na fila de montagem….*|Montando o vídeo…|BAIXAR VÍDEO FINAL|VER VÍDEO FINAL / POSTAR"
     times: 20
     commands:
       - scrollUntilVisible:
           element:
             id: request-final
           optional: true
+          timeout: 60000
       - tapOn:
           id: request-final
           optional: true
       - extendedWaitUntil:
-          visible: "Na fila de montagem….*|Montando o vídeo…|BAIXAR VÍDEO FINAL"
+          visible: "Na fila de montagem….*|Montando o vídeo…|BAIXAR VÍDEO FINAL|VER VÍDEO FINAL / POSTAR"
           timeout: 8000
           optional: true
-# the server worker renders; refresh until the download is available
+# the server worker renders; the app downloads the final by itself when it's ready
 - repeat:
     while:
       notVisible:
-        id: download-final
-    times: 40
+        id: open-final
+    times: 70
     commands:
       - tapOn:
           text: "ATUALIZAR"
           optional: true
+      - tapOn:
+          id: download-final
+          optional: true
+      # o botão aparece no lugar de "Montando o vídeo…" (sem rolar: rolar para baixo passaria dele)
       - extendedWaitUntil:
           visible:
-            id: download-final
-          timeout: 5000
+            id: open-final
+          timeout: 8000
           optional: true
+- extendedWaitUntil:
+    visible:
+      id: open-final
+    timeout: 120000
 - tapOn:
-    id: download-final
+    id: open-final
 - extendedWaitUntil:
     visible:
       id: final-screen
@@ -120,4 +139,5 @@ appId: me.rodrigoserra.postai
 - scrollUntilVisible:
     element:
       id: share-final
+    timeout: 60000
 - takeScreenshot: 10_video_final

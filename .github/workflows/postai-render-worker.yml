@@ -17,7 +17,7 @@ concurrency:
 jobs:
   drain:
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 30
     env:
       SUPABASE_URL: ${{ secrets.POSTAI_SUPABASE_URL }}
       SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.POSTAI_SUPABASE_SERVICE_ROLE_KEY }}
@@ -38,17 +38,40 @@ jobs:
           node-version: '22'
           cache: npm
           cache-dependency-path: package-lock.json
-      - name: FFmpeg + fonte manuscrita
+      - name: FFmpeg + fontes das legendas (OFL)
         if: steps.queue.outputs.n != '0'
         run: |
-          sudo apt-get update -qq && sudo apt-get install -y -qq ffmpeg > /dev/null
-          curl -fsSL -o "$RUNNER_TEMP/CaveatBrush-Regular.ttf" https://github.com/google/fonts/raw/main/ofl/caveatbrush/CaveatBrush-Regular.ttf
+          sudo apt-get update -qq && sudo apt-get install -y -qq ffmpeg fonts-dejavu-core > /dev/null
+          mkdir -p "$RUNNER_TEMP/fonts"
+          curl -fsSL -o "$RUNNER_TEMP/fonts/CaveatBrush-Regular.ttf" https://github.com/google/fonts/raw/main/ofl/caveatbrush/CaveatBrush-Regular.ttf
+          curl -fsSL -o "$RUNNER_TEMP/fonts/Anton-Regular.ttf" https://github.com/google/fonts/raw/main/ofl/anton/Anton-Regular.ttf
+          cp /usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf "$RUNNER_TEMP/fonts/"
+      # legenda sincronizada com a fala: Whisper local (grátis, sem API); modelo e pacotes em cache entre execuções
+      - uses: actions/setup-python@v5
+        if: steps.queue.outputs.n != '0'
+        with:
+          python-version: '3.11'
+          cache: pip
+          cache-dependency-path: apps/worker/scripts/requirements.txt
+      - uses: actions/cache@v4
+        if: steps.queue.outputs.n != '0'
+        with:
+          path: |
+            ~/.cache/huggingface
+            ${{ runner.temp }}/postai-music
+          key: postai-whisper-small-music-v1
       - if: steps.queue.outputs.n != '0'
-        run: npm ci --workspace @postai/worker --workspace @postai/domain --ignore-scripts
+        run: |
+          pip install -q -r apps/worker/scripts/requirements.txt
+          npm ci --workspace @postai/worker --workspace @postai/domain --ignore-scripts
       - name: Render queued jobs
         if: steps.queue.outputs.n != '0'
         env:
-          FONT_FILE: ${{ runner.temp }}/CaveatBrush-Regular.ttf
+          FONT_FILE: ${{ runner.temp }}/fonts/CaveatBrush-Regular.ttf
+          FONTS_DIR: ${{ runner.temp }}/fonts
+          WHISPER_PYTHON: python
+          WHISPER_MODEL: small
+          MUSIC_CACHE: ${{ runner.temp }}/postai-music
         run: |
           for i in $(seq 1 10); do npx tsx apps/worker/src/main.ts --once; done
 

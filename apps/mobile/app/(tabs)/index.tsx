@@ -11,6 +11,7 @@ import { reportError } from "../../src/telemetry";
 import { useApp } from "../../src/app-state";
 import { TodayView } from "../../src/components/TodayView";
 import { UpdateBanner } from "../../src/components/UpdateBanner";
+import { createFreeSpeech, importVideo } from "../../src/freeSpeech";
 import { ProfileSwitcher } from "../../src/components/ProfileSwitcher";
 import { Button, ErrorBox, Loading, Screen } from "../../src/ui";
 
@@ -21,6 +22,20 @@ export default function Today() {
   const [now, setNow] = useState(new Date());
   const [generatingId, setGeneratingId] = useState<string | null>(null);
   const [sync, setSync] = useState(getSyncStatus());
+  const [quick, setQuick] = useState<string | null>(null);
+
+  async function quickStart(label: string, fn: () => Promise<void>) {
+    setQuick(label);
+    setError(null);
+    try {
+      await fn();
+    } catch (e) {
+      reportError(e, label);
+      setError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setQuick(null);
+    }
+  }
 
   useEffect(() => subscribeSync(setSync), []);
 
@@ -79,6 +94,16 @@ export default function Today() {
     <Screen testID="today-screen">
       <UpdateBanner />
       <ProfileSwitcher />
+      <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8 }}>
+        <Button compact variant="secondary" label="🎙 FALA LIVRE (sem roteiro)" loading={quick === "fala"} testID="free-speech" onPress={() => void quickStart("fala", async () => {
+          const c = await createFreeSpeech("gravar");
+          router.push({ pathname: "/record", params: { contentId: c.id } });
+        })} />
+        <Button compact variant="secondary" label="📥 IMPORTAR VÍDEO" loading={quick === "importar"} testID="import-video" onPress={() => void quickStart("importar", async () => {
+          const c = await importVideo();
+          if (c) router.push(`/content/${c.id}`);
+        })} />
+      </View>
       {workspace?.profile.kind === "empresa" ? (
         <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8 }}>
           <Button compact label="🎥 NOVO PROJETO NO ESTÚDIO" onPress={() => router.push("/projeto")} testID="open-projeto" />
