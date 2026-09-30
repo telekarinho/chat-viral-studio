@@ -78,3 +78,14 @@ describe("plano de edição automático", () => {
     expect(p.clips[0]).toMatchObject({ trimStartMs: 0, durationMs: 700 });
   });
 });
+
+describe("pedido para a IA (perfil pessoal)", () => {
+  it("pede formato que viraliza, coerência e gancho = 1ª frase no Pensamento do Dia", async () => {
+    const { buildPrompt, VIRAL_FORMATS } = await import("../src");
+    const { system, user } = buildPrompt({ profile: RODRIGO_PROFILE, pillarName: "Família", format: "thought", eventText: null, recentSummaries: [], avoid: "" });
+    for (const f of VIRAL_FORMATS) expect(system).toContain(f);
+    expect(system).toContain("uma ideia só");
+    expect(user).toContain("A 1ª frase É o gancho");
+    expect(user).toContain("Pilar editorial: Família.");
+  });
+});

@@ -1,6 +1,6 @@
 import { z } from "zod";
 
-export const PROMPT_VERSION = "content-v1.2.0";
+export const PROMPT_VERSION = "content-v1.3.0";
 
 export const NARRATIVE_STRUCTURES = ["confissao", "pergunta", "contraste", "historia", "conselho", "observacao"] as const;
 export type NarrativeStructure = (typeof NARRATIVE_STRUCTURES)[number];
