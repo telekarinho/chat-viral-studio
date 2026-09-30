@@ -83,6 +83,12 @@ appId: me.rodrigoserra.postai
       id: edit-plan
     timeout: 60000
 - takeScreenshot: 09_plano_edicao
+# deixa a linha de status/botões da montagem inteira na tela (fica logo acima deste texto)
+- scrollUntilVisible:
+    element:
+      text: "Quer mudar algo.*"
+    centerElement: true
+    timeout: 60000
 # the final is requested AUTOMATICALLY when all parts are in the cloud (the button stays as a fallback)
 - repeat:
     while:
@@ -106,7 +112,7 @@ appId: me.rodrigoserra.postai
     while:
       notVisible:
         id: open-final
-    times: 40
+    times: 70
     commands:
       - tapOn:
           text: "ATUALIZAR"
@@ -123,7 +129,7 @@ appId: me.rodrigoserra.postai
 - extendedWaitUntil:
     visible:
       id: open-final
-    timeout: 60000
+    timeout: 120000
 - tapOn:
     id: open-final
 - extendedWaitUntil:
