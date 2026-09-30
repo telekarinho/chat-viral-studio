@@ -274,8 +274,7 @@ export async function processJob(db: SupabaseClient, job: RenderJobRow, fontFile
     let done = await db.from("render_jobs").update({ ...row, result }).eq("id", job.id);
     // banco ainda sem a coluna `result` (migration pendente): o vídeo é entregue do mesmo jeito
     if (done.error && /result/.test(done.error.message)) {
-      process.stdout.write(JSON.stringify({ level: "warn", msg: "render.result_column_missing", job: job.id }) + "
-");
+      process.stdout.write(JSON.stringify({ level: "warn", msg: "render.result_column_missing", job: job.id }) + "\n");
       done = await db.from("render_jobs").update(row).eq("id", job.id);
     }
     if (done.error) throw new Error(`gravar resultado: ${done.error.message}`);
