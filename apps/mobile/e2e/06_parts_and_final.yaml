@@ -114,13 +114,14 @@ appId: me.rodrigoserra.postai
       - tapOn:
           id: download-final
           optional: true
-      - scrollUntilVisible:
-          element:
+      # o botão aparece no lugar de "Montando o vídeo…" (sem rolar: rolar para baixo passaria dele)
+      - extendedWaitUntil:
+          visible:
             id: open-final
           timeout: 8000
           optional: true
-- scrollUntilVisible:
-    element:
+- extendedWaitUntil:
+    visible:
       id: open-final
     timeout: 60000
 - tapOn:
