@@ -1,4 +1,4 @@
-import type { EditClip, EditPlan } from "@postai/domain";
+import type { EditClip, EditPlan, WatermarkCorner } from "@postai/domain";
 
 export interface RenderInput {
   plan: EditPlan;
@@ -25,6 +25,13 @@ export function keepExpr(keep: readonly { startMs: number; endMs: number }[]): s
 }
 
 const SIGNATURE_MS = 2000;
+
+/** Posição da assinatura do canto: longe das bordas (e da barra de cima/botões das redes). */
+export function watermarkXY(corner: Exclude<WatermarkCorner, "off">): { x: string; y: string } {
+  const left = corner.endsWith("esq");
+  const top = corner.startsWith("sup");
+  return { x: left ? "w*0.05" : "w-text_w-w*0.05", y: top ? "h*0.065" : "h*0.78-text_h" };
+}
 const MUSIC_FADE_IN_S = 0.8;
 const MUSIC_FADE_OUT_S = 1.5;
 
@@ -158,9 +165,16 @@ export function ffmpegArgs(r: RenderInput): string[] {
   } else {
     parts.push("[vcat]null[vc]");
   }
+  const endAt = sec(Math.max(0, total - SIGNATURE_MS));
+  // assinatura pequena no canto durante o vídeo; no fim ela vai para o centro, maior
+  const corner = plan.watermark && plan.watermark !== "off" && plan.signature.trim() ? watermarkXY(plan.watermark) : null;
+  const cornerText = corner
+    ? `drawtext=fontfile='${font}':text='${escapeDrawtext(plan.signature)}':fontsize=34:fontcolor=white@0.75:shadowcolor=0x000000@0.6:shadowx=2:shadowy=2` +
+      `:x=${corner.x}:y=${corner.y}:enable='lt(t\\,${endAt})',`
+    : "";
   parts.push(
-    `[vc]drawtext=fontfile='${font}':text='${escapeDrawtext(plan.signature)}':fontsize=44:fontcolor=white@0.9:shadowcolor=0x000000@0.6:shadowx=2:shadowy=2` +
-      `:x=(w-text_w)/2:y=h*0.86:enable='gte(t\\,${sec(Math.max(0, total - SIGNATURE_MS))})'[vout]`,
+    `[vc]${cornerText}drawtext=fontfile='${font}':text='${escapeDrawtext(plan.signature)}':fontsize=44:fontcolor=white@0.9:shadowcolor=0x000000@0.6:shadowx=2:shadowy=2` +
+      `:x=(w-text_w)/2:y=h*0.86:enable='gte(t\\,${endAt})'[vout]`,
   );
   const withMusic = Boolean(r.musicFile && plan.music);
   if (withMusic) {

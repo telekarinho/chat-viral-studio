@@ -1,7 +1,7 @@
 import {
   applyTaskAction, buildDayPlan, toLocalDateKey, type ContentDraft, type ContentFormat, type CreatorProfile, type Fingerprint,
   type FingerprintType, type GenerationMeta, type MediaRecord, type MediaState, type Pillar, type RecordingTask, type ResolutionPreset,
-  type RoutineBlock, type TaskAction, type TaskStatus, type ClipMeta, type ProjectInfo, type UseTarget, PRODUCTION_MODES, type EditChoices,
+  type RoutineBlock, type TaskAction, type TaskStatus, type ClipMeta, type ProjectInfo, type UseTarget, PRODUCTION_MODES, type EditChoices, watermarkCorner,
 } from "@postai/domain";
 import { config, newId, nowIso } from "../config";
 import { getDb } from "./database";
@@ -140,7 +140,7 @@ export async function updateProfile(profile: CreatorProfile, name: string): Prom
     onConflict: "workspace_id",
     rows: [{
       workspace_id: ws.id, display_name: profile.displayName, handle: profile.handle, positioning: profile.positioning, signature: profile.signature,
-      closing_phrase: profile.closingPhrase, voice_rules: profile.voiceRules, tone: { kind: profile.kind ?? "pessoal", business: profile.business ?? null }, updated_at: nowIso(),
+      closing_phrase: profile.closingPhrase, voice_rules: profile.voiceRules, tone: { kind: profile.kind ?? "pessoal", business: profile.business ?? null, watermark: watermarkCorner(profile.watermark) }, updated_at: nowIso(),
     }],
   });
   return next;

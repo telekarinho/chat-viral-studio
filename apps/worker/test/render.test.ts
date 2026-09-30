@@ -49,6 +49,17 @@ describe("renderizador (comando)", () => {
     const off = ffmpegArgs({ plan: { ...plan, retouch: "off" }, inputs: ["a.mp4", "b.mp4", "c.mp4"], hasAudio: [true, true, true], fontFile: "f.ttf", output: "o.mp4" });
     expect(off[off.indexOf("-filter_complex") + 1]).not.toContain("bilateral=");
   });
+  it("assinatura do perfil no canto escolhido durante o vídeo e no centro no fim", () => {
+    const g = (p: typeof plan) => { const a = ffmpegArgs({ plan: p, inputs: ["a.mp4", "b.mp4", "c.mp4"], hasAudio: [true, true, true], fontFile: "f.ttf", output: "o.mp4" }); return a[a.indexOf("-filter_complex") + 1]!; };
+    const drawtexts = (graph: string) => graph.split("drawtext=").length - 1;
+    expect(drawtexts(g(plan))).toBe(1); // sem canto escolhido: só a assinatura final
+    const cp = g({ ...plan, signature: "ControlPot", watermark: "inf-esq" });
+    expect(drawtexts(cp)).toBe(2);
+    expect(cp).toContain("text='ControlPot':fontsize=34");
+    expect(cp).toContain("x=w*0.05:y=h*0.78-text_h:enable='lt(t");
+    expect(g({ ...plan, watermark: "sup-dir" })).toContain("x=w-text_w-w*0.05:y=h*0.065");
+    expect(drawtexts(g({ ...plan, watermark: "off" }))).toBe(1);
+  });
   it("embelezamento só na pele (máscara), 3 níveis, sem saturar a boca, e tirar tremido", () => {
     const g = (p: typeof plan) => { const a = ffmpegArgs({ plan: p, inputs: ["a.mp4", "b.mp4", "c.mp4"], hasAudio: [true, true, true], fontFile: "f.ttf", output: "o.mp4" }); return a[a.indexOf("-filter_complex") + 1]!; };
     const forte = g({ ...plan, retouch: "forte", stabilize: true });
@@ -145,7 +156,7 @@ describe.skipIf(!hasFfmpeg || !FONT)("renderizador (FFmpeg real)", () => {
     await run("ffmpeg", ["-y", "-loglevel", "error", "-f", "lavfi", "-i", "sine=frequency=220:duration=4", "-c:a", "libmp3lame", music]);
     const broll = join(dir, "broll.mp4");
     await run("ffmpeg", ["-y", "-loglevel", "error", "-f", "lavfi", "-i", "smptebars=size=1280x720:rate=30:duration=3", "-c:v", "libx264", "-pix_fmt", "yuv420p", broll]);
-    const base = buildEditPlan({ segments, takes, signature: "RodrigoSerra.me", captionStyle: "destaque", retouch: "forte", stabilize: true, voiceClean: true, hookText: "Treino de hoje", music: { trackId: "mixkit-32", mood: "motivacional", volume: 0.22 } });
+    const base = buildEditPlan({ segments, takes, signature: "RodrigoSerra.me", captionStyle: "destaque", retouch: "forte", stabilize: true, voiceClean: true, hookText: "Treino de hoje", watermark: "sup-dir", music: { trackId: "mixkit-32", mood: "motivacional", volume: 0.22 } });
     // parte 1 com corte no meio; parte 3 com cena de apoio (horizontal, vira 9:16)
     const cut = base.clips.map((c, i) => (i === 0 ? { ...c, durationMs: 1600, keep: [{ startMs: 300, endMs: 1100 }, { startMs: 1700, endMs: 2500 }] } : i === 2 ? { ...c, broll: { takeId: "b", atMs: 600, durationMs: 1200 } } : c));
     const plan = withClips(base, cut);

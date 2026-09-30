@@ -1,5 +1,6 @@
 import type { MusicMood } from "./music";
 import type { ScriptSegment, SegmentRole } from "./segments";
+import type { WatermarkCorner } from "./watermark";
 
 /**
  * Automatic edit decision list: which take goes where, which camera move each part gets and
@@ -80,6 +81,8 @@ export interface EditPlan {
   /** texto grande nos 3 primeiros segundos (gancho na tela) */
   hookText?: string | null;
   signature: string;
+  /** assinatura pequena num canto durante o vídeo todo */
+  watermark?: WatermarkCorner;
   /** cor do destaque da legenda (#RRGGBB) */
   accentColor?: string;
   music?: PlanMusic | null;
@@ -110,6 +113,8 @@ export interface PlanInput {
   voiceClean?: boolean;
   hookText?: string | null;
   signature: string;
+  /** assinatura pequena num canto durante o vídeo todo */
+  watermark?: WatermarkCorner;
   accentColor?: string;
   music?: PlanMusic | null;
 }
@@ -211,6 +216,7 @@ export function buildEditPlan(input: PlanInput): EditPlan {
   return {
     version: "edit-v1", width: 1080, height: 1920, fps: 30, captionStyle: style, retouch: input.retouch ?? "leve", stabilize: input.stabilize ?? false,
     voiceClean: input.voiceClean ?? false, hookText: input.hookText ?? null, signature: input.signature,
+    ...(input.watermark ? { watermark: input.watermark } : {}),
     ...(input.accentColor ? { accentColor: input.accentColor } : {}), music: input.music ?? null, clips, transitions,
     totalMs: clips.reduce((a, c) => a + c.durationMs, 0) - transitions.reduce((a, t) => a + t.durationMs, 0),
   };

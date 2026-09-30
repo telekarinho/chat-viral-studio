@@ -1,5 +1,6 @@
 import { PLATFORMS, PROMPT_VERSION, type ContentDraft, type Platform } from "./contract";
 import type { BusinessStrategy, ProfileKind } from "../profiles";
+import type { WatermarkCorner } from "../watermark";
 
 export interface CreatorProfile {
   displayName: string;
@@ -10,6 +11,8 @@ export interface CreatorProfile {
   voiceRules: string[];
   kind?: ProfileKind;
   business?: BusinessStrategy;
+  /** canto da assinatura no vídeo (padrão: em cima, à direita) */
+  watermark?: WatermarkCorner;
 }
 
 export const RODRIGO_PROFILE: CreatorProfile = {

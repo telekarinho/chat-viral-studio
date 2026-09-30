@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import { Text, TextInput, View } from "react-native";
 import * as Clipboard from "expo-clipboard";
 import { router, useFocusEffect, useLocalSearchParams } from "expo-router";
-import { FORMAT_LABEL, PLATFORMS, PLATFORM_LABEL, SHORT_ROLES, buildEditPlan, buildSegments, isBusiness, wholeTakeSegment, type EditPlan, type Platform, type ScriptSegment } from "@postai/domain";
+import { FORMAT_LABEL, PLATFORMS, PLATFORM_LABEL, SHORT_ROLES, buildEditPlan, buildSegments, isBusiness, WATERMARK_LABEL, watermarkCorner, wholeTakeSegment, type EditPlan, type Platform, type ScriptSegment } from "@postai/domain";
 import { completeContent, getContent, latestTakesBySegment, listTakes, listTasks, setEditChoices, workspaceById, selectHook, type ContentItem, type Take, type Workspace } from "../../src/db/repo";
 import { ProjectPanel } from "../../src/components/ProjectPanel";
 import { FinishOptions } from "../../src/components/FinishOptions";
@@ -49,9 +49,9 @@ export default function ContentScreen() {
       const recorded = segments.filter((sg) => chosen.has(sg.index)).map((sg) => sg.index);
       const whole = recorded.length === 0 ? (await listTakes({ contentItemId: item.id })).find((t) => t.segmentIndex === null && !t.tags.includes("descartado")) : undefined;
       const plan = recorded.length === segments.length
-        ? buildEditPlan({ segments, signature: ws.profile.signature, takes: segments.map((sg) => ({ segmentIndex: sg.index, takeId: chosen.get(sg.index)!.id, durationMs: chosen.get(sg.index)!.media.durationMs ?? 0 })) })
+        ? buildEditPlan({ segments, signature: ws.profile.signature, watermark: watermarkCorner(ws.profile.watermark), takes: segments.map((sg) => ({ segmentIndex: sg.index, takeId: chosen.get(sg.index)!.id, durationMs: chosen.get(sg.index)!.media.durationMs ?? 0 })) })
         : whole
-          ? buildEditPlan({ segments: [wholeTakeSegment(item.draft)], signature: ws.profile.signature, takes: [{ segmentIndex: 0, takeId: whole.id, durationMs: whole.media.durationMs ?? 0 }] })
+          ? buildEditPlan({ segments: [wholeTakeSegment(item.draft)], signature: ws.profile.signature, watermark: watermarkCorner(ws.profile.watermark), takes: [{ segmentIndex: 0, takeId: whole.id, durationMs: whole.media.durationMs ?? 0 }] })
           : null;
       setParts({ segments, recorded, plan });
       setFinalUri(await localFinal(item.id));
@@ -275,7 +275,7 @@ ${owner?.ws.profile.signature ?? ""}`.trim())} />
                   {parts.plan.clips.map((c) => (
                     <Text key={c.segmentIndex} style={s.muted}>{c.segmentIndex + 1}. {EFFECT_LABEL[c.effect.kind]} · {(c.durationMs / 1000).toFixed(1)}s · {c.captions.length} {c.captions.length === 1 ? "legenda" : "legendas"}</Text>
                   ))}
-                  <Text style={s.muted}>{`Assinatura ${parts.plan.signature}. A montagem (juntar, efeitos, legenda da sua fala e música) roda no servidor de edição.`}</Text>
+                  <Text style={s.muted}>{`Assinatura ${parts.plan.signature}${parts.plan.watermark && parts.plan.watermark !== "off" ? ` (no canto: ${WATERMARK_LABEL[parts.plan.watermark].slice(2)})` : ""}. A montagem (juntar, efeitos, legenda da sua fala e música) roda no servidor de edição.`}</Text>
                   {finalUri ? (
                     <>
                       <Button compact label="VER VÍDEO FINAL / POSTAR" onPress={() => router.push(`/final/${c.id}`)} testID="open-final" />

@@ -1,4 +1,4 @@
-import { PROFILE_TEMPLATES, RODRIGO_PILLARS, RODRIGO_PROFILE, rodrigoRoutine, type BusinessStrategy, type ContentFormat, type CreatorProfile, type Pillar, type ProfileTemplate, type RoutineBlock } from "@postai/domain";
+import { PROFILE_TEMPLATES, RODRIGO_PILLARS, RODRIGO_PROFILE, rodrigoRoutine, type BusinessStrategy, type ContentFormat, type CreatorProfile, type Pillar, type ProfileTemplate, type RoutineBlock, watermarkCorner } from "@postai/domain";
 import { newId } from "./config";
 import { DEFAULT_SETTINGS, getWorkspace, saveWorkspace, type Workspace } from "./db/repo";
 import { supabase } from "./supabase";
@@ -50,7 +50,7 @@ export async function pullWorkspace(wsId: string, settings = DEFAULT_SETTINGS, a
   ]);
   const err = ws.error ?? prof.error ?? pillars.error ?? blocks.error;
   if (err) throw new Error(`Falha ao carregar seu workspace: ${err.message}`);
-  const tone = (prof.data.tone ?? {}) as { kind?: string; business?: BusinessStrategy | null };
+  const tone = (prof.data.tone ?? {}) as { kind?: string; business?: BusinessStrategy | null; watermark?: unknown };
   const workspace: Workspace = {
     id: wsId,
     name: ws.data?.name ?? "Meu workspace",
@@ -59,6 +59,7 @@ export async function pullWorkspace(wsId: string, settings = DEFAULT_SETTINGS, a
       displayName: prof.data.display_name, handle: prof.data.handle ?? "", positioning: prof.data.positioning ?? "", signature: prof.data.signature ?? "",
       closingPhrase: prof.data.closing_phrase ?? "", voiceRules: prof.data.voice_rules ?? RODRIGO_PROFILE.voiceRules,
       kind: tone.kind === "empresa" ? "empresa" : "pessoal", business: tone.kind === "empresa" && tone.business ? tone.business : undefined,
+      watermark: watermarkCorner(tone.watermark),
     },
     pillars: (pillars.data ?? []).map((p) => ({ slug: p.slug, name: p.name, targetPercent: Number(p.target_percent), active: p.active })),
     routine: (blocks.data ?? []).map((b): RoutineBlock => ({
