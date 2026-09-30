@@ -33,7 +33,8 @@ jobs:
           # fila de montagem + montagens travadas (servidor caiu no meio) + pedidos de exclusão de conta (LGPD)
           q=$(count "render_jobs?select=id&status=eq.queued")
           s=$(count "render_jobs?select=id&status=eq.rendering&updated_at=lt.$stale")
-          p=$(count "privacy_requests?select=id&kind=eq.delete_account&status=eq.requested")
+          stale30=$(date -u -d '30 minutes ago' +%Y-%m-%dT%H:%M:%SZ)
+          p=$(count "privacy_requests?select=id&kind=eq.delete_account&or=(status.eq.requested,and(status.eq.processing,processed_at.lt.$stale30))")
           n=$((q + s + p))
           echo "na fila: $q · travadas: $s · exclusões LGPD: $p"; echo "n=$n" >> "$GITHUB_OUTPUT"
       - uses: actions/checkout@v4

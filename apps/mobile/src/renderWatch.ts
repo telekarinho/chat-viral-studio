@@ -2,7 +2,6 @@ import * as Notifications from "expo-notifications";
 import { getDb } from "./db/database";
 import { getContent } from "./db/repo";
 import { localFinal } from "./finalRender";
-import { ensureNotificationPermission } from "./notifications";
 import { supabase } from "./supabase";
 
 // só avisa de montagens recentes (um aparelho novo não recebe aviso de vídeos antigos)
@@ -34,7 +33,8 @@ export async function notifyFinishedRenders(workspaceId: string): Promise<number
     const curto = r.plan?.variant === "curto";
     // já baixado no aparelho = a pessoa já viu (estava na tela quando ficou pronto)
     if (r.status === "done" && (await localFinal(r.content_item_id, curto ? "curto" : "completo"))) continue;
-    if (!(await ensureNotificationPermission())) return sent;
+    // não pede permissão do nada (pode estar gravando): usa a que a pessoa já deu nos lembretes
+    if (!(await Notifications.getPermissionsAsync()).granted) continue;
     const title = (await getContent(r.content_item_id))?.title ?? "seu vídeo";
     await Notifications.scheduleNotificationAsync({
       content: r.status === "done"

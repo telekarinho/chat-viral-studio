@@ -46,4 +46,17 @@ describe.skipIf(!(url && anon && service))("exclusão de conta (LGPD)", () => {
     expect((await admin.auth.admin.getUserById(outro.id)).data.user?.id).toBe(outro.id);
     expect((await admin.storage.from("takes").list(outro.ws)).data?.map((o) => o.name)).toEqual(["b.mp4"]);
   }, 60_000);
+
+  it("pedido parado em 'processing' (servidor caiu no meio) é retomado", async () => {
+    const admin = createClient(url!, service!, { auth: { persistSession: false } });
+    const created = await admin.auth.admin.createUser({ email: `lgpd-stale-${randomUUID()}@test.local`, password: `pw-${randomUUID()}`, email_confirm: true });
+    const uid = created.data.user!.id;
+    const hourAgo = new Date(Date.now() - 60 * 60 * 1000).toISOString();
+    const ins = await admin.from("privacy_requests").insert({ user_id: uid, kind: "delete_account", status: "processing", processed_at: hourAgo });
+    expect(ins.error).toBeNull();
+    while (await processDeletionRequest(admin)) {
+      if (!(await admin.from("privacy_requests").select("id").eq("user_id", uid)).data?.length) break;
+    }
+    expect((await admin.auth.admin.getUserById(uid)).data.user).toBeNull();
+  }, 60_000);
 });

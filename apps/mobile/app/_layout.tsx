@@ -1,7 +1,7 @@
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 import { AppState } from "react-native";
 import * as Notifications from "expo-notifications";
-import { Stack, router } from "expo-router";
+import { Stack, router, useRootNavigationState } from "expo-router";
 import { StatusBar } from "expo-status-bar";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 import { AppProvider, useApp } from "../src/app-state";
@@ -25,10 +25,16 @@ const RENDER_CHECK_MS = 60_000;
 function RenderWatch() {
   const { workspace } = useApp();
   const tapped = Notifications.useLastNotificationResponse();
+  const navReady = Boolean(useRootNavigationState()?.key);
+  const handled = useRef<string | null>(null);
   useEffect(() => {
+    // app aberto pelo aviso: espera a navegação montar e abre o conteúdo uma vez só
     const id = tapped?.notification.request.content.data?.contentId;
-    if (typeof id === "string") router.push(`/content/${id}`);
-  }, [tapped]);
+    const key = tapped?.notification.request.identifier ?? null;
+    if (!navReady || typeof id !== "string" || !key || handled.current === key) return;
+    handled.current = key;
+    router.push(`/content/${id}`);
+  }, [tapped, navReady]);
   useEffect(() => {
     if (!workspace?.cloud) return;
     const check = () => void notifyFinishedRenders(workspace.id).catch((e) => reportError(e, "render watch"));
