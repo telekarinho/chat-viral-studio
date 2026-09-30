@@ -58,9 +58,12 @@ type JobRow = { id: string; status: RenderJob["status"]; output_key: string | nu
 const toJob = (r: JobRow): RenderJob => ({ id: r.id, status: r.status, output_key: r.output_key, error: r.error, result: r.result, variant: r.plan?.variant === "curto" ? "curto" : "completo" });
 
 async function jobsOf(contentId: string): Promise<RenderJob[]> {
-  const { data, error } = await supabase!.from("render_jobs").select("id,status,output_key,error,result,plan").eq("content_item_id", contentId).order("created_at", { ascending: false }).limit(10);
-  if (error) throw new Error(error.message);
-  return ((data ?? []) as JobRow[]).map(toJob);
+  const q = (cols: string) => supabase!.from("render_jobs").select(cols).eq("content_item_id", contentId).order("created_at", { ascending: false }).limit(10);
+  let res = await q("id,status,output_key,error,result,plan");
+  // 42703 = banco ainda sem a coluna `result` (migration pendente): segue sem o resumo da edição
+  if (res.error?.code === "42703") res = await q("id,status,output_key,error,plan");
+  if (res.error) throw new Error(res.error.message);
+  return ((res.data ?? []) as unknown as JobRow[]).map((r) => toJob({ ...r, result: r.result ?? null }));
 }
 
 async function activeOfVariant(contentId: string, variant: RenderVariant): Promise<RenderJob | null> {

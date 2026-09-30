@@ -270,7 +270,14 @@ export async function processJob(db: SupabaseClient, job: RenderJobRow, fontFile
       variant: sp.variant, warnings, transcript: edited.transcript, cover_key: coverKey, cuts: edited.cuts,
       broll: Object.keys(brollFiles).length, music: musicFile && track ? `${track.title} — ${track.artist}` : null, spokenCaptions: edited.spoken,
     };
-    const done = await db.from("render_jobs").update({ status: "done", output_key: `${base}.mp4`, output_size: bytes.length, error: null, result, updated_at: new Date().toISOString() }).eq("id", job.id);
+    const row = { status: "done", output_key: `${base}.mp4`, output_size: bytes.length, error: null, updated_at: new Date().toISOString() };
+    let done = await db.from("render_jobs").update({ ...row, result }).eq("id", job.id);
+    // banco ainda sem a coluna `result` (migration pendente): o vídeo é entregue do mesmo jeito
+    if (done.error && /result/.test(done.error.message)) {
+      process.stdout.write(JSON.stringify({ level: "warn", msg: "render.result_column_missing", job: job.id }) + "
+");
+      done = await db.from("render_jobs").update(row).eq("id", job.id);
+    }
     if (done.error) throw new Error(`gravar resultado: ${done.error.message}`);
     return { outputKey: `${base}.mp4`, size: bytes.length, result };
   } catch (e) {
