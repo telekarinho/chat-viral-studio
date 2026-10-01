@@ -86,6 +86,13 @@ appId: me.rodrigoserra.postai
     timeout: 60000
 - tapOn:
     id: attach-done
+# gravou tudo: o app vai direto para "Seu vídeo vai sair assim" (funciona offline; monta quando a internet voltar)
+- extendedWaitUntil:
+    visible:
+      id: final-summary
+    timeout: 20000
+- takeScreenshot: 05b_resumo_offline
+- back
 - extendedWaitUntil:
     visible:
       id: content-screen
