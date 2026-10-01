@@ -3,6 +3,9 @@ name: Post.ai iOS (AltStore)
 # iPhone sem conta paga da Apple: gera um .ipa SEM assinatura; o AltStore/SideStore do criador assina com a
 # Apple ID gratuita dele e renova a cada 7 dias (os dados do app ficam). Repositório público = Mac grátis no GitHub.
 on:
+  # PR que mexe no build do iPhone compila de teste (sem publicar)
+  pull_request:
+    paths: ['.github/workflows/postai-ios-altstore.yml', 'apps/mobile/app.config.ts', 'apps/mobile/package.json']
   workflow_dispatch:
     inputs:
       release:
