@@ -70,6 +70,15 @@ async function activeOfVariant(contentId: string, variant: RenderVariant): Promi
   return (await jobsOf(contentId)).find((j) => j.variant === variant && ACTIVE.includes(j.status)) ?? null;
 }
 
+/**
+ * Acorda o servidor de edição na hora (sem esperar o agendamento do GitHub, que atrasa horas).
+ * Sem a função `kick-worker` publicada, não faz nada: o agendamento continua como reserva.
+ */
+export async function kickRenderWorker(): Promise<void> {
+  if (!supabase) return;
+  await supabase.functions.invoke("kick-worker", { body: {} }).catch(() => undefined);
+}
+
 /** Lança erro quando não dá para consultar (quem chama decide mostrar) — null = nunca foi pedida. */
 export async function latestRenderJob(contentId: string, variant: RenderVariant = "completo"): Promise<RenderJob | null> {
   if (!supabase) return null;

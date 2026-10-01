@@ -91,68 +91,31 @@ appId: me.rodrigoserra.postai
     timeout: 60000
 - tapOn:
     id: attach-done
+# fim do fluxo numa tela só: o app já escolheu tudo, a pessoa só confirma
 - extendedWaitUntil:
     visible:
-      id: content-screen
-    timeout: 20000
-- scrollUntilVisible:
-    element:
-      id: edit-plan
-    timeout: 60000
-- takeScreenshot: 09_plano_edicao
-# deixa a linha de status/botões da montagem inteira na tela (fica logo acima deste texto)
-- scrollUntilVisible:
-    element:
-      text: "Quer mudar algo.*"
-    centerElement: true
-    timeout: 60000
-# the final is requested AUTOMATICALLY when all parts are in the cloud (the button stays as a fallback)
-- repeat:
-    while:
-      notVisible: "Na fila de montagem….*|Montando o vídeo…|BAIXAR VÍDEO FINAL|VER VÍDEO FINAL / POSTAR"
-    times: 20
-    commands:
-      - scrollUntilVisible:
-          element:
-            id: request-final
-          optional: true
-          timeout: 60000
-      - tapOn:
-          id: request-final
-          optional: true
-      - extendedWaitUntil:
-          visible: "Na fila de montagem….*|Montando o vídeo…|BAIXAR VÍDEO FINAL|VER VÍDEO FINAL / POSTAR"
-          timeout: 8000
-          optional: true
-# the server worker renders; the app downloads the final by itself when it's ready
-- repeat:
-    while:
-      notVisible:
-        id: open-final
-    times: 70
-    commands:
-      - tapOn:
-          text: "ATUALIZAR"
-          optional: true
-      - tapOn:
-          id: download-final
-          optional: true
-      # o botão aparece no lugar de "Montando o vídeo…" (sem rolar: rolar para baixo passaria dele)
-      - extendedWaitUntil:
-          visible:
-            id: open-final
-          timeout: 8000
-          optional: true
+      id: finalizar-screen
+    timeout: 30000
 - extendedWaitUntil:
     visible:
-      id: open-final
-    timeout: 120000
+      id: final-summary
+    timeout: 30000
+- assertVisible: ".*Música: .*"
 - tapOn:
-    id: open-final
+    id: swap-music
+- takeScreenshot: 09_resumo_montagem
+- tapOn:
+    id: confirm-render
+- extendedWaitUntil:
+    visible:
+      id: render-progress
+    timeout: 20000
+- takeScreenshot: 09b_montando
+# o servidor monta e a tela abre o vídeo final sozinha
 - extendedWaitUntil:
     visible:
       id: final-screen
-    timeout: 60000
+    timeout: 900000
 - scrollUntilVisible:
     element:
       id: share-final

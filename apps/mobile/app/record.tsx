@@ -205,7 +205,9 @@ export default function RecordScreen() {
         await queuePatrimonio(saved.id, patrimonio.ordem, patrimonio.clipe);
         void syncNow();
       }
-      if (contentId) router.replace(`/content/${contentId}`);
+      // gravou tudo de um conteúdo com roteiro: vai direto para "Seu vídeo vai sair assim" (só confirmar)
+      if (contentId && !project && !patrimonio) router.replace(`/finalizar/${contentId}`);
+      else if (contentId) router.replace(`/content/${contentId}`);
       else router.back();
     } catch (e) {
       setMessage(e instanceof Error ? e.message : String(e));
