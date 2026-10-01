@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useReducer, useRef, useState } from "react";
-import { Pressable, StyleSheet, Text, TextInput, View } from "react-native";
+import { Pressable, StyleSheet, Text, TextInput, View, useWindowDimensions } from "react-native";
 import { router, useLocalSearchParams } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useKeepAwake } from "expo-keep-awake";
@@ -39,6 +39,7 @@ export default function RecordScreen() {
   const [fps, setFps] = useState(30);
   // "Luz": front = screen ring light (bright frame + max brightness), back = torch
   const [light, setLight] = useState<LightMode>("off");
+  const winW = useWindowDimensions().width;
   const [prompterOn, setPrompterOn] = useState(params.prompter === "1" || params.partes === "1" || Boolean(params.instrucao));
   // gravação por partes: only the current part is on the teleprompter; recorded parts disappear
   const [segments, setSegments] = useState<ScriptSegment[] | null>(null);
@@ -289,6 +290,8 @@ export default function RecordScreen() {
   const busy = phase === "saving";
   const recording = phase === "recording";
   const ringLight = light !== "off" && position === "front";
+  // luz máxima: a câmera vira uma janela oval e o resto da tela é luz pura no rosto (a gravação continua o quadro inteiro)
+  const ovalW = Math.round(winW * LIGHT_WINDOW);
   const nextRetouch = (r: Retouch): Retouch => (r === "forte" ? "leve" : r === "leve" ? "off" : "forte");
   function cycleRetouch() {
     if (!content) return;
@@ -303,7 +306,7 @@ export default function RecordScreen() {
   const tip = role && !firstPart ? RECORDING_TIPS[role] : `${RECORDING_CHECKLIST}. ${RECORDING_TIPS[role ?? "hook"]}`;
   return (
     <View style={[st.root, ringLight && { backgroundColor: RING_COLOR[light] }]} testID="record-screen">
-      <View style={st.frame}>
+      <View style={ringLight ? [st.frame, { width: ovalW, borderRadius: ovalW / 2, marginTop: -80 }] : st.frame}>
         <Camera
           ref={camera}
           style={StyleSheet.absoluteFill}
@@ -331,7 +334,7 @@ export default function RecordScreen() {
 
       <View style={[st.top, { top: 18 + insets.top }]}>
         <Pressable onPress={() => (recording ? undefined : router.back())} accessibilityRole="button" accessibilityLabel="Fechar" style={st.close} hitSlop={10}>
-          <Text style={st.closeText}>✕</Text>
+          <Text style={[st.closeText, ringLight && { color: "#111111", textShadowRadius: 0 }]}>✕</Text>
         </Pressable>
         {recording ? (
           <Text style={st.rec} testID="rec-indicator">{`● REC ${elapsed}s`}</Text>
@@ -350,14 +353,14 @@ export default function RecordScreen() {
       {/* trilho de botões à direita, como no TikTok: ícone + nome embaixo */}
       {!recording ? (
         <View style={st.rail}>
-          <RailButton icon="⟲" label="Virar" onPress={() => setPosition(position === "front" ? "back" : "front")} testID="flip-camera" />
-          <RailButton icon="☀" label={LIGHT_LABEL[light]} selected={light !== "off"} onPress={() => setLight(NEXT_LIGHT[light])} testID="toggle-light" />
-          <RailButton icon="⏱" label={tp.countdownSeconds ? `${tp.countdownSeconds}s` : "Timer"} selected={tp.countdownSeconds > 0} onPress={() => dispatch({ type: "setCountdown", seconds: nextCountdown })} testID="timer" />
+          <RailButton onLight={ringLight} icon="⟲" label="Virar" onPress={() => setPosition(position === "front" ? "back" : "front")} testID="flip-camera" />
+          <RailButton onLight={ringLight} icon="☀" label={LIGHT_LABEL[light]} selected={light !== "off"} onPress={() => setLight(NEXT_LIGHT[light])} testID="toggle-light" />
+          <RailButton onLight={ringLight} icon="⏱" label={tp.countdownSeconds ? `${tp.countdownSeconds}s` : "Timer"} selected={tp.countdownSeconds > 0} onPress={() => dispatch({ type: "setCountdown", seconds: nextCountdown })} testID="timer" />
           {content && !patrimonio ? (
-            <RailButton icon="✨" label={RETOUCH_SHORT[retouch]} selected={retouch !== "off"} onPress={cycleRetouch} testID="beauty" />
+            <RailButton onLight={ringLight} icon="✨" label={RETOUCH_SHORT[retouch]} selected={retouch !== "off"} onPress={cycleRetouch} testID="beauty" />
           ) : null}
-          <RailButton icon="Aa" label={prompterOn ? "Texto" : "Sem texto"} selected={prompterOn} onPress={() => setPrompterOn(!prompterOn)} testID="toggle-prompter" />
-          <RailButton icon="⚙" label="Ajustes" selected={settingsOpen} onPress={() => setSettingsOpen(!settingsOpen)} testID="open-settings" />
+          <RailButton onLight={ringLight} icon="Aa" label={prompterOn ? "Texto" : "Sem texto"} selected={prompterOn} onPress={() => setPrompterOn(!prompterOn)} testID="toggle-prompter" />
+          <RailButton onLight={ringLight} icon="⚙" label="Ajustes" selected={settingsOpen} onPress={() => setSettingsOpen(!settingsOpen)} testID="open-settings" />
         </View>
       ) : null}
       {project ? (
@@ -473,13 +476,13 @@ function Pill({ label, onPress, selected, hint, testID }: { label: string; onPre
 }
 
 /** Botão do trilho lateral (estilo TikTok): ícone redondo com o nome embaixo. */
-function RailButton({ icon, label, onPress, selected, testID }: { icon: string; label: string; onPress: () => void; selected?: boolean; testID?: string }) {
+function RailButton({ icon, label, onPress, selected, testID, onLight }: { icon: string; label: string; onPress: () => void; selected?: boolean; testID?: string; onLight?: boolean }) {
   return (
     <Pressable onPress={onPress} accessibilityRole="button" accessibilityLabel={label} accessibilityState={{ selected: Boolean(selected) }} testID={testID} style={st.railBtn} hitSlop={6}>
       <View style={[st.railIcon, selected && st.railIconOn]}>
         <Text style={[st.railIconText, selected && { color: "#000000" }]}>{icon}</Text>
       </View>
-      <Text style={st.railLabel} numberOfLines={1}>{label}</Text>
+      <Text style={[st.railLabel, onLight && st.railLabelOnLight]} numberOfLines={1}>{label}</Text>
     </Pressable>
   );
 }
@@ -496,10 +499,13 @@ function SoftGlow({ color }: { color: string }) {
   );
 }
 
+// branca primeiro: é a que mais ilumina (gravar na rua à noite); quente fica como opção para pele
 type LightMode = "off" | "warm" | "neutral";
-const NEXT_LIGHT: Record<LightMode, LightMode> = { off: "warm", warm: "neutral", neutral: "off" };
-const LIGHT_LABEL: Record<LightMode, string> = { off: "Luz", warm: "Quente", neutral: "Branca" };
-const RING_COLOR: Record<LightMode, string> = { off: "#000000", warm: "#FFE9CC", neutral: "#FFFFFF" };
+const NEXT_LIGHT: Record<LightMode, LightMode> = { off: "neutral", neutral: "warm", warm: "off" };
+const LIGHT_LABEL: Record<LightMode, string> = { off: "Luz", neutral: "Luz máx.", warm: "Quente" };
+const RING_COLOR: Record<LightMode, string> = { off: "#000000", warm: "#FFE2BF", neutral: "#FFFFFF" };
+/** largura da janela da câmera com a luz ligada (o resto da tela vira luz) */
+const LIGHT_WINDOW = 0.66;
 const RETOUCH_SHORT: Record<Retouch, string> = { forte: "Forte", leve: "Natural", off: "Embelezar" };
 
 const st = StyleSheet.create({
@@ -515,6 +521,7 @@ const st = StyleSheet.create({
   railIcon: { width: 46, height: 46, borderRadius: 23, backgroundColor: "rgba(0,0,0,0.35)", alignItems: "center", justifyContent: "center" },
   railIconOn: { backgroundColor: "#FFFFFF" },
   railIconText: { color: "#FFFFFF", fontSize: 20, fontWeight: "900" },
+  railLabelOnLight: { color: "#111111", textShadowRadius: 0 },
   railLabel: { color: "#FFFFFF", fontSize: 11, fontWeight: "800", marginTop: 3, textShadowColor: "rgba(0,0,0,0.8)", textShadowRadius: 3 },
   studio: { position: "absolute", top: 64, left: 12, right: 80, alignItems: "center", gap: 2 },
   bottom: { position: "absolute", bottom: 28, left: 12, right: 12, alignItems: "center", gap: 10 },
