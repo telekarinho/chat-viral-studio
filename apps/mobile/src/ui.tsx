@@ -1,6 +1,6 @@
 import type { ReactNode } from "react";
 import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View, type StyleProp, type ViewStyle } from "react-native";
-import { SafeAreaView } from "react-native-safe-area-context";
+import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 
 export const colors = {
   bg: "#F4F3EF",
@@ -19,9 +19,11 @@ export const colors = {
 };
 
 export function Screen({ children, scroll = true, testID }: { children: ReactNode; scroll?: boolean; testID?: string }) {
+  // o fim da rolagem não fica escondido atrás dos botões do Android (|||, ○, <)
+  const bottom = useSafeAreaInsets().bottom;
   return (
     <SafeAreaView style={s.safe} edges={["top", "left", "right"]} testID={testID}>
-      {scroll ? <ScrollView contentContainerStyle={s.container} keyboardShouldPersistTaps="handled">{children}</ScrollView> : <View style={[s.container, { flex: 1 }]}>{children}</View>}
+      {scroll ? <ScrollView contentContainerStyle={[s.container, { paddingBottom: 48 + bottom }]} keyboardShouldPersistTaps="handled">{children}</ScrollView> : <View style={[s.container, { flex: 1, paddingBottom: bottom }]}>{children}</View>}
     </SafeAreaView>
   );
 }

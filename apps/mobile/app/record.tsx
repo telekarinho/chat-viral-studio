@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useReducer, useRef, useState } from "react";
 import { Pressable, StyleSheet, Text, TextInput, View } from "react-native";
 import { router, useLocalSearchParams } from "expo-router";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useKeepAwake } from "expo-keep-awake";
 import { useVideoPlayer, VideoView } from "expo-video";
 import * as Brightness from "expo-brightness";
@@ -24,6 +25,7 @@ const VIDEO_MBPS: Record<ResolutionPreset, number> = { "1080p": 5, "2k": 9, "4k"
 
 export default function RecordScreen() {
   useKeepAwake();
+  const insets = useSafeAreaInsets();
   const params = useLocalSearchParams<{ taskId?: string; contentId?: string; prompter?: string; partes?: string; ordem?: string; clipe?: string; instrucao?: string }>();
   // Gravar patrimônio: real footage for a MMIX factory order clip (rear camera, no speech)
   const patrimonio = params.ordem ? { ordem: Number(params.ordem), clipe: Number(params.clipe || 1) } : null;
@@ -325,7 +327,7 @@ export default function RecordScreen() {
         </View>
       ) : null}
 
-      <View style={st.top}>
+      <View style={[st.top, { top: 18 + insets.top }]}>
         <Pressable onPress={() => (recording ? undefined : router.back())} accessibilityRole="button" accessibilityLabel="Fechar" style={st.close} hitSlop={10}>
           <Text style={st.closeText}>✕</Text>
         </Pressable>
@@ -363,7 +365,7 @@ export default function RecordScreen() {
         </View>
       ) : null}
 
-      <View style={st.bottom}>
+      <View style={[st.bottom, { bottom: 28 + insets.bottom }]}>
         {message ? <Text style={st.message} accessibilityRole="alert">{message}</Text> : null}
         {!recording && !settingsOpen && !patrimonio ? (
           <View style={st.tip} testID="recording-tip">
