@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
-import { Text } from "react-native";
+import { Linking, Text } from "react-native";
+import { activateKeepAwakeAsync, deactivateKeepAwake } from "expo-keep-awake";
 import { checkForUpdate, installUpdate, type AvailableUpdate } from "../updater";
 import { reportError } from "../telemetry";
 import { Button, Card, colors } from "../ui";
@@ -27,17 +28,24 @@ export function UpdateBanner() {
         onPress={async () => {
           setBusy(true);
           setError(null);
+          // tela apagando no meio derruba o download de 60 MB
+          await activateKeepAwakeAsync("update").catch(() => undefined);
           try {
             await installUpdate(update);
           } catch (e) {
             reportError(e, "update");
             setError(e instanceof Error ? e.message : "Não consegui atualizar agora.");
           } finally {
+            deactivateKeepAwake("update");
             setBusy(false);
           }
         }}
         testID="update-now"
       />
+      {error ? (
+        // plano B: o gerenciador de downloads do Android aguenta queda de conexão e continua sozinho
+        <Button compact variant="secondary" label="BAIXAR PELO NAVEGADOR" onPress={() => void Linking.openURL(update.apkUrl)} testID="update-browser" />
+      ) : null}
     </Card>
   );
 }
