@@ -41,7 +41,7 @@ const DOWNLOAD_ATTEMPTS = 3;
 const RETRY_DELAY_MS = 2_000;
 
 /** Baixa o APK; queda de conexão no meio (Wi-Fi trocando, "connection abort") tenta de novo sozinho. */
-async function downloadApk(update: AvailableUpdate): Promise<File> {
+async function downloadApk(update: AvailableUpdate): Promise<Awaited<ReturnType<typeof File.downloadFileAsync>>> {
   let last: unknown = null;
   for (let attempt = 1; attempt <= DOWNLOAD_ATTEMPTS; attempt++) {
     const dest = new File(Paths.cache, "post-ai-update.apk");
