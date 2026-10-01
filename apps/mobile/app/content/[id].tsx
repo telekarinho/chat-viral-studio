@@ -11,6 +11,7 @@ import { generateForContent, saveUserEdit } from "../../src/generate";
 import { reportError } from "../../src/telemetry";
 import { setContentOnScreen } from "../../src/renderWatch";
 import { MetricsCard } from "../../src/components/MetricsCard";
+import { pullAssistantDraft } from "../../src/assistant";
 import { describeResult, downloadFinal, latestRenderJob, localFinal, localResult, requestFinalRender, type RenderJob, type RenderResult } from "../../src/finalRender";
 import { Button, Card, Chip, ErrorBox, Eyebrow, H1, Loading, Screen, Section, colors, s } from "../../src/ui";
 
@@ -31,6 +32,7 @@ export default function ContentScreen() {
   const [dlFailedJob, setDlFailedJob] = useState<string | null>(null);
   const [owner, setOwner] = useState<{ ws: Workspace; takes: Take[] } | null>(null);
   const [business, setBusiness] = useState(false);
+  const [assistantMsg, setAssistantMsg] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     const item = await getContent(id);
@@ -72,6 +74,14 @@ export default function ContentScreen() {
     }
   }, [id]);
   useFocusEffect(useCallback(() => void load().catch((e) => setError(String(e))), [load]));
+  // roteiro escrito pelo assistente (Claude) pelo conector: chega em segundo plano (sem travar a tela offline)
+  useFocusEffect(useCallback(() => {
+    void pullAssistantDraft(id).then((r) => {
+      if (!r) return;
+      setAssistantMsg("content" in r ? "✨ Chegou o roteiro escrito pelo seu assistente (Claude)." : `O roteiro do assistente foi recusado: ${r.errors.join(" ")}`);
+      if ("content" in r) void load();
+    }).catch(() => undefined);
+  }, [id, load]));
   // esta tela já acompanha e baixa o vídeo sozinha: sem aviso duplicado enquanto ela está aberta
   useFocusEffect(useCallback(() => {
     setContentOnScreen(id);
@@ -161,6 +171,7 @@ export default function ContentScreen() {
       <Eyebrow>{`${FORMAT_LABEL[c.format]} · ${c.draft?.pillar ?? c.pillarSlug}`}</Eyebrow>
       <H1>{d?.title ?? "Sem roteiro ainda"}</H1>
       {error ? <ErrorBox message={error} /> : null}
+      {assistantMsg ? <Card testID="assistant-draft"><Text style={{ color: colors.good, fontWeight: "800" }}>{assistantMsg}</Text></Card> : null}
       {c.project && owner ? <ProjectPanel c={c} ws={owner.ws} takes={owner.takes} onChange={() => void load()} /> : null}
 
       {!d ? (

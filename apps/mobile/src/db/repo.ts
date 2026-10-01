@@ -51,6 +51,8 @@ export interface ContentItem {
   precisaRevisao?: string | null;
   edit?: EditChoices | null;
   metrics?: PostMetrics | null;
+  /** primeira vez que tocou em POSTAR e em quais redes */
+  posted?: { at: string; to: string[] } | null;
 }
 
 export interface Take {
@@ -329,7 +331,7 @@ export async function runTaskAction(taskId: string, action: TaskAction): Promise
 type ContentRow = {
   id: string; workspace_id: string; date: string; format: string; pillar_slug: string; title: string; status: string; scheduled_for: string;
   draft: string | null; meta: string | null; selected_hook: number | null;
-  project?: string | null; derived_from?: string | null; precisa_revisao?: string | null; edit?: string | null; metrics?: string | null;
+  project?: string | null; derived_from?: string | null; precisa_revisao?: string | null; edit?: string | null; metrics?: string | null; posted?: string | null;
 };
 
 const toContent = (r: ContentRow): ContentItem => ({
@@ -339,11 +341,12 @@ const toContent = (r: ContentRow): ContentItem => ({
   project: r.project ? JSON.parse(r.project) : null, derivedFrom: r.derived_from ?? null, precisaRevisao: r.precisa_revisao ?? null,
   edit: r.edit ? JSON.parse(r.edit) : null,
   metrics: r.metrics ? JSON.parse(r.metrics) : null,
+  posted: r.posted ? JSON.parse(r.posted) : null,
 });
 
 const contentServerRow = (c: Omit<ContentItem, "draft" | "meta"> & { draft: ContentDraft | null; meta: ContentItem["meta"] }) => ({
   id: c.id, workspace_id: c.workspaceId, pillar_slug: c.pillarSlug, plan_date: c.date, scheduled_for: c.scheduledFor, format: c.format,
-  title: c.title, duration_seconds: c.draft?.duration_seconds ?? null, status: c.status, structured_payload: { selected_hook: c.selectedHook, project: c.project ?? null, edit: c.edit ?? null, metrics: c.metrics ?? null },
+  title: c.title, duration_seconds: c.draft?.duration_seconds ?? null, status: c.status, structured_payload: { selected_hook: c.selectedHook, project: c.project ?? null, edit: c.edit ?? null, metrics: c.metrics ?? null, posted_at: c.posted?.at ?? null, posted_to: c.posted?.to ?? [] },
   derived_from: c.derivedFrom ?? null, precisa_revisao: c.precisaRevisao ?? null, updated_at: nowIso(),
 });
 
@@ -421,6 +424,16 @@ export async function setContentMetrics(contentId: string, metrics: PostMetrics)
   const c = (await getContent(contentId))!;
   await enqueue(await workspaceById(c.workspaceId), "content_items", contentId, { rows: [contentServerRow(c)] });
   return c;
+}
+
+/** Toque em POSTAR: guarda a hora da 1ª postagem e junta as redes (o agente usa para achar o melhor horário). */
+export async function markPosted(contentId: string, network: string): Promise<void> {
+  const c = await getContent(contentId);
+  if (!c) return;
+  const posted = { at: c.posted?.at ?? nowIso(), to: [...new Set([...(c.posted?.to ?? []), network])] };
+  const db = await getDb();
+  await db.runAsync("UPDATE content_items SET posted = ?, updated_at = ? WHERE id = ?", JSON.stringify(posted), nowIso(), contentId);
+  await enqueue(await workspaceById(c.workspaceId), "content_items", contentId, { rows: [contentServerRow({ ...c, posted })] });
 }
 
 /** Conteúdos do perfil ativo que já têm números anotados (mais recentes primeiro). */

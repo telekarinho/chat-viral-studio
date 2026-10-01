@@ -11,6 +11,7 @@ import { deleteAllLocalTakes } from "../src/media";
 import { supabase } from "../src/supabase";
 import { getSyncStatus, syncNow } from "../src/sync/engine";
 import { recentErrors } from "../src/telemetry";
+import { ConnectorCard } from "../src/components/ConnectorCard";
 import { Button, Card, ErrorBox, Eyebrow, H1, Screen, Section, colors, s } from "../src/ui";
 import { toLocalDateKey } from "@postai/domain";
 
@@ -86,6 +87,9 @@ export default function Settings() {
         {sync.lastError ? <Text style={s.muted}>Último erro: {sync.lastError}</Text> : null}
         <Button compact variant="secondary" label="SINCRONIZAR AGORA" onPress={() => void syncNow()} />
       </Card>
+
+      <Section>Meu assistente de IA (Claude)</Section>
+      {ws ? <ConnectorCard ws={ws} /> : null}
 
       <Section>Lembretes</Section>
       <Card style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center" }}>

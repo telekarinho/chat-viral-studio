@@ -5,7 +5,7 @@ import * as Clipboard from "expo-clipboard";
 import { router, useFocusEffect, useLocalSearchParams } from "expo-router";
 import { useVideoPlayer, VideoView } from "expo-video";
 import { PLATFORMS, PLATFORM_LABEL, type Platform } from "@postai/domain";
-import { getContent, type ContentItem } from "../../src/db/repo";
+import { getContent, markPosted, type ContentItem } from "../../src/db/repo";
 import { describeResult, localCover, localFinal, localResult, type RenderResult } from "../../src/finalRender";
 import { FREE_SPEECH_MODEL } from "../../src/freeSpeech";
 import { MetricsCard } from "../../src/components/MetricsCard";
@@ -50,6 +50,7 @@ export default function FinalScreen() {
     try {
       const how = await shareVideoTo(target, uri!, draft);
       const label = target ? SHARE_TARGETS[target].label : "o app";
+      void markPosted(c!.id, target ? SHARE_TARGETS[target].label : "outros apps").catch((e) => reportError(e, "mark posted"));
       setNotice(how === "app"
         ? `Abrindo ${label} com o vídeo. A legenda já está copiada — é só colar.`
         : `Escolha ${label} na lista. A legenda já está copiada — é só colar.`);

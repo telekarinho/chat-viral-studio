@@ -83,7 +83,7 @@ jobs:
         run: |
           eval "$(supabase status -o env | sed 's/^/export /')"
           export SUPABASE_URL="$API_URL" SUPABASE_ANON_KEY="$ANON_KEY" SUPABASE_SERVICE_ROLE_KEY="$SERVICE_ROLE_KEY"
-          (cd apps/api && npx vitest run test/rls.integration.test.ts --reporter verbose)
+          (cd apps/api && npx vitest run test/rls.integration.test.ts test/mcp.integration.test.ts --reporter verbose)
           (cd apps/worker && npx vitest run test/worker.integration.test.ts test/mmix.integration.test.ts test/estudio.integration.test.ts test/privacy.integration.test.ts --reporter verbose)
       - name: Edge Function `generate` boots in Deno (auth + config guards)
         run: |
@@ -96,4 +96,4 @@ jobs:
           r=$(curl -s -X POST "$F" -H "apikey: $ANON_KEY" -H "Authorization: Bearer $T" -H 'Content-Type: application/json' -d "$body")
           echo "$r"; echo "$r" | grep -q llm_not_configured
       - name: Edge bundle is up to date
-        run: npm run build:edge -w @postai/api && git diff --exit-code supabase/functions
+        run: npm run build:edge -w @postai/api && npm run build:mcp -w @postai/api && git diff --exit-code supabase/functions

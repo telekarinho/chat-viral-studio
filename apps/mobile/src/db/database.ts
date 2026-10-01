@@ -52,6 +52,8 @@ export function getDb(): Promise<SQLite.SQLiteDatabase> {
       if (!ccols.some((c) => c.name === "edit")) await db.execAsync("ALTER TABLE content_items ADD COLUMN edit TEXT");
       // v5: números do post anotados pelo criador
       if (!ccols.some((c) => c.name === "metrics")) await db.execAsync("ALTER TABLE content_items ADD COLUMN metrics TEXT");
+      // v6: quando e onde foi postado (o agente usa para achar o melhor horário)
+      if (!ccols.some((c) => c.name === "posted")) await db.execAsync("ALTER TABLE content_items ADD COLUMN posted TEXT");
       return db;
     })();
   }
