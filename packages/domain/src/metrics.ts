@@ -35,6 +35,14 @@ export function engagementRate(m: Pick<PostMetrics, MetricField>): number {
   return m.views > 0 ? (m.likes + m.comments + m.shares + m.saves) / m.views : 0;
 }
 
+/**
+ * Compartilhamentos a cada 1.000 visualizações. O Instagram diz que envios por alcance são um dos 3
+ * sinais que mais pesam (com tempo assistido e curtidas por alcance) — é o número a acompanhar.
+ */
+export function sharesPer1k(m: Pick<PostMetrics, "views" | "shares">): number {
+  return m.views > 0 ? (m.shares / m.views) * 1000 : 0;
+}
+
 export interface MetricsItem { id: string; title: string; pillarSlug: string; metrics: PostMetrics }
 
 export interface PillarPerformance { pillarSlug: string; posts: number; avgViews: number; avgEngagement: number }

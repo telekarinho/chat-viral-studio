@@ -34,3 +34,11 @@ describe("números dos posts", () => {
     expect(metricsInsights([]).best).toBeNull();
   });
 });
+
+describe("envios por alcance", () => {
+  it("compartilhamentos a cada mil visualizações", async () => {
+    const { sharesPer1k } = await import("../src");
+    expect(sharesPer1k({ views: 2000, shares: 10 })).toBe(5);
+    expect(sharesPer1k({ views: 0, shares: 3 })).toBe(0);
+  });
+});

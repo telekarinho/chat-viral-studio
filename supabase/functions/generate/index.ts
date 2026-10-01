@@ -150,7 +150,7 @@ var SYNC_POLICY = { baseDelayMs: 5e3, maxDelayMs: 30 * 6e4, maxAttempts: 8 };
 
 // ../../packages/domain/src/ai/contract.ts
 import { z } from "npm:zod@4";
-var PROMPT_VERSION = "content-v1.2.0";
+var PROMPT_VERSION = "content-v1.3.0";
 var NARRATIVE_STRUCTURES = ["confissao", "pergunta", "contraste", "historia", "conselho", "observacao"];
 var PLATFORMS = ["instagram", "tiktok", "facebook", "youtube_shorts"];
 var text = (min = 1, max = 2e3) => z.string().trim().min(min).max(max);
@@ -226,6 +226,15 @@ var RODRIGO_PROFILE = {
     "exemplos concretos do dia a dia, n\xE3o abstra\xE7\xF5es"
   ]
 };
+var VIRAL_FORMATS = [
+  "\u201Cningu\xE9m te conta que\u2026\u201D (revela algo que todo mundo vive e ningu\xE9m fala)",
+  "\u201Ceu costumava\u2026 hoje eu\u2026\u201D (antes e depois pessoal)",
+  "\u201Co erro que eu cometi com\u2026\u201D (confiss\xE3o com aprendizado)",
+  "pergunta direta que o espectador responde na cabe\xE7a (\u201Cquando foi a \xFAltima vez que voc\xEA\u2026?\u201D)",
+  "contraste: o que todo mundo pensa \xD7 o que acontece de verdade",
+  "cena concreta do dia (lugar, hora, frase ouvida) que vira li\xE7\xE3o",
+  "lista curta de 3 (\u201C3 coisas que\u2026\u201D), s\xF3 no v\xEDdeo principal"
+];
 var DURATION_RANGE = {
   thought: [5, 15],
   main_video: [45, 120]
@@ -248,9 +257,18 @@ function buildPrompt(input) {
     "- uma \xFAnica ideia por v\xEDdeo, com um detalhe espec\xEDfico e real (lugar, hora, objeto, frase ouvida) em vez de abstra\xE7\xE3o;",
     "- tens\xE3o no MAS: algo que o espectador tamb\xE9m vive e n\xE3o admite;",
     "- o POR ISSO entrega uma virada pr\xE1tica que d\xE1 vontade de salvar ou mandar para algu\xE9m;",
-    "- o CTA pede uma resposta simples nos coment\xE1rios ligada ao tema (nada de 'curte e compartilha');",
+    "- a 1\xAA frase j\xE1 diz o assunto com a palavra que algu\xE9m pesquisaria (a plataforma transcreve a fala e usa na busca); nada de 'oi, gente' nem contexto antes do gancho;",
+    "- o que mais espalha \xE9 algu\xE9m MANDAR o v\xEDdeo para outra pessoa: escreva pensando em quem vai receber;",
+    "- o CTA \xE9 UM destes, o que combinar: pedir para mandar para algu\xE9m espec\xEDfico ('manda para quem\u2026') ou uma pergunta simples para responder nos coment\xE1rios, ligada ao tema (nada de 'curte e compartilha');",
     "- screen_text: 2 a 5 palavras que resumem o v\xEDdeo sem repetir o gancho;",
     "- legendas por plataforma adaptadas (TikTok curta e direta; Instagram com respiro; YouTube Shorts com t\xEDtulo forte);",
+    "Formato que viraliza (escolha UM que combine com o tema e use de verdade, sem for\xE7ar):",
+    ...VIRAL_FORMATS.map((f) => `- ${f};`),
+    "Coer\xEAncia (o texto \xE9 lido em voz alta, parte por parte, e precisa fazer sentido para quem nunca viu o perfil):",
+    "- uma ideia s\xF3, do come\xE7o ao fim; cada frase continua a anterior (nada de frases soltas de efeito, colcha de retalhos ou prov\xE9rbio gen\xE9rico);",
+    "- o gancho promete algo e o final entrega exatamente isso; o tema do dia (pilar) \xE9 o assunto, n\xE3o um detalhe;",
+    "- nada de met\xE1fora confusa nem palavra dif\xEDcil; se uma frase n\xE3o d\xE1 para entender de primeira, reescreva;",
+    "- antes de responder, leia o roteiro inteiro em voz alta mentalmente: se algum trecho n\xE3o se liga ao resto, corte.",
     "Responda somente no JSON do schema."
   ].join("\n");
   const user = [
@@ -259,7 +277,7 @@ function buildPrompt(input) {
     b ? "" : `Pilar editorial: ${input.pillarName}.`,
     input.eventText ? `${b ? "Situa\xE7\xE3o real da empresa hoje" : "Acontecimento real de hoje contado pelo criador"} (transforme em conte\xFAdo, preserve os fatos): "${input.eventText}"` : b ? "Sem acontecimento espec\xEDfico: parta de uma dor real do cliente." : "Sem acontecimento espec\xEDfico: parta de uma situa\xE7\xE3o comum e concreta do dia dele.",
     input.brief ? `Briefing do projeto (siga \xE0 risca; dados do equipamento s\xF3 os daqui): ${input.brief}` : "",
-    input.format === "main_video" ? "Inclua em 'versions' varia\xE7\xF5es de 15s, 30s e 60s quando fizer sentido." : "Em 'versions' inclua no m\xE1ximo uma varia\xE7\xE3o de at\xE9 15s.",
+    input.format === "main_video" ? "Inclua em 'versions' varia\xE7\xF5es de 15s, 30s e 60s quando fizer sentido." : "Pensamento do Dia: 3 a 5 frases curtas no 'script'. A 1\xAA frase \xC9 o gancho (at\xE9 12 palavras; \xE9 gravada sozinha como 'Gancho'); as do meio desenvolvem UMA ideia; a \xFAltima antes do fechamento \xE9 a virada que d\xE1 vontade de mandar para algu\xE9m. Em 'versions' inclua no m\xE1ximo uma varia\xE7\xE3o de at\xE9 15s.",
     input.recentSummaries.length ? `Conte\xFAdos recentes (n\xE3o repita assunto, frase, met\xE1fora, gancho, CTA nem estrutura):
 ${input.recentSummaries.map((s) => `- ${s}`).join("\n")}` : "",
     input.avoid

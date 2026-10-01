@@ -30,6 +30,17 @@ export const RODRIGO_PROFILE: CreatorProfile = {
   ],
 };
 
+/** Formatos de vídeo curto que mais retêm e são compartilhados (sempre-verdes: não dependem da tendência do dia). */
+export const VIRAL_FORMATS = [
+  "“ninguém te conta que…” (revela algo que todo mundo vive e ninguém fala)",
+  "“eu costumava… hoje eu…” (antes e depois pessoal)",
+  "“o erro que eu cometi com…” (confissão com aprendizado)",
+  "pergunta direta que o espectador responde na cabeça (“quando foi a última vez que você…?”)",
+  "contraste: o que todo mundo pensa × o que acontece de verdade",
+  "cena concreta do dia (lugar, hora, frase ouvida) que vira lição",
+  "lista curta de 3 (“3 coisas que…”), só no vídeo principal",
+] as const;
+
 export const DURATION_RANGE: Record<"thought" | "main_video", [number, number]> = {
   thought: [5, 15],
   main_video: [45, 120],
@@ -65,9 +76,18 @@ export function buildPrompt(input: PromptInput): { system: string; user: string;
     "- uma única ideia por vídeo, com um detalhe específico e real (lugar, hora, objeto, frase ouvida) em vez de abstração;",
     "- tensão no MAS: algo que o espectador também vive e não admite;",
     "- o POR ISSO entrega uma virada prática que dá vontade de salvar ou mandar para alguém;",
-    "- o CTA pede uma resposta simples nos comentários ligada ao tema (nada de 'curte e compartilha');",
+    "- a 1ª frase já diz o assunto com a palavra que alguém pesquisaria (a plataforma transcreve a fala e usa na busca); nada de 'oi, gente' nem contexto antes do gancho;",
+    "- o que mais espalha é alguém MANDAR o vídeo para outra pessoa: escreva pensando em quem vai receber;",
+    "- o CTA é UM destes, o que combinar: pedir para mandar para alguém específico ('manda para quem…') ou uma pergunta simples para responder nos comentários, ligada ao tema (nada de 'curte e compartilha');",
     "- screen_text: 2 a 5 palavras que resumem o vídeo sem repetir o gancho;",
     "- legendas por plataforma adaptadas (TikTok curta e direta; Instagram com respiro; YouTube Shorts com título forte);",
+    "Formato que viraliza (escolha UM que combine com o tema e use de verdade, sem forçar):",
+    ...VIRAL_FORMATS.map((f) => `- ${f};`),
+    "Coerência (o texto é lido em voz alta, parte por parte, e precisa fazer sentido para quem nunca viu o perfil):",
+    "- uma ideia só, do começo ao fim; cada frase continua a anterior (nada de frases soltas de efeito, colcha de retalhos ou provérbio genérico);",
+    "- o gancho promete algo e o final entrega exatamente isso; o tema do dia (pilar) é o assunto, não um detalhe;",
+    "- nada de metáfora confusa nem palavra difícil; se uma frase não dá para entender de primeira, reescreva;",
+    "- antes de responder, leia o roteiro inteiro em voz alta mentalmente: se algum trecho não se liga ao resto, corte.",
     "Responda somente no JSON do schema.",
   ].join("\n");
   const user = [
@@ -76,7 +96,9 @@ export function buildPrompt(input: PromptInput): { system: string; user: string;
     b ? "" : `Pilar editorial: ${input.pillarName}.`,
     input.eventText ? `${b ? "Situação real da empresa hoje" : "Acontecimento real de hoje contado pelo criador"} (transforme em conteúdo, preserve os fatos): "${input.eventText}"` : b ? "Sem acontecimento específico: parta de uma dor real do cliente." : "Sem acontecimento específico: parta de uma situação comum e concreta do dia dele.",
     input.brief ? `Briefing do projeto (siga à risca; dados do equipamento só os daqui): ${input.brief}` : "",
-    input.format === "main_video" ? "Inclua em 'versions' variações de 15s, 30s e 60s quando fizer sentido." : "Em 'versions' inclua no máximo uma variação de até 15s.",
+    input.format === "main_video"
+      ? "Inclua em 'versions' variações de 15s, 30s e 60s quando fizer sentido."
+      : "Pensamento do Dia: 3 a 5 frases curtas no 'script'. A 1ª frase É o gancho (até 12 palavras; é gravada sozinha como 'Gancho'); as do meio desenvolvem UMA ideia; a última antes do fechamento é a virada que dá vontade de mandar para alguém. Em 'versions' inclua no máximo uma variação de até 15s.",
     input.recentSummaries.length ? `Conteúdos recentes (não repita assunto, frase, metáfora, gancho, CTA nem estrutura):\n${input.recentSummaries.map((s) => `- ${s}`).join("\n")}` : "",
     input.avoid,
   ]

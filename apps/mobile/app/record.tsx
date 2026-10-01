@@ -6,10 +6,10 @@ import { useVideoPlayer, VideoView } from "expo-video";
 import * as Brightness from "expo-brightness";
 import { Camera, useCameraDevice, useCameraPermission, useMicrophonePermission, type VideoFile } from "react-native-vision-camera";
 import {
-  PRESET_LABEL, PRODUCTION_MODES, SHOT_LIBRARY, availablePresets, buildSegments, initialTeleprompter, isBusiness, type ProjectInfo, type ShotKey, pickFormat, segmentProgress, supportedFps, teleprompterReducer,
-  type ResolutionPreset, type ScriptSegment,
+  DEFAULT_EDIT_CHOICES, PRESET_LABEL, PRODUCTION_MODES, RECORDING_CHECKLIST, RECORDING_TIPS, SHOT_LIBRARY, availablePresets, buildSegments, initialTeleprompter, isBusiness, type ProjectInfo, type ShotKey, pickFormat, segmentProgress, supportedFps, teleprompterReducer,
+  type ResolutionPreset, type Retouch, type ScriptSegment,
 } from "@postai/domain";
-import { getContent, getTask, latestTakesBySegment, registerTake, requireWorkspace, queuePatrimonio, runTaskAction, workspaceById, updateSettings, updateTakeMeta, type Take } from "../src/db/repo";
+import { getContent, getTask, latestTakesBySegment, registerTake, requireWorkspace, queuePatrimonio, runTaskAction, setEditChoices, workspaceById, updateSettings, updateTakeMeta, type ContentItem, type Take } from "../src/db/repo";
 import { freeDiskBytes, persistRecording } from "../src/media";
 import { newId } from "../src/config";
 import { syncNow } from "../src/sync/engine";
@@ -48,6 +48,10 @@ export default function RecordScreen() {
   const [shot, setShot] = useState<ShotKey | null>(null);
   const [category, setCategory] = useState("livre");
   const [tp, dispatch] = useReducer(teleprompterReducer, initialTeleprompter);
+  // embelezamento da pele: escolhido aqui, aplicado na montagem do vídeo final
+  const [content, setContent] = useState<ContentItem | null>(null);
+  const [retouch, setRetouch] = useState<Retouch>("forte");
+  const [settingsOpen, setSettingsOpen] = useState(false);
   const [phase, setPhase] = useState<Phase>("ready");
   const [message, setMessage] = useState<string | null>(null);
   const [saved, setSaved] = useState<Take | null>(null);
@@ -69,6 +73,11 @@ export default function RecordScreen() {
       const content = contentId ? await getContent(contentId) : null;
       setCategory(params.ordem ? "patrimonio" : task?.kind ?? content?.format ?? "livre");
       if (params.instrucao) setScript(params.instrucao);
+      if (content) {
+        setContent(content);
+        const business = isBusiness((await workspaceById(content.workspaceId)).profile);
+        setRetouch(content.edit?.retouch ?? (business ? "leve" : "forte"));
+      }
       if (content?.project) {
         setProject(content.project);
         setShot(PRODUCTION_MODES[content.project.mode].shots[0] ?? null);
@@ -274,7 +283,20 @@ export default function RecordScreen() {
   }
 
   const busy = phase === "saving";
+  const recording = phase === "recording";
   const ringLight = light !== "off" && position === "front";
+  const nextRetouch = (r: Retouch): Retouch => (r === "forte" ? "leve" : r === "leve" ? "off" : "forte");
+  function cycleRetouch() {
+    if (!content) return;
+    const r = nextRetouch(retouch);
+    setRetouch(r);
+    void setEditChoices(content.id, { ...DEFAULT_EDIT_CHOICES, ...content.edit, retouch: r }).then(setContent).catch((e) => reportError(e, "retouch"));
+  }
+  const nextCountdown = tp.countdownSeconds === 0 ? 3 : tp.countdownSeconds === 3 ? 5 : 0;
+  // dica de gravação da parte atual; antes da 1ª parte, o básico de luz/enquadramento
+  const role = segments && segIndex !== null ? segments[segIndex]?.role : null;
+  const firstPart = !segments || recordedParts.length === 0;
+  const tip = role && !firstPart ? RECORDING_TIPS[role] : `${RECORDING_CHECKLIST}. ${RECORDING_TIPS[role ?? "hook"]}`;
   return (
     <View style={[st.root, ringLight && { backgroundColor: RING_COLOR[light] }]} testID="record-screen">
       <View style={st.frame}>
@@ -293,8 +315,9 @@ export default function RecordScreen() {
           torch={position === "back" && light !== "off" ? "on" : "off"}
           resizeMode="cover"
         />
+        {/* luz de tela estilo TikTok: brilho suave vindo das bordas */}
+        {ringLight ? <SoftGlow color={RING_COLOR[light]} /> : null}
       </View>
-      {ringLight ? <View pointerEvents="none" style={[st.ring, { borderColor: RING_COLOR[light] }]} testID="ring-light" /> : null}
       <Teleprompter text={script || "Sem roteiro — fale livremente."} state={tp} dispatch={dispatch} visible={prompterOn} />
       {tp.phase === "countdown" ? (
         <View style={st.countdown} pointerEvents="none" testID="countdown">
@@ -303,67 +326,103 @@ export default function RecordScreen() {
       ) : null}
 
       <View style={st.top}>
-        <Pill label="✕" onPress={() => (phase === "recording" ? undefined : router.back())} hint="Fechar" />
-        {phase === "recording" ? (
+        <Pressable onPress={() => (recording ? undefined : router.back())} accessibilityRole="button" accessibilityLabel="Fechar" style={st.close} hitSlop={10}>
+          <Text style={st.closeText}>✕</Text>
+        </Pressable>
+        {recording ? (
           <Text style={st.rec} testID="rec-indicator">{`● REC ${elapsed}s`}</Text>
         ) : segments && segIndex !== null ? (
-          <Text style={st.meta} testID="part-indicator" accessible accessibilityRole="header" accessibilityLabel={`Parte ${segIndex + 1} de ${segments.length}, ${segments[segIndex]?.label ?? ""}`}>
-            {`Parte ${segIndex + 1}/${segments.length} · ${segments[segIndex]?.label ?? ""}`}
-          </Text>
+          <View style={st.topPill}>
+            <Text style={st.topPillText} testID="part-indicator" accessible accessibilityRole="header" accessibilityLabel={`Parte ${segIndex + 1} de ${segments.length}, ${segments[segIndex]?.label ?? ""}`}>
+              {`Parte ${segIndex + 1}/${segments.length} · ${segments[segIndex]?.label ?? ""}`}
+            </Text>
+          </View>
         ) : (
-          <Text style={st.meta}>{PRESET_LABEL[format && presets.includes(preset) ? preset : "1080p"]} · {effectiveFps}fps · 9:16</Text>
+          <View style={st.topPill}><Text style={st.topPillText}>{`${PRESET_LABEL[format && presets.includes(preset) ? preset : "1080p"]} · ${effectiveFps}fps`}</Text></View>
         )}
-        <Pill label="⟲" onPress={() => phase !== "recording" && setPosition(position === "front" ? "back" : "front")} hint="Trocar câmera" testID="flip-camera" />
+        <View style={{ width: 44 }} />
       </View>
+
+      {/* trilho de botões à direita, como no TikTok: ícone + nome embaixo */}
+      {!recording ? (
+        <View style={st.rail}>
+          <RailButton icon="⟲" label="Virar" onPress={() => setPosition(position === "front" ? "back" : "front")} testID="flip-camera" />
+          <RailButton icon="☀" label={LIGHT_LABEL[light]} selected={light !== "off"} onPress={() => setLight(NEXT_LIGHT[light])} testID="toggle-light" />
+          <RailButton icon="⏱" label={tp.countdownSeconds ? `${tp.countdownSeconds}s` : "Timer"} selected={tp.countdownSeconds > 0} onPress={() => dispatch({ type: "setCountdown", seconds: nextCountdown })} testID="timer" />
+          {content && !patrimonio ? (
+            <RailButton icon="✨" label={RETOUCH_SHORT[retouch]} selected={retouch !== "off"} onPress={cycleRetouch} testID="beauty" />
+          ) : null}
+          <RailButton icon="Aa" label={prompterOn ? "Texto" : "Sem texto"} selected={prompterOn} onPress={() => setPrompterOn(!prompterOn)} testID="toggle-prompter" />
+          <RailButton icon="⚙" label="Ajustes" selected={settingsOpen} onPress={() => setSettingsOpen(!settingsOpen)} testID="open-settings" />
+        </View>
+      ) : null}
       {project ? (
         <View style={st.studio} pointerEvents="none" testID="studio-indicator">
           <Text style={st.meta}>{`🎥 ${project.skuNome ?? project.sku ?? "sem SKU"}${shot ? ` · ${SHOT_LIBRARY[shot].label}` : ""}`}</Text>
-          {shot && phase !== "recording" ? <Text style={st.meta}>{SHOT_LIBRARY[shot].hint}</Text> : null}
+          {shot && !recording ? <Text style={st.meta}>{SHOT_LIBRARY[shot].hint}</Text> : null}
         </View>
       ) : null}
 
       <View style={st.bottom}>
         {message ? <Text style={st.message} accessibilityRole="alert">{message}</Text> : null}
-        {phase !== "recording" ? (
-          <>
+        {!recording && !settingsOpen && !patrimonio ? (
+          <View style={st.tip} testID="recording-tip">
+            <Text style={st.tipText}>{`💡 ${tip}`}</Text>
+            {content && retouch !== "off" ? <Text style={st.tipSub}>{`✨ Embelezamento ${RETOUCH_SHORT[retouch].toLowerCase()} entra no vídeo final (a câmera mostra sem filtro)`}</Text> : null}
+          </View>
+        ) : null}
+        {settingsOpen && !recording ? (
+          <View style={st.sheet} testID="settings-sheet">
+            <Text style={st.sheetTitle}>Qualidade</Text>
             <View style={st.row}>
               {presets.map((p) => <Pill key={p} label={PRESET_LABEL[p]} selected={p === preset} onPress={() => { setPreset(p); savePrefs({ resolution: p }); }} testID={`res-${p}`} />)}
               {fpsOptions.map((f) => <Pill key={f} label={`${f}fps`} selected={f === effectiveFps} onPress={() => { setFps(f); savePrefs({ fps: f }); }} />)}
             </View>
-            {project ? (
-              <View style={st.row}>
-                {PRODUCTION_MODES[project.mode].shots.map((k) => <Pill key={k} label={SHOT_LIBRARY[k].label} selected={k === shot} onPress={() => setShot(k)} testID={`shot-${k}`} />)}
-              </View>
-            ) : null}
+            <Text style={st.sheetTitle}>Contagem antes de gravar</Text>
             <View style={st.row}>
-              <Pill label={LIGHT_LABEL[light]} selected={light !== "off"} onPress={() => setLight(NEXT_LIGHT[light])} hint="Luz para gravar" testID="toggle-light" />
-              <Pill label={prompterOn ? "Prompter ON" : "Prompter OFF"} selected={prompterOn} onPress={() => setPrompterOn(!prompterOn)} testID="toggle-prompter" />
-              {[0, 3, 5].map((c) => <Pill key={c} label={c ? `${c}s` : "sem contagem"} selected={tp.countdownSeconds === c} onPress={() => dispatch({ type: "setCountdown", seconds: c })} testID={`countdown-${c}`} />)}
+              {[0, 3, 5].map((c) => <Pill key={c} label={c ? `${c}s` : "Sem contagem"} selected={tp.countdownSeconds === c} onPress={() => dispatch({ type: "setCountdown", seconds: c })} testID={`countdown-${c}`} />)}
             </View>
-          </>
-        ) : null}
-        {prompterOn ? (
-          <View style={st.row}>
-            <Pill label="A−" onPress={() => dispatch({ type: "setFontSize", value: tp.fontSize - 4 })} testID="font-minus" />
-            <Pill label="A+" onPress={() => dispatch({ type: "setFontSize", value: tp.fontSize + 4 })} testID="font-plus" />
-            <Pill label="🐢" onPress={() => dispatch({ type: "setSpeed", value: tp.speed - 1 })} hint="Mais devagar" testID="speed-minus" />
-            <Text style={st.meta}>vel {tp.speed}</Text>
-            <Pill label="🐇" onPress={() => dispatch({ type: "setSpeed", value: tp.speed + 1 })} hint="Mais rápido" testID="speed-plus" />
-            <Pill label="⇋" selected={tp.mirrored} onPress={() => dispatch({ type: "toggleMirror" })} hint="Espelhar" testID="mirror" />
-            <Pill label={tp.phase === "paused" ? "▶" : "❚❚"} onPress={() => dispatch({ type: tp.phase === "paused" ? "resume" : "pause" })} hint="Pausar ou continuar texto" testID="prompter-pause" />
-            <Pill label="↺" onPress={() => dispatch({ type: "restart" })} hint="Reiniciar texto" testID="prompter-restart" />
+            {prompterOn ? (
+              <>
+                <Text style={st.sheetTitle}>{`Texto na tela · velocidade ${tp.speed}`}</Text>
+                <View style={st.row}>
+                  <Pill label="A−" onPress={() => dispatch({ type: "setFontSize", value: tp.fontSize - 4 })} hint="Letra menor" testID="font-minus" />
+                  <Pill label="A+" onPress={() => dispatch({ type: "setFontSize", value: tp.fontSize + 4 })} hint="Letra maior" testID="font-plus" />
+                  <Pill label="🐢 Devagar" onPress={() => dispatch({ type: "setSpeed", value: tp.speed - 1 })} hint="Mais devagar" testID="speed-minus" />
+                  <Pill label="🐇 Rápido" onPress={() => dispatch({ type: "setSpeed", value: tp.speed + 1 })} hint="Mais rápido" testID="speed-plus" />
+                  <Pill label="⇋ Espelhar" selected={tp.mirrored} onPress={() => dispatch({ type: "toggleMirror" })} hint="Espelhar" testID="mirror" />
+                  <Pill label="↺ Do começo" onPress={() => dispatch({ type: "restart" })} hint="Reiniciar texto" testID="prompter-restart" />
+                </View>
+              </>
+            ) : null}
+            {project ? (
+              <>
+                <Text style={st.sheetTitle}>Tomada</Text>
+                <View style={st.row}>
+                  {PRODUCTION_MODES[project.mode].shots.map((k) => <Pill key={k} label={SHOT_LIBRARY[k].label} selected={k === shot} onPress={() => setShot(k)} testID={`shot-${k}`} />)}
+                </View>
+              </>
+            ) : null}
           </View>
         ) : null}
-        <Pressable
-          onPress={onRecordPress}
-          disabled={busy || tp.phase === "countdown"}
-          accessibilityRole="button"
-          accessibilityLabel={phase === "recording" ? "Parar gravação" : "Iniciar gravação"}
-          style={[st.recBtn, phase === "recording" && st.recBtnOn]}
-          testID="record-button"
-        >
-          <View style={[st.recInner, phase === "recording" && st.recInnerOn]} />
-        </Pressable>
+        <View style={st.recRow}>
+          <View style={st.side}>
+            {prompterOn && (recording || tp.phase === "paused") ? (
+              <Pill label={tp.phase === "paused" ? "▶ Texto" : "❚❚ Texto"} onPress={() => dispatch({ type: tp.phase === "paused" ? "resume" : "pause" })} hint="Pausar ou continuar texto" testID="prompter-pause" />
+            ) : null}
+          </View>
+          <Pressable
+            onPress={onRecordPress}
+            disabled={busy || tp.phase === "countdown"}
+            accessibilityRole="button"
+            accessibilityLabel={recording ? "Parar gravação" : "Iniciar gravação"}
+            style={[st.recBtn, recording && st.recBtnOn]}
+            testID="record-button"
+          >
+            <View style={[st.recInner, recording && st.recInnerOn]} />
+          </Pressable>
+          <View style={st.side} />
+        </View>
         {busy ? <Text style={st.meta}>Salvando no aparelho…</Text> : null}
       </View>
     </View>
@@ -409,27 +468,68 @@ function Pill({ label, onPress, selected, hint, testID }: { label: string; onPre
   );
 }
 
+/** Botão do trilho lateral (estilo TikTok): ícone redondo com o nome embaixo. */
+function RailButton({ icon, label, onPress, selected, testID }: { icon: string; label: string; onPress: () => void; selected?: boolean; testID?: string }) {
+  return (
+    <Pressable onPress={onPress} accessibilityRole="button" accessibilityLabel={label} accessibilityState={{ selected: Boolean(selected) }} testID={testID} style={st.railBtn} hitSlop={6}>
+      <View style={[st.railIcon, selected && st.railIconOn]}>
+        <Text style={[st.railIconText, selected && { color: "#000000" }]}>{icon}</Text>
+      </View>
+      <Text style={st.railLabel} numberOfLines={1}>{label}</Text>
+    </Pressable>
+  );
+}
+
+const GLOW_LAYERS = 14;
+/** Luz de tela suave: bordas claras que se desfazem para o centro (sem moldura dura). */
+function SoftGlow({ color }: { color: string }) {
+  return (
+    <View pointerEvents="none" style={StyleSheet.absoluteFill} testID="ring-light">
+      {Array.from({ length: GLOW_LAYERS }, (_, i) => (
+        <View key={i} style={[StyleSheet.absoluteFill, { borderColor: color, borderWidth: 6 + i * 5, borderRadius: 40 + i * 4, opacity: 0.1 }]} />
+      ))}
+    </View>
+  );
+}
+
 type LightMode = "off" | "warm" | "neutral";
 const NEXT_LIGHT: Record<LightMode, LightMode> = { off: "warm", warm: "neutral", neutral: "off" };
-const LIGHT_LABEL: Record<LightMode, string> = { off: "💡 Luz", warm: "💡 Quente", neutral: "💡 Neutra" };
+const LIGHT_LABEL: Record<LightMode, string> = { off: "Luz", warm: "Quente", neutral: "Branca" };
 const RING_COLOR: Record<LightMode, string> = { off: "#000000", warm: "#FFE9CC", neutral: "#FFFFFF" };
+const RETOUCH_SHORT: Record<Retouch, string> = { forte: "Forte", leve: "Natural", off: "Embelezar" };
 
 const st = StyleSheet.create({
   root: { flex: 1, backgroundColor: "#000000", justifyContent: "center" },
   frame: { width: "100%", aspectRatio: 9 / 16, alignSelf: "center", overflow: "hidden" },
-  ring: { ...StyleSheet.absoluteFillObject, borderWidth: 34, borderRadius: 28 },
   top: { position: "absolute", top: 18, left: 12, right: 12, flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
-  studio: { position: "absolute", top: 64, left: 12, right: 12, alignItems: "center", gap: 2 },
-  bottom: { position: "absolute", bottom: 24, left: 12, right: 12, alignItems: "center", gap: 10 },
+  close: { width: 44, height: 44, alignItems: "center", justifyContent: "center" },
+  closeText: { color: "#FFFFFF", fontSize: 26, fontWeight: "700", textShadowColor: "rgba(0,0,0,0.6)", textShadowRadius: 4 },
+  topPill: { paddingHorizontal: 18, paddingVertical: 10, borderRadius: 24, backgroundColor: "rgba(0,0,0,0.45)" },
+  topPillText: { color: "#FFFFFF", fontWeight: "800", fontSize: 15 },
+  rail: { position: "absolute", top: 84, right: 8, alignItems: "center", gap: 14 },
+  railBtn: { alignItems: "center", width: 62 },
+  railIcon: { width: 46, height: 46, borderRadius: 23, backgroundColor: "rgba(0,0,0,0.35)", alignItems: "center", justifyContent: "center" },
+  railIconOn: { backgroundColor: "#FFFFFF" },
+  railIconText: { color: "#FFFFFF", fontSize: 20, fontWeight: "900" },
+  railLabel: { color: "#FFFFFF", fontSize: 11, fontWeight: "800", marginTop: 3, textShadowColor: "rgba(0,0,0,0.8)", textShadowRadius: 3 },
+  studio: { position: "absolute", top: 64, left: 12, right: 80, alignItems: "center", gap: 2 },
+  bottom: { position: "absolute", bottom: 28, left: 12, right: 12, alignItems: "center", gap: 10 },
+  sheet: { alignSelf: "stretch", backgroundColor: "rgba(0,0,0,0.78)", borderRadius: 18, padding: 12, gap: 8 },
+  sheetTitle: { color: "#FFFFFF", fontWeight: "900", fontSize: 13, opacity: 0.85 },
   row: { flexDirection: "row", flexWrap: "wrap", gap: 8, justifyContent: "center", alignItems: "center" },
-  pill: { minHeight: 44, minWidth: 44, paddingHorizontal: 12, borderRadius: 22, backgroundColor: "rgba(0,0,0,0.55)", alignItems: "center", justifyContent: "center" },
+  recRow: { flexDirection: "row", alignItems: "center", justifyContent: "center", alignSelf: "stretch" },
+  side: { flex: 1, alignItems: "center" },
+  pill: { minHeight: 44, minWidth: 44, paddingHorizontal: 12, borderRadius: 22, backgroundColor: "rgba(255,255,255,0.14)", alignItems: "center", justifyContent: "center" },
   pillText: { color: "#FFFFFF", fontWeight: "800", fontSize: 13 },
   meta: { color: "#FFFFFF", fontWeight: "700", fontSize: 13 },
-  rec: { color: "#FF4D4D", fontWeight: "900", fontSize: 15 },
+  tip: { alignSelf: "stretch", backgroundColor: "rgba(0,0,0,0.5)", paddingHorizontal: 12, paddingVertical: 8, borderRadius: 14, gap: 4 },
+  tipText: { color: "#FFFFFF", fontWeight: "700", fontSize: 13, lineHeight: 18 },
+  tipSub: { color: "#FFFFFF", fontWeight: "600", fontSize: 11, opacity: 0.8 },
+  rec: { color: "#FF4D4D", fontWeight: "900", fontSize: 16, backgroundColor: "rgba(0,0,0,0.45)", paddingHorizontal: 14, paddingVertical: 8, borderRadius: 18, overflow: "hidden" },
   message: { color: "#FFFFFF", backgroundColor: "rgba(180,35,24,0.85)", padding: 10, borderRadius: 10, fontWeight: "700" },
-  recBtn: { width: 78, height: 78, borderRadius: 39, borderWidth: 5, borderColor: "#FFFFFF", alignItems: "center", justifyContent: "center" },
+  recBtn: { width: 84, height: 84, borderRadius: 42, borderWidth: 5, borderColor: "#FFFFFF", alignItems: "center", justifyContent: "center" },
   recBtnOn: { borderColor: "#FF4D4D" },
-  recInner: { width: 58, height: 58, borderRadius: 29, backgroundColor: "#FF3B30" },
+  recInner: { width: 66, height: 66, borderRadius: 33, backgroundColor: "#FE2C55" },
   recInnerOn: { width: 30, height: 30, borderRadius: 6 },
   countdown: { ...StyleSheet.absoluteFillObject, alignItems: "center", justifyContent: "center" },
   countdownText: { color: "#FFFFFF", fontSize: 120, fontWeight: "900", textShadowColor: "#000", textShadowRadius: 12 },
