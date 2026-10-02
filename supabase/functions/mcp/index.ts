@@ -272,34 +272,41 @@ var MOOD_LABEL = {
   empresa: "Vendas / produto",
   calmo: "Calmo"
 };
-var mk = (id, mood, title, artist, sha256, durationSec) => (
+var mk = (id, mood, title, artist, sha256, durationSec, bpm) => (
   // licença Mixkit Free: inclui uso comercial
-  { id: `mixkit-${id}`, mood, title, artist, url: `https://assets.mixkit.co/music/${id}/${id}.mp3`, sha256, durationSec, license: "comercial" }
+  { id: `mixkit-${id}`, mood, title, artist, url: `https://assets.mixkit.co/music/${id}/${id}.mp3`, sha256, durationSec, license: "comercial", bpm, trending: null }
 );
 var MUSIC_LIBRARY = [
-  mk(22, "reflexao", "Piano Reflections", "Ahjay Stelino", "7d58c4255d91f58e29e61520b6011cabd5a54b3e89b54646cebac9d37295bbec", 199),
-  mk(601, "reflexao", "Skyline", "Eugenio Mininni", "2fcb36e7e58c4b6bc1505b7980237fdad86696589572a958bb6ee2084c592cc5", 206),
-  mk(599, "reflexao", "Possible Dreams", "Eugenio Mininni", "ee6d055c20cccda716b6b63a154ef0dc825195b7061dc439abb8a623973f4798", 159),
-  mk(32, "motivacional", "Driving Ambition", "Ahjay Stelino", "e3c88488e65b8c87a6f06120983ce2cb12ea3aeba99f8cadb7ee5d6d284ef2c6", 102),
-  mk(31, "motivacional", "Dreaming Big", "Ahjay Stelino", "8c89819547b42a80750fb25f37a960a1f45f6fd66bc8d784ac817b98b002897c", 110),
-  mk(34, "motivacional", "Raising Me Higher", "Ahjay Stelino", "619b82cea299230cca5beac36d049291a1cb2be8ce0afdafda3e06fb30d06525", 98),
-  mk(1183, "treino", "Karma", "Michael Ramir C.", "56f331c37552486a1a31c65a443f1669ed37f7fb3bd99d9078d23ec55caa052f", 135),
-  mk(470, "treino", "Golden Storm", "Diego Nava", "32e5a363ce84f0b633579d0b10cf3c758ae3c02f5121147a321e2483e3384e26", 95),
-  mk(1e3, "treino", "I Can Hear Your Heartbeat", "Michael Ramir C.", "a23c959605dc4a53f7e3b8c8949fcc0d082c29989b944bb2a7f8d9601ddca0d1", 110),
-  mk(839, "familia", "Tears of Joy", "Michael Ramir C.", "30717c4e8d2a954a6163477b831e5b8981b406d2c34d72820fce4d40a8686ddc", 140),
-  mk(963, "familia", "Just Keep Walking", "Michael Ramir C.", "fa93f4808cecc643eee8d74647bd8b823991f2155672b7d37f3db79f9beb7e16", 125),
-  mk(801, "familia", "Happy Home", "Michael Ramir C.", "76b82159ba1d6821a5ac9465e8ff19007446c1b657dfe53b5917fc8896b3bf21", 110),
-  mk(2, "humor", "Comical", "Ahjay Stelino", "2f5ed23f2c51b5aa28b237563ee1249d12094fefce7afdaddee4f5a330e010cb", 114),
-  mk(466, "humor", "Games Worldbeat", "Bernardo R.", "a1c70e5719bdfbe5dd8ec064939b27e3baed8c2b7f9375ae5b361e6ba71d4922", 107),
-  mk(474, "empresa", "What About Action?", "Diego Nava", "4bcd99a13f3d71c6d356c2459f6f585f0d3f91ca8912aeef81ac626b8c8e3133", 117),
-  mk(729, "empresa", "Pop Track 03", "Lily J", "0bb90793c71a07e6d698afdd434b32ffb4fe93dbbdb0577d3e71a4de80b0337b", 97),
-  mk(1167, "empresa", "Close Up", "Michael Ramir C.", "a7f05a29d07a84d38072ccd2b35204bca812db86e75b2a837e71cc144d3e739b", 95),
-  mk(441, "calmo", "Meditation", "Arulo", "6ffb81be8ab2447eb7b9357d6ae3d1b58eb8bc85376a724fafa5fe4d1acf562a", 118),
-  mk(175, "calmo", "Digital Clouds", "Alejandro Maga\xF1a (A. M.)", "71cd4ea39edcc7532672bd97311abadfd318d00e7a828310a88b4f57fad9cd48", 101)
+  mk(22, "reflexao", "Piano Reflections", "Ahjay Stelino", "7d58c4255d91f58e29e61520b6011cabd5a54b3e89b54646cebac9d37295bbec", 199, 120),
+  mk(601, "reflexao", "Skyline", "Eugenio Mininni", "2fcb36e7e58c4b6bc1505b7980237fdad86696589572a958bb6ee2084c592cc5", 206, null),
+  mk(599, "reflexao", "Possible Dreams", "Eugenio Mininni", "ee6d055c20cccda716b6b63a154ef0dc825195b7061dc439abb8a623973f4798", 159, null),
+  mk(32, "motivacional", "Driving Ambition", "Ahjay Stelino", "e3c88488e65b8c87a6f06120983ce2cb12ea3aeba99f8cadb7ee5d6d284ef2c6", 102, 100),
+  mk(31, "motivacional", "Dreaming Big", "Ahjay Stelino", "8c89819547b42a80750fb25f37a960a1f45f6fd66bc8d784ac817b98b002897c", 110, null),
+  mk(34, "motivacional", "Raising Me Higher", "Ahjay Stelino", "619b82cea299230cca5beac36d049291a1cb2be8ce0afdafda3e06fb30d06525", 98, 110),
+  mk(1183, "treino", "Karma", "Michael Ramir C.", "56f331c37552486a1a31c65a443f1669ed37f7fb3bd99d9078d23ec55caa052f", 135, 128),
+  mk(470, "treino", "Golden Storm", "Diego Nava", "32e5a363ce84f0b633579d0b10cf3c758ae3c02f5121147a321e2483e3384e26", 95, 127),
+  mk(1e3, "treino", "I Can Hear Your Heartbeat", "Michael Ramir C.", "a23c959605dc4a53f7e3b8c8949fcc0d082c29989b944bb2a7f8d9601ddca0d1", 110, 125),
+  mk(839, "familia", "Tears of Joy", "Michael Ramir C.", "30717c4e8d2a954a6163477b831e5b8981b406d2c34d72820fce4d40a8686ddc", 140, 124),
+  mk(963, "familia", "Just Keep Walking", "Michael Ramir C.", "fa93f4808cecc643eee8d74647bd8b823991f2155672b7d37f3db79f9beb7e16", 125, 96),
+  mk(801, "familia", "Happy Home", "Michael Ramir C.", "76b82159ba1d6821a5ac9465e8ff19007446c1b657dfe53b5917fc8896b3bf21", 110, 140),
+  mk(2, "humor", "Comical", "Ahjay Stelino", "2f5ed23f2c51b5aa28b237563ee1249d12094fefce7afdaddee4f5a330e010cb", 114, 140),
+  mk(466, "humor", "Games Worldbeat", "Bernardo R.", "a1c70e5719bdfbe5dd8ec064939b27e3baed8c2b7f9375ae5b361e6ba71d4922", 107, null),
+  mk(474, "empresa", "What About Action?", "Diego Nava", "4bcd99a13f3d71c6d356c2459f6f585f0d3f91ca8912aeef81ac626b8c8e3133", 117, 121),
+  mk(729, "empresa", "Pop Track 03", "Lily J", "0bb90793c71a07e6d698afdd434b32ffb4fe93dbbdb0577d3e71a4de80b0337b", 97, 109),
+  mk(1167, "empresa", "Close Up", "Michael Ramir C.", "a7f05a29d07a84d38072ccd2b35204bca812db86e75b2a837e71cc144d3e739b", 95, 105),
+  mk(441, "calmo", "Meditation", "Arulo", "6ffb81be8ab2447eb7b9357d6ae3d1b58eb8bc85376a724fafa5fe4d1acf562a", 118, null),
+  mk(175, "calmo", "Digital Clouds", "Alejandro Maga\xF1a (A. M.)", "71cd4ea39edcc7532672bd97311abadfd318d00e7a828310a88b4f57fad9cd48", 101, 129)
 ];
 var trackById = (id) => MUSIC_LIBRARY.find((t) => t.id === id);
 
 // ../../packages/domain/src/ai/direction.ts
+var MOODS = Object.keys(MOOD_LABEL);
+var plain = (s2) => s2.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase().trim();
+function normalizeMood(s2) {
+  const p = plain(s2);
+  if (!p) return "";
+  return MOODS.find((m) => m === p || plain(MOOD_LABEL[m]) === p || plain(MOOD_LABEL[m]).startsWith(p)) ?? "";
+}
 var s = (max) => z.string().trim().max(max);
 var req = (max) => z.string().trim().min(1).max(max);
 var sec = z.number().min(0).max(600);
@@ -332,7 +339,8 @@ var DirectionSchema = z.object({
   legendas_na_tela: z.array(OnScreenTextSchema).max(12).default([]),
   musica: z.object({
     id: req(40),
-    clima: s(40).default(""),
+    /** um de listar_musicas: reflexao | motivacional | treino | familia | humor | empresa | calmo */
+    clima: s(40).default("").transform(normalizeMood),
     bpm: z.number().int().min(40).max(220).nullable().default(null),
     /** volume da música em relação à voz, 0.05–0.6 (0.22 = padrão) */
     volume: z.number().min(0.05).max(0.6).default(0.22),
@@ -388,8 +396,31 @@ function takeInstructions(t) {
   ];
   return rows.filter(([, v]) => v.trim()).map(([label, value]) => ({ label, value }));
 }
+function directionReport(d) {
+  const spoken = spokenTakes(d);
+  const silent = d.takes.filter((t) => !t.fala_exata.trim());
+  const out2 = [
+    { campo: "takes (fala_exata)", aplicado: spoken.length > 0, como: spoken.length ? `${spoken.length} parte(s) gravada(s) na ordem, com teleprompter da fala_exata: ${spoken.map((t) => t.nome).join(" \u2192 ")}` : "nenhum take com fala \u2014 o app grava o roteiro (script) por partes" },
+    { campo: "takes (instru\xE7\xF5es)", aplicado: spoken.some((t) => takeInstructions(t).length > 0), como: "enquadramento, c\xE2mera, local, luz, olhar, emo\xE7\xE3o, B-roll e erro comum aparecem na tela de grava\xE7\xE3o de cada take" }
+  ];
+  if (silent.length) out2.push({ campo: "takes sem fala", aplicado: false, como: `${silent.length} take(s) sem fala aparecem como instru\xE7\xE3o no conte\xFAdo, mas n\xE3o viram parte do v\xEDdeo \u2014 grave como cena de apoio (B-roll) do dia para a montagem usar` });
+  if (d.legendas_na_tela.length) {
+    out2.push({ campo: "legendas_na_tela", aplicado: true, como: `${d.legendas_na_tela.length} texto(s) na tela nos tempos e posi\xE7\xF5es pedidos (substituem o gancho autom\xE1tico)` });
+    if (d.legendas_na_tela.some((l) => l.estilo.trim())) out2.push({ campo: "legendas_na_tela[].estilo", aplicado: false, como: "o estilo \xE9 sempre a letra manuscrita do perfil; o texto de estilo fica s\xF3 como refer\xEAncia" });
+  }
+  if (d.musica) {
+    const track = trackById(d.musica.id);
+    out2.push({ campo: "musica", aplicado: Boolean(track), como: track ? `"${track.title}" com volume ${Math.round(d.musica.volume * 100)}%, entrando em ${d.musica.entrada}s${d.musica.saida !== null ? ` e saindo em ${d.musica.saida}s` : ""}; abaixa sozinha quando h\xE1 fala (ducking). Vale se a m\xFAsica do v\xEDdeo estiver em \u201Cautom\xE1tica\u201D no app` : "id fora da biblioteca \u2014 o v\xEDdeo sai com a m\xFAsica autom\xE1tica" });
+  }
+  if (d.edicao.cortes || d.edicao.transicao || d.edicao.zoom) out2.push({ campo: "edicao", aplicado: false, como: "cortes de pausa, transi\xE7\xF5es e zoom s\xE3o autom\xE1ticos; o texto de edi\xE7\xE3o aparece no app como orienta\xE7\xE3o" });
+  if (d.capa) out2.push({ campo: "capa", aplicado: true, como: `capa tirada do segundo ${d.capa.frame}${d.capa.texto ? ` com o texto \u201C${d.capa.texto}\u201D` : ""}` });
+  if (d.publicacao_por_rede.length) out2.push({ campo: "publicacao_por_rede", aplicado: false, como: "hor\xE1rio, hashtags e 1\xBA coment\xE1rio aparecem no app para o criador copiar; o app n\xE3o agenda nem posta sozinho" });
+  if (d.teste_ab) out2.push({ campo: "teste_ab", aplicado: false, como: "os ganchos aparecem no app; o v\xEDdeo usa o gancho escolhido pelo criador (n\xE3o gera 3 vers\xF5es)" });
+  return out2;
+}
 
 // ../../packages/domain/src/ai/contract.ts
+z2.config(z2.locales.pt());
 var PROMPT_VERSION = "content-v1.3.0";
 var NARRATIVE_STRUCTURES = ["confissao", "pergunta", "contraste", "historia", "conselho", "observacao"];
 var PLATFORMS = ["instagram", "tiktok", "facebook", "youtube_shorts"];
@@ -433,6 +464,30 @@ function parseDraft(input) {
   const r = ContentDraftSchema.safeParse(input);
   if (r.success) return { ok: true, draft: r.data };
   return { ok: false, errors: r.error.issues.map((i) => `${i.path.join(".") || "(root)"}: ${i.message}`) };
+}
+function contractLimits() {
+  const root = z2.toJSONSchema(ContentDraftSchema, { target: "draft-7", io: "input" });
+  const out2 = [];
+  const walk = (n, path, required) => {
+    const alt = n.anyOf?.find((x) => x.type !== "null");
+    const nullable = Boolean(n.anyOf?.some((x) => x.type === "null"));
+    const node = alt ? { ...alt, default: n.default ?? alt.default } : n;
+    const t = Array.isArray(node.type) ? node.type.join("|") : node.type ?? "?";
+    const lim = [];
+    if (node.minLength !== void 0 || node.maxLength !== void 0) lim.push(`${node.minLength ?? 0}\u2013${node.maxLength ?? "\u221E"} caracteres`);
+    if (node.minItems !== void 0 || node.maxItems !== void 0) lim.push(`${node.minItems ?? 0}\u2013${node.maxItems ?? "\u221E"} itens`);
+    if (node.minimum !== void 0 || node.maximum !== void 0) lim.push(`${node.minimum ?? "-\u221E"} a ${node.maximum ?? "\u221E"}`);
+    if (node.enum) lim.push(`um de: ${node.enum.join(" | ")}`);
+    if (node.pattern) lim.push(`formato ${node.pattern}`);
+    if (path && (t !== "object" || !node.properties)) {
+      const flags = [required ? "obrigat\xF3rio" : "opcional", nullable ? "pode ser null" : "", node.default !== void 0 ? `padr\xE3o ${JSON.stringify(node.default)}` : ""].filter(Boolean).join(", ");
+      out2.push(`${path}: ${t}${lim.length ? ` (${lim.join("; ")})` : ""} \u2014 ${flags}`);
+    } else if (path) out2.push(`${path}: objeto \u2014 ${required ? "obrigat\xF3rio" : "opcional"}${nullable ? ", pode ser null" : ""}`);
+    if (node.properties) for (const [k, v] of Object.entries(node.properties)) walk(v, path ? `${path}.${k}` : k, node.required?.includes(k) ?? false);
+    if (node.items) walk(node.items, `${path}[]`, true);
+  };
+  walk(root, "", true);
+  return out2;
 }
 
 // ../../packages/domain/src/ai/prompt.ts
@@ -1129,8 +1184,10 @@ function describeProofs(strategyProofs, registered) {
   const byText = new Map(registered.map((p) => [p.descricao.toLowerCase(), p.status]));
   const all = [.../* @__PURE__ */ new Set([...strategyProofs, ...registered.map((p) => p.descricao)])];
   if (!all.length) return "";
+  const sceneOf = new Map(registered.filter((p) => p.contentItemId).map((p) => [p.descricao.toLowerCase(), p.contentItemId]));
+  const scene = (d) => sceneOf.has(d.toLowerCase()) ? ` (cena ${sceneOf.get(d.toLowerCase())})` : "";
   return `Provas film\xE1veis:
-${all.map((d) => `- ${d}: ${byText.get(d.toLowerCase()) === "filmada" ? "j\xE1 filmada" : "falta filmar"}`).join("\n")}`;
+${all.map((d) => `- ${d}: ${byText.get(d.toLowerCase()) === "filmada" ? "j\xE1 filmada" : "falta filmar"}${scene(d)}`).join("\n")}`;
 }
 var PROFILE_INTERVIEW = [
   "ENTREVISTA PARA CRIAR UM PERFIL (pergunte uma coisa por vez, em portugu\xEAs simples; n\xE3o invente respostas):",
@@ -1223,6 +1280,7 @@ var MAX_PLAN_DAYS = 14;
 var PILLAR_WINDOW_DAYS = 30;
 var TOPIC_WINDOW_DAYS = 14;
 var MIN_POSTS_FOR_CONCLUSIONS = 5;
+var BPM_TOLERANCE = 10;
 var WEEKDAY = ["dom", "seg", "ter", "qua", "qui", "sex", "s\xE1b"];
 var DIRECTION_GUIDE = [
   'DIRE\xC7\xC3O COMPLETA (campo "direcao" no mesmo JSON do roteiro \u2014 o app grava, legenda, mixa e exporta s\xF3 com isto):',
@@ -1245,7 +1303,7 @@ var MCP_TOOLS = [
   { name: "ler_roteiro", title: "Ler roteiro salvo", description: "Devolve o roteiro j\xE1 salvo de um conte\xFAdo (JSON completo), as escolhas de edi\xE7\xE3o/m\xFAsica, os n\xFAmeros e se h\xE1 um roteiro do assistente esperando o app abrir.", inputSchema: obj({ content_id: { type: "string" } }, ["content_id"]), annotations: RO2 },
   { name: "instrucoes_do_roteiro", title: "Regras para o roteiro", description: "Regras do perfil (voz, formatos que viralizam, fechamento, o que n\xE3o repetir), temas abaixo da meta nos \xFAltimos 30 dias, assuntos bloqueados por 14 dias e o JSON exato.", inputSchema: obj({ content_id: { type: "string", description: "id de conteudos_do_dia" }, acontecimento: { type: "string", description: "o que aconteceu hoje (opcional)" } }, ["content_id"]), annotations: RO2 },
   { name: "salvar_roteiro", title: "Salvar roteiro no app", description: "Valida (contrato, gancho \u2264 12 palavras, texto de tela 2\u20135 palavras, dura\xE7\xE3o coerente, sem repetir, sem pre\xE7o/alega\xE7\xE3o sem prova no comercial) e envia ao app. Se falhar, devolve o que corrigir.", inputSchema: obj({ content_id: { type: "string" }, roteiro: { type: "object", description: "o JSON completo do roteiro" } }, ["content_id", "roteiro"]), annotations: WRITE2 },
-  { name: "salvar_cenas", title: "Salvar cenas de apoio", description: "Para conte\xFAdo de cena de apoio (B-roll / prova visual): a lista de takes com instru\xE7\xE3o de filmagem. O app mostra cada take para gravar.", inputSchema: obj({ content_id: { type: "string" }, takes: { type: "array", description: "takes {ordem, nome, duracao_segundos, enquadramento, movimento_camera, local, luz, olhar, emocao, broll, erro_comum, fala_exata (opcional)}", items: { type: "object" } } }, ["content_id", "takes"]), annotations: WRITE2 },
+  { name: "salvar_cenas", title: "Salvar cenas de apoio", description: "Para conte\xFAdo de cena de apoio (B-roll / prova visual): a lista de takes com instru\xE7\xE3o de filmagem. O app mostra cada take para gravar.", inputSchema: obj({ content_id: { type: "string" }, takes: { type: "array", description: "takes {ordem, nome, duracao_segundos, enquadramento, movimento_camera, local, luz, olhar, emocao, broll, erro_comum, fala_exata (opcional)}", items: { type: "object" } }, provas: { type: "array", items: { type: "string" }, description: "provas film\xE1veis do perfil que esta cena filma (ficam 'filmada' quando a cena for gravada)" } }, ["content_id", "takes"]), annotations: WRITE2 },
   { name: "registrar_metricas", title: "Registrar n\xFAmeros do post", description: "Salva os n\xFAmeros REAIS de um post (ex.: lidos no Metricool ou no painel da rede) para o app e o ranking. Nunca invente n\xFAmeros.", inputSchema: obj({ content_id: { type: "string" }, visualizacoes: { type: "number" }, curtidas: { type: "number" }, comentarios: { type: "number" }, compartilhamentos: { type: "number" }, salvamentos: { type: "number" }, retencao: { type: "number", description: "% de conclus\xE3o/reten\xE7\xE3o m\xE9dia (0\u2013100)" }, tempo_medio_segundos: { type: "number" }, seguidores_ganhos: { type: "number" }, fonte: { type: "string", description: "ex.: Metricool, Instagram" } }, ["content_id", "visualizacoes"]), annotations: WRITE2 },
   { name: "listar_musicas", title: "M\xFAsicas licenciadas", description: "Faixas da biblioteca licenciada (id, clima, dura\xE7\xE3o, licen\xE7a). Use o id em direcao.musica.id. Conta de empresa s\xF3 v\xEA faixas com licen\xE7a comercial.", inputSchema: obj({ clima: { type: "string", description: `opcional: ${Object.keys(MOOD_LABEL).join(", ")}` }, bpm: { type: "number", description: "opcional (as faixas ainda n\xE3o t\xEAm BPM medido)" } }), annotations: RO2 },
   { name: "ler_status_gravacao", title: "Status da grava\xE7\xE3o", description: "O que j\xE1 foi gravado (por take/parte), o que falta, se j\xE1 subiu e como est\xE1 a montagem do v\xEDdeo.", inputSchema: obj({ content_id: { type: "string" } }, ["content_id"]), annotations: RO2 },
@@ -1269,7 +1327,8 @@ async function describeStrategy(store) {
     `Voz: ${p.voiceRules.join("; ")}`,
     p.closingPhrase ? `Fechamento obrigat\xF3rio: "${p.closingPhrase}"` : "",
     `Temas e meta: ${s2.pillars.map((x2) => `${x2.name} ${x2.targetPercent}%`).join(" \xB7 ")}`,
-    `Rotina (hor\xE1rio de Bras\xEDlia): ${s2.routine.map((r) => `${WEEKDAY[r.weekday]} ${r.startTime} ${r.title} (${FORMAT_LABEL2[r.format] ?? r.format})`).join(" \xB7 ") || "sem rotina"}`
+    `Rotina (hor\xE1rio de Bras\xEDlia): ${s2.routine.map((r) => `${WEEKDAY[r.weekday]} ${r.startTime} ${r.title} (${FORMAT_LABEL2[r.format] ?? r.format})`).join(" \xB7 ") || "sem rotina"}`,
+    p.kind === "empresa" ? "Como ler a rotina: V\xEDdeo principal = conte\xFAdo com roteiro (salvar_roteiro); Cena de apoio/prova visual = conte\xFAdo sem fala com lista de takes (salvar_cenas, ligada \xE0s provas film\xE1veis)." : "Como ler a rotina: s\xF3 Pensamento do Dia e V\xEDdeo principal t\xEAm roteiro (2 conte\xFAdos por dia). Os demais hor\xE1rios s\xE3o cenas de apoio de ~3s (caf\xE9, trabalho, academia\u2026) sem roteiro: o app guarda e usa por cima da fala na montagem do v\xEDdeo do dia. S\xE1bado e domingo n\xE3o t\xEAm rotina."
   ];
   const b = p.kind === "empresa" ? p.business : void 0;
   if (b) {
@@ -1364,6 +1423,10 @@ async function blockedTopics(store) {
   return `Assuntos BLOQUEADOS (usados nos \xFAltimos ${TOPIC_WINDOW_DAYS} dias \u2014 escolha outro):
 ${list2.join("\n")}`;
 }
+function scriptState(c) {
+  if (c.pendingDraft) return " \xB7 roteiro do assistente aguardando abertura no app (use ler_roteiro; salvar substitui)";
+  return c.hasScript ? " \xB7 j\xE1 tem roteiro (use ler_roteiro; salvar substitui)" : "";
+}
 function clampDays(v) {
   return typeof v === "number" && v >= 1 ? Math.min(MAX_PLAN_DAYS, Math.floor(v)) : 7;
 }
@@ -1401,7 +1464,7 @@ async function callProfileTool(store, name, args, now) {
     const start = typeof args.data_inicio === "string" && DATE.test(args.data_inicio) ? args.data_inicio : todayBrasilia(now);
     const days = await store.planDays(start, clampDays(args.dias));
     const lines = await Promise.all(days.map(async (d) => {
-      const items = await Promise.all(d.items.map(async (c) => `  \xB7 id ${c.id} \xB7 ${FORMAT_LABEL2[c.format] ?? c.format} \xB7 ${await store.pillarName(c.pillarSlug)}${c.hasScript ? " \xB7 j\xE1 tem roteiro" : ""}`));
+      const items = await Promise.all(d.items.map(async (c) => `  \xB7 id ${c.id} \xB7 ${FORMAT_LABEL2[c.format] ?? c.format} \xB7 ${await store.pillarName(c.pillarSlug)}${scriptState(c)}`));
       return `${d.date}${d.created ? " (plano criado agora)" : ""}:
 ${items.join("\n") || "  \xB7 sem grava\xE7\xE3o de roteiro neste dia"}`;
     }));
@@ -1413,17 +1476,19 @@ Use instrucoes_do_roteiro e salvar_roteiro em cada id. O app mostra estes mesmos
     const date = typeof args.data === "string" && DATE.test(args.data) ? args.data : todayBrasilia(now);
     const items = await store.contentsOn(date);
     if (!items.length) return text2(`Nada planejado para ${date}. Use criar_plano com data_inicio ${date} (ou o criador abre o Post.ai no dia).`);
-    const lines = await Promise.all(items.map(async (c) => `- id ${c.id} \xB7 ${FORMAT_LABEL2[c.format] ?? c.format} \xB7 tema: ${await store.pillarName(c.pillarSlug)} \xB7 ${c.hasScript ? "j\xE1 tem roteiro (use ler_roteiro; salvar substitui)" : "sem roteiro"}`));
+    const lines = await Promise.all(items.map(async (c) => `- id ${c.id} \xB7 ${FORMAT_LABEL2[c.format] ?? c.format} \xB7 tema: ${await store.pillarName(c.pillarSlug)} \xB7 ${scriptState(c).replace(/^ · /, "") || "sem roteiro"}`));
     return text2(`Conte\xFAdos de ${date}:
 ${lines.join("\n")}`);
   }
   if (name === "listar_musicas") {
     const business = (await store.profile()).kind === "empresa";
-    const mood = typeof args.clima === "string" && args.clima in MOOD_LABEL ? args.clima : null;
-    const list2 = MUSIC_LIBRARY.filter((t) => (!business || t.license === "comercial") && (!mood || t.mood === mood));
-    if (!list2.length) return text2("Nenhuma faixa com esse filtro.");
-    const bpmNote = typeof args.bpm === "number" ? "\nObs.: as faixas ainda n\xE3o t\xEAm BPM medido \u2014 escolha pelo clima." : "";
-    return text2(`${list2.map((t) => `- id ${t.id} \xB7 "${t.title}" \u2014 ${t.artist} \xB7 clima ${MOOD_LABEL[t.mood]} \xB7 ${t.durationSec}s \xB7 licen\xE7a ${t.license}`).join("\n")}${bpmNote}`);
+    const mood = typeof args.clima === "string" ? normalizeMood(args.clima) || null : null;
+    const bpm = typeof args.bpm === "number" ? args.bpm : null;
+    const list2 = MUSIC_LIBRARY.filter((t) => (!business || t.license === "comercial") && (!mood || t.mood === mood) && (bpm === null || t.bpm !== null && Math.abs(t.bpm - bpm) <= BPM_TOLERANCE));
+    if (!list2.length) return text2(`Nenhuma faixa com esse filtro${bpm !== null ? ` (BPM ${bpm} \xB1 ${BPM_TOLERANCE})` : ""}.`);
+    const rows = list2.map((t) => `- id ${t.id} \xB7 "${t.title}" \u2014 ${t.artist} \xB7 clima ${t.mood} (${MOOD_LABEL[t.mood]}) \xB7 ${t.bpm ? `${t.bpm} BPM` : "sem batida definida"} \xB7 ${t.durationSec}s \xB7 licen\xE7a ${t.license}`);
+    return text2(`${rows.join("\n")}
+Use o valor de "clima" (ex.: ${list2[0].mood}) em direcao.musica.clima. BPM medido no \xE1udio. Tend\xEAncia ("em alta"): ainda sem fonte de dados \u2014 n\xE3o informada.`);
   }
   if (name === "registrar_melhoria") {
     const titulo = String(args.titulo ?? "").trim().slice(0, 140);
@@ -1442,14 +1507,27 @@ ${lines.join("\n")}`);
   const content = id ? await store.content(id) : null;
   if (!content) return text2("Conte\xFAdo n\xE3o encontrado neste perfil. Use um id de conteudos_do_dia ou criar_plano.", true);
   if (name === "ler_roteiro") {
-    const s2 = await store.readScript(content.id);
-    return text2(JSON.stringify({ content_id: content.id, data: content.date, formato: content.format, tema: await store.pillarName(content.pillarSlug), ...s2 }, null, 2));
+    const { pending, ...s2 } = await store.readScript(content.id);
+    const current = pending?.draft ?? s2.draft;
+    return text2(JSON.stringify({
+      content_id: content.id,
+      data: content.date,
+      formato: content.format,
+      tema: await store.pillarName(content.pillarSlug),
+      ...s2,
+      // o que o assistente enviou e o app ainda não abriu
+      pendente: pending ?? null,
+      // o que o app e a montagem fazem com a direção deste roteiro (o que não for aplicado vem dito)
+      aplicacao: current?.direcao ? directionReport(current.direcao) : null
+    }, null, 2));
   }
   if (name === "ler_status_gravacao") {
     const [rec, script, profile] = await Promise.all([store.recordingStatus(content.id), store.readScript(content.id), store.profile()]);
     const lines = [];
-    if (script.draft) {
-      const segs = buildSegments(script.draft, { selectedHook: 0, userEdited: false, closingPhrase: profile.closingPhrase, business: profile.kind === "empresa" });
+    const draft = script.draft ?? script.pending?.draft ?? null;
+    if (!script.draft && draft) lines.push("(roteiro do assistente ainda n\xE3o aberto no app \u2014 as partes abaixo valem depois que o criador abrir o conte\xFAdo)");
+    if (draft) {
+      const segs = buildSegments(draft, { selectedHook: 0, userEdited: false, closingPhrase: profile.closingPhrase, business: profile.kind === "empresa" });
       for (const sg of segs) {
         const t = rec.takes.filter((x) => x.segmentIndex === sg.index);
         lines.push(`- ${sg.index + 1}. ${sg.label}: ${!t.length ? "falta gravar" : t.some((x) => x.synced) ? "gravado e enviado" : "gravado, ainda subindo"}`);
@@ -1475,7 +1553,10 @@ Montagem: ${render}${posted}`);
     const unproven = biz ? pendingClaimsIn(parsed.data.map((t) => `${t.fala_exata} ${t.broll}`).join(" "), biz.pendingClaims ?? []) : [];
     if (unproven.length) return text2(`A cena afirma algo ainda sem prova: ${unproven.join("; ")}.`, true);
     await store.saveScenes(content.id, parsed.data);
-    return text2(`${parsed.data.length} take(s) de "${content.title}" enviados para o Post.ai. Aparecem no app ao abrir esta cena.`);
+    const provas = Array.isArray(args.provas) ? args.provas.filter((x) => typeof x === "string" && x.trim().length >= 3).map((x) => x.trim().slice(0, 300)) : [];
+    const current = new Map((await store.proofs()).map((p) => [p.descricao.toLowerCase(), p.status]));
+    for (const d of provas) await store.saveProof({ descricao: d, status: current.get(d.toLowerCase()) ?? "falta_filmar", contentItemId: content.id });
+    return text2(`${parsed.data.length} take(s) de "${content.title}" enviados para o Post.ai. Aparecem no app ao abrir esta cena.${provas.length ? ` Provas ligadas: ${provas.join("; ")}.` : ""}`);
   }
   if (content.format === "broll") return text2("Cena de apoio (B-roll, sem roteiro falado): use salvar_cenas com a lista de takes (nome, duracao_segundos, enquadramento, movimento_camera, local, luz, broll, erro_comum).", true);
   if (content.format !== "thought" && content.format !== "main_video") return text2("Este conte\xFAdo n\xE3o usa roteiro falado (\xE9 story).", true);
@@ -1490,7 +1571,9 @@ Montagem: ${render}${posted}`);
     const eventText = typeof args.acontecimento === "string" && args.acontecimento.trim() ? args.acontecimento.trim().slice(0, 1500) : null;
     const prompt = buildManualPrompt({ profile, pillarName, format: content.format, eventText, brief: content.project ? projectBrief(content.project) : null, recentSummaries, avoid: "" });
     const cases = profile.kind === "empresa" ? describeCases(await store.realCases()) : "";
-    return text2([prompt, deficit, blocked, cases, "Regras do diretor: gancho \u2264 12 palavras; screen_text 2\u20135 palavras; duration_seconds \u2248 palavras do script \xF7 2,5.", DIRECTION_GUIDE].filter(Boolean).join("\n\n"));
+    const limits = `LIMITES DE CADA CAMPO (o validador confere exatamente isto; erros voltam todos juntos com o caminho do campo):
+${contractLimits().join("\n")}`;
+    return text2([prompt, deficit, blocked, cases, "Regras do diretor: gancho \u2264 12 palavras; screen_text 2\u20135 palavras; duration_seconds \u2248 palavras do script \xF7 2,5.", DIRECTION_GUIDE, limits].filter(Boolean).join("\n\n"));
   }
   if (name === "salvar_roteiro") {
     const profile = await store.profile();
@@ -1498,18 +1581,15 @@ Montagem: ${render}${posted}`);
     if (!parsed.ok) return text2(`O roteiro n\xE3o passou na valida\xE7\xE3o. Corrija e salve de novo:
 - ${parsed.errors.join("\n- ")}`, true);
     const draft = finalizeDraft(parsed.draft, profile);
-    const rules = [
+    const biz = profile.kind === "empresa" ? profile.business : void 0;
+    const problems = [
       ...directorIssues(draft),
       ...draft.direcao ? directionIssues(draft.direcao, { durationSeconds: draft.duration_seconds, spoken: true, business: profile.kind === "empresa" }) : []
     ];
-    if (rules.length) return text2(`Ajuste e salve de novo:
-- ${rules.join("\n- ")}`, true);
-    const biz = profile.kind === "empresa" ? profile.business : void 0;
-    if (biz?.noPrice && mentionsPrice(draft)) return text2("O roteiro fala pre\xE7o/valor. Neste perfil de empresa pre\xE7o n\xE3o aparece no v\xEDdeo: reescreva sem pre\xE7o.", true);
-    const unproven = biz ? pendingClaimsIn(`${draft.script} ${draft.cta}`, biz.pendingClaims ?? []) : [];
-    if (unproven.length) return text2(`O roteiro afirma algo ainda sem prova: ${unproven.join("; ")}. Reescreva sem isso.`, true);
+    if (biz?.noPrice && mentionsPrice(draft)) problems.push("pre\xE7o: o roteiro fala pre\xE7o/valor \u2014 neste perfil de empresa pre\xE7o n\xE3o aparece no v\xEDdeo.");
+    for (const c of biz ? pendingClaimsIn(`${draft.script} ${draft.cta}`, biz.pendingClaims ?? []) : []) problems.push(`alega\xE7\xE3o sem prova: "${c}" \u2014 reescreva sem isso.`);
     if (biz && content.pillarSlug === CLIENT_STORY_PILLAR && !(await store.realCases()).some(authorized)) {
-      return text2("Este perfil n\xE3o tem caso real de cliente autorizado. Cadastre com cadastrar_caso_real (com autoriza\xE7\xE3o) antes de escrever 'Hist\xF3rias de cliente'.", true);
+      problems.push("hist\xF3rias de cliente: este perfil n\xE3o tem caso real autorizado \u2014 cadastre com cadastrar_caso_real (com autoriza\xE7\xE3o) antes.");
     }
     const [fps, topics] = await Promise.all([store.recentFingerprints(), store.recentTopics(TOPIC_WINDOW_DAYS)]);
     const recent = [...fps, ...topics.map((t) => ({ type: "topic", value: normalizeText(t.topic), contentItemId: t.contentItemId }))].filter((f) => f.contentItemId !== content.id);
@@ -1521,9 +1601,10 @@ Montagem: ${render}${posted}`);
         const c = olds.get(i);
         return c ? `"${c.title}" \xB7 ${FORMAT_LABEL2[c.format] ?? c.format} de ${c.date} \xB7 id ${c.id}` : void 0;
       };
-      return text2(`Parece repetir conte\xFAdo recente. Mude isto e salve de novo:
-- ${describeRepetition(report, label).join("\n- ")}`, true);
+      problems.push(...describeRepetition(report, label).map((x) => `repeti\xE7\xE3o \u2014 ${x}`));
     }
+    if (problems.length) return text2(`Ajuste tudo isto e salve de novo (${problems.length} ${problems.length === 1 ? "ponto" : "pontos"}):
+- ${problems.join("\n- ")}`, true);
     await store.saveDraft(content.id, draft);
     return text2(`Roteiro "${draft.title}" enviado para o Post.ai. Ele aparece no app ao abrir este conte\xFAdo.`);
   }
@@ -1657,6 +1738,7 @@ var brtDayRange = (dateKey) => {
   return [start.toISOString(), new Date(start.getTime() + 864e5).toISOString()];
 };
 var WRITE_ROLES = ["owner", "editor"];
+var PENDING_WINDOW_DAYS = 30;
 function musicLabel(edit, draft) {
   const choice = edit?.music ?? "auto";
   if (choice === "none") return "sem m\xFAsica";
@@ -1666,10 +1748,39 @@ function musicLabel(edit, draft) {
 }
 function supabaseMcpStore(db, workspaceId, userId) {
   const memory = supabaseMemory(db, userId);
+  const pendingDrafts = async (days = PENDING_WINDOW_DAYS) => {
+    const { data, error } = await db.from("assistant_drafts").select("content_item_id, draft, created_at").eq("workspace_id", workspaceId).is("consumed_at", null).gte("created_at", daysAgo(days)).order("created_at", { ascending: false }).limit(60);
+    if (error) throw new Error(error.message);
+    const seen = /* @__PURE__ */ new Set();
+    return (data ?? []).flatMap((r) => {
+      const parsed = parseDraft(r.draft);
+      const id = r.content_item_id;
+      if (!parsed.ok || seen.has(id)) return [];
+      seen.add(id);
+      return [{ contentItemId: id, draft: parsed.draft, createdAt: r.created_at }];
+    });
+  };
+  const backfillBroll = async (from, to, date, pillars) => {
+    const { data, error } = await db.from("recording_tasks").select("id, title, scheduled_for").eq("workspace_id", workspaceId).eq("kind", "broll").eq("optional", false).is("content_item_id", null).gte("scheduled_for", from).lt("scheduled_for", to);
+    if (error) throw new Error(error.message);
+    const slug = pillars.find((p) => p.slug === "demonstracao")?.slug ?? pillars[0]?.slug ?? "";
+    for (const t of data ?? []) {
+      const id = crypto.randomUUID();
+      const ci = await db.from("content_items").insert({ id, workspace_id: workspaceId, pillar_slug: slug, plan_date: date, scheduled_for: t.scheduled_for, format: "broll", title: t.title, status: "planned", structured_payload: {} });
+      if (ci.error) throw new Error(ci.error.message);
+      const up = await db.from("recording_tasks").update({ content_item_id: id, updated_at: (/* @__PURE__ */ new Date()).toISOString() }).eq("id", t.id);
+      if (up.error) throw new Error(up.error.message);
+    }
+    return data?.length ?? 0;
+  };
   const withScript = async (rows) => {
     const ids = rows.map((r) => r.id);
-    const { data } = ids.length ? await db.from("scripts").select("content_item_id").in("content_item_id", ids) : { data: [] };
+    const [{ data }, pend] = await Promise.all([
+      ids.length ? db.from("scripts").select("content_item_id").in("content_item_id", ids) : Promise.resolve({ data: [] }),
+      ids.length ? db.from("assistant_drafts").select("content_item_id").in("content_item_id", ids).is("consumed_at", null) : Promise.resolve({ data: [] })
+    ]);
     const scripted = new Set((data ?? []).map((s2) => s2.content_item_id));
+    const pending = new Set((pend.data ?? []).map((s2) => s2.content_item_id));
     return rows.map((r) => ({
       id: r.id,
       format: r.format,
@@ -1677,6 +1788,7 @@ function supabaseMcpStore(db, workspaceId, userId) {
       title: r.title,
       date: r.plan_date ?? "",
       hasScript: scripted.has(r.id),
+      pendingDraft: pending.has(r.id),
       project: asProject(r.structured_payload)
     }));
   };
@@ -1708,15 +1820,19 @@ function supabaseMcpStore(db, workspaceId, userId) {
       const [script, content, pending] = await Promise.all([
         db.from("scripts").select("draft").eq("workspace_id", workspaceId).eq("content_item_id", contentId).order("updated_at", { ascending: false }).limit(1).maybeSingle(),
         db.from("content_items").select("structured_payload").eq("workspace_id", workspaceId).eq("id", contentId).maybeSingle(),
-        db.from("assistant_drafts").select("id", { count: "exact", head: true }).eq("workspace_id", workspaceId).eq("content_item_id", contentId).is("consumed_at", null)
+        db.from("assistant_drafts").select("draft, created_at").eq("workspace_id", workspaceId).eq("content_item_id", contentId).is("consumed_at", null).order("created_at", { ascending: false }).limit(1)
       ]);
       const sp = content.data?.structured_payload ?? {};
+      const box = pending.data?.[0] ?? null;
+      const boxDraft = box?.draft;
       return {
         draft: script.data?.draft ?? null,
         edit: sp.edit ?? null,
         metrics: sp.metrics ?? null,
         postedAt: typeof sp.posted_at === "string" ? sp.posted_at : null,
-        pendingFromAssistant: (pending.count ?? 0) > 0,
+        pendingFromAssistant: Boolean(box),
+        // o que o assistente enviou e o app ainda não abriu (roteiro ou cenas) — para conferir antes da gravação
+        pending: box ? { sentAt: box.created_at, draft: boxDraft?.tipo === "cenas" ? null : box.draft, scenes: boxDraft?.tipo === "cenas" ? boxDraft.takes : null } : null,
         scenes: Array.isArray(sp.cenas) ? sp.cenas : null
       };
     },
@@ -1748,7 +1864,8 @@ function supabaseMcpStore(db, workspaceId, userId) {
         if (tasks.error) throw new Error(tasks.error.message);
         const existing = await store.contentsOn(date);
         if (existing.length || tasks.data?.length) {
-          out2.push({ date, created: false, items: existing });
+          const added = business ? await backfillBroll(from, to, date, pillars) : 0;
+          out2.push({ date, created: false, items: added ? await store.contentsOn(date) : existing });
           continue;
         }
         const plan = buildDayPlan({ date: /* @__PURE__ */ new Date(0), dateKey: date, utcOffsetMinutes: BRASILIA_OFFSET_MIN, workspaceId, routine, pillars, recentPillarSlugs: history, newId: () => crypto.randomUUID(), now: (/* @__PURE__ */ new Date()).toISOString(), directedBroll: business });
@@ -1788,9 +1905,9 @@ function supabaseMcpStore(db, workspaceId, userId) {
       return out2;
     },
     async pillarCounts(days) {
-      const scripts = await db.from("scripts").select("content_item_id").eq("workspace_id", workspaceId).gte("created_at", daysAgo(days));
+      const [scripts, pending] = await Promise.all([db.from("scripts").select("content_item_id").eq("workspace_id", workspaceId).gte("created_at", daysAgo(days)), pendingDrafts(days)]);
       if (scripts.error) throw new Error(scripts.error.message);
-      const ids = [...new Set((scripts.data ?? []).map((r) => r.content_item_id).filter(Boolean))];
+      const ids = [...new Set([...(scripts.data ?? []).map((r) => r.content_item_id), ...pending.map((p) => p.contentItemId)].filter(Boolean))];
       if (!ids.length) return {};
       const items = await db.from("content_items").select("pillar_slug").eq("workspace_id", workspaceId).in("id", ids);
       if (items.error) throw new Error(items.error.message);
@@ -1801,7 +1918,11 @@ function supabaseMcpStore(db, workspaceId, userId) {
     async recentTopics(days) {
       const { data, error } = await db.from("scripts").select("draft, content_item_id").eq("workspace_id", workspaceId).gte("created_at", daysAgo(days)).order("created_at", { ascending: false }).limit(60);
       if (error) throw new Error(error.message);
-      return (data ?? []).map((r) => ({ topic: String(r.draft?.topic ?? ""), contentItemId: r.content_item_id ?? null })).filter((r) => r.topic);
+      const pending = await pendingDrafts(days);
+      return [
+        ...pending.map((p) => ({ topic: p.draft.topic, contentItemId: p.contentItemId })),
+        ...(data ?? []).map((r) => ({ topic: String(r.draft?.topic ?? ""), contentItemId: r.content_item_id ?? null }))
+      ].filter((r) => r.topic);
     },
     async saveImprovement(i) {
       const { data, error } = await db.from("melhorias").insert({ workspace_id: workspaceId, user_id: userId, ...i }).select("id").single();
@@ -1820,8 +1941,14 @@ function supabaseMcpStore(db, workspaceId, userId) {
     },
     profile: () => memory.profile(workspaceId),
     pillarName: (slug) => memory.pillarName(workspaceId, slug),
-    recentFingerprints: () => memory.recentFingerprints(workspaceId),
-    recentSummaries: () => memory.recentSummaries(workspaceId),
+    async recentFingerprints() {
+      const [saved, pending] = await Promise.all([memory.recentFingerprints(workspaceId), pendingDrafts()]);
+      return [...pending.flatMap((p) => fingerprintsFor(p.draft).map((f) => ({ ...f, contentItemId: p.contentItemId, createdAt: p.createdAt }))), ...saved];
+    },
+    async recentSummaries() {
+      const [saved, pending] = await Promise.all([memory.recentSummaries(workspaceId), pendingDrafts()]);
+      return [...pending.map((p) => `${summarizeForMemory(p.draft)} (enviado pelo assistente, aguardando o app)`), ...saved].slice(0, 15);
+    },
     async saveDraft(contentId, draft) {
       const { error } = await db.from("assistant_drafts").insert({ workspace_id: workspaceId, content_item_id: contentId, draft, source: "mcp" });
       if (error) throw new Error(error.message);
@@ -1918,12 +2045,23 @@ function supabaseMcpStore(db, workspaceId, userId) {
       return data.id;
     },
     async proofs() {
-      const { data, error } = await db.from("provas_filmaveis").select("descricao, status").eq("workspace_id", workspaceId).order("created_at");
+      const { data, error } = await db.from("provas_filmaveis").select("descricao, status, content_item_id").eq("workspace_id", workspaceId).order("created_at");
       if (error) throw new Error(error.message);
-      return data ?? [];
+      const rows = data ?? [];
+      const linked = [...new Set(rows.map((r) => r.content_item_id).filter((x) => Boolean(x)))];
+      const shot = /* @__PURE__ */ new Set();
+      if (linked.length) {
+        const takes = await db.from("takes").select("content_item_id, tags, media_files(state)").eq("workspace_id", workspaceId).in("content_item_id", linked);
+        if (takes.error) throw new Error(takes.error.message);
+        for (const t of takes.data ?? []) {
+          if (!(t.tags ?? []).includes("descartado") && t.media_files?.state === "uploaded_original") shot.add(t.content_item_id);
+        }
+      }
+      return rows.map((r) => ({ descricao: r.descricao, status: r.status === "filmada" || r.content_item_id && shot.has(r.content_item_id) ? "filmada" : "falta_filmar", contentItemId: r.content_item_id }));
     },
     async saveProof(p) {
-      const { error } = await db.from("provas_filmaveis").upsert({ workspace_id: workspaceId, descricao: p.descricao, status: p.status, updated_at: (/* @__PURE__ */ new Date()).toISOString() }, { onConflict: "workspace_id,descricao" });
+      const row = { workspace_id: workspaceId, descricao: p.descricao, status: p.status, updated_at: (/* @__PURE__ */ new Date()).toISOString(), ...p.contentItemId ? { content_item_id: p.contentItemId } : {} };
+      const { error } = await db.from("provas_filmaveis").upsert(row, { onConflict: "workspace_id,descricao" });
       if (error) throw new Error(error.message);
     }
   };

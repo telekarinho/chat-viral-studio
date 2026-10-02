@@ -137,7 +137,11 @@ export const RealCaseSchema = z.object({
 });
 export type RealCaseInput = z.infer<typeof RealCaseSchema>;
 export interface RealCase extends Required<Omit<RealCaseInput, "id">> { id: string }
-export interface FilmableProof { descricao: string; status: "falta_filmar" | "filmada" }
+export interface FilmableProof {
+  descricao: string; status: "falta_filmar" | "filmada";
+  /** cena de apoio que filma esta prova (salvar_cenas) */
+  contentItemId?: string | null;
+}
 
 export const authorized = (c: RealCase) => c.autorizacao.trim().length > 0;
 
@@ -152,7 +156,9 @@ export function describeProofs(strategyProofs: readonly string[], registered: re
   const byText = new Map(registered.map((p) => [p.descricao.toLowerCase(), p.status]));
   const all = [...new Set([...strategyProofs, ...registered.map((p) => p.descricao)])];
   if (!all.length) return "";
-  return `Provas filmáveis:\n${all.map((d) => `- ${d}: ${byText.get(d.toLowerCase()) === "filmada" ? "já filmada" : "falta filmar"}`).join("\n")}`;
+  const sceneOf = new Map(registered.filter((p) => p.contentItemId).map((p) => [p.descricao.toLowerCase(), p.contentItemId!]));
+  const scene = (d: string) => (sceneOf.has(d.toLowerCase()) ? ` (cena ${sceneOf.get(d.toLowerCase())})` : "");
+  return `Provas filmáveis:\n${all.map((d) => `- ${d}: ${byText.get(d.toLowerCase()) === "filmada" ? "já filmada" : "falta filmar"}${scene(d)}`).join("\n")}`;
 }
 
 export const PROFILE_INTERVIEW = [

@@ -1,5 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { BRASILIA_OFFSET_MIN, buildDayPlan, trackById, type Scenes, type ContentDraft, type ContentFormat, type EditChoices, type Pillar, type PostMetrics, type ProjectInfo, type RoutineBlock } from "@postai/domain";
+import { BRASILIA_OFFSET_MIN, buildDayPlan, fingerprintsFor, parseDraft, summarizeForMemory, trackById, type Scenes, type ContentDraft, type ContentFormat, type EditChoices, type Pillar, type PostMetrics, type ProjectInfo, type RoutineBlock } from "@postai/domain";
 import { supabaseMemory } from "./adapters";
 import type { McpContent, McpContext, McpPost, McpProfile, McpRecording, McpScript, McpStore } from "./mcp-tools";
 import type { FilmableProof, NewProfile, RealCase } from "./mcp-profiles";
@@ -16,6 +16,7 @@ const brtDayRange = (dateKey: string) => {
   return [start.toISOString(), new Date(start.getTime() + 86_400_000).toISOString()] as const;
 };
 const WRITE_ROLES = ["owner", "editor"];
+const PENDING_WINDOW_DAYS = 30;
 
 /** Música usada: a escolhida pelo criador, a da direção ou o automático. */
 function musicLabel(edit: EditChoices | null, draft: ContentDraft | undefined): string | null {
@@ -32,12 +33,46 @@ function musicLabel(edit: EditChoices | null, draft: ContentDraft | undefined): 
  */
 export function supabaseMcpStore(db: SupabaseClient, workspaceId: string, userId: string): McpStore {
   const memory = supabaseMemory(db, userId);
+  /** roteiros enviados pelo assistente que o app ainda não abriu (mais novos primeiro) — contam como roteiro feito */
+  const pendingDrafts = async (days = PENDING_WINDOW_DAYS): Promise<{ contentItemId: string; draft: ContentDraft; createdAt: string }[]> => {
+    const { data, error } = await db.from("assistant_drafts").select("content_item_id, draft, created_at").eq("workspace_id", workspaceId).is("consumed_at", null)
+      .gte("created_at", daysAgo(days)).order("created_at", { ascending: false }).limit(60);
+    if (error) throw new Error(error.message);
+    const seen = new Set<string>();
+    return (data ?? []).flatMap((r) => {
+      const parsed = parseDraft(r.draft);
+      const id = r.content_item_id as string;
+      if (!parsed.ok || seen.has(id)) return [];
+      seen.add(id);
+      return [{ contentItemId: id, draft: parsed.draft, createdAt: r.created_at as string }];
+    });
+  };
+  /** Dia planejado antes da cena dirigida: a missão de B-roll da empresa ganha um conteúdo (formato cena de apoio). */
+  const backfillBroll = async (from: string, to: string, date: string, pillars: Pillar[]): Promise<number> => {
+    const { data, error } = await db.from("recording_tasks").select("id, title, scheduled_for").eq("workspace_id", workspaceId).eq("kind", "broll")
+      .eq("optional", false).is("content_item_id", null).gte("scheduled_for", from).lt("scheduled_for", to);
+    if (error) throw new Error(error.message);
+    const slug = pillars.find((p) => p.slug === "demonstracao")?.slug ?? pillars[0]?.slug ?? "";
+    for (const t of data ?? []) {
+      const id = crypto.randomUUID();
+      const ci = await db.from("content_items").insert({ id, workspace_id: workspaceId, pillar_slug: slug, plan_date: date, scheduled_for: t.scheduled_for, format: "broll", title: t.title, status: "planned", structured_payload: {} });
+      if (ci.error) throw new Error(ci.error.message);
+      const up = await db.from("recording_tasks").update({ content_item_id: id, updated_at: new Date().toISOString() }).eq("id", t.id);
+      if (up.error) throw new Error(up.error.message);
+    }
+    return data?.length ?? 0;
+  };
   const withScript = async (rows: ContentRow[]): Promise<McpContent[]> => {
     const ids = rows.map((r) => r.id);
-    const { data } = ids.length ? await db.from("scripts").select("content_item_id").in("content_item_id", ids) : { data: [] };
+    const [{ data }, pend] = await Promise.all([
+      ids.length ? db.from("scripts").select("content_item_id").in("content_item_id", ids) : Promise.resolve({ data: [] }),
+      ids.length ? db.from("assistant_drafts").select("content_item_id").in("content_item_id", ids).is("consumed_at", null) : Promise.resolve({ data: [] }),
+    ]);
     const scripted = new Set((data ?? []).map((s: { content_item_id: string }) => s.content_item_id));
+    const pending = new Set((pend.data ?? []).map((s: { content_item_id: string }) => s.content_item_id));
     return rows.map((r) => ({
-      id: r.id, format: r.format, pillarSlug: r.pillar_slug ?? "", title: r.title, date: r.plan_date ?? "", hasScript: scripted.has(r.id), project: asProject(r.structured_payload),
+      id: r.id, format: r.format, pillarSlug: r.pillar_slug ?? "", title: r.title, date: r.plan_date ?? "", hasScript: scripted.has(r.id), pendingDraft: pending.has(r.id),
+      project: asProject(r.structured_payload),
     }));
   };
   const store: McpStore = {
@@ -68,15 +103,19 @@ export function supabaseMcpStore(db: SupabaseClient, workspaceId: string, userId
       const [script, content, pending] = await Promise.all([
         db.from("scripts").select("draft").eq("workspace_id", workspaceId).eq("content_item_id", contentId).order("updated_at", { ascending: false }).limit(1).maybeSingle(),
         db.from("content_items").select("structured_payload").eq("workspace_id", workspaceId).eq("id", contentId).maybeSingle(),
-        db.from("assistant_drafts").select("id", { count: "exact", head: true }).eq("workspace_id", workspaceId).eq("content_item_id", contentId).is("consumed_at", null),
+        db.from("assistant_drafts").select("draft, created_at").eq("workspace_id", workspaceId).eq("content_item_id", contentId).is("consumed_at", null).order("created_at", { ascending: false }).limit(1),
       ]);
       const sp = (content.data?.structured_payload ?? {}) as Record<string, unknown>;
+      const box = pending.data?.[0] ?? null;
+      const boxDraft = box?.draft as { tipo?: string; takes?: unknown } | null | undefined;
       return {
         draft: (script.data?.draft ?? null) as ContentDraft | null,
         edit: (sp.edit ?? null) as EditChoices | null,
         metrics: (sp.metrics ?? null) as PostMetrics | null,
         postedAt: typeof sp.posted_at === "string" ? sp.posted_at : null,
-        pendingFromAssistant: (pending.count ?? 0) > 0,
+        pendingFromAssistant: Boolean(box),
+        // o que o assistente enviou e o app ainda não abriu (roteiro ou cenas) — para conferir antes da gravação
+        pending: box ? { sentAt: box.created_at as string, draft: boxDraft?.tipo === "cenas" ? null : (box.draft as ContentDraft), scenes: boxDraft?.tipo === "cenas" ? (boxDraft.takes as Scenes) : null } : null,
         scenes: Array.isArray(sp.cenas) ? (sp.cenas as Scenes) : null,
       };
     },
@@ -101,9 +140,10 @@ export function supabaseMcpStore(db: SupabaseClient, workspaceId: string, userId
         const tasks = await db.from("recording_tasks").select("id").eq("workspace_id", workspaceId).gte("scheduled_for", from).lt("scheduled_for", to).limit(1);
         if (tasks.error) throw new Error(tasks.error.message);
         const existing = await store.contentsOn(date);
-        // dia já planejado (pelo app ou antes): fica como está
+        // dia já planejado (pelo app ou antes): fica como está — só a empresa ganha a cena de apoio que faltava
         if (existing.length || tasks.data?.length) {
-          out.push({ date, created: false, items: existing });
+          const added = business ? await backfillBroll(from, to, date, pillars) : 0;
+          out.push({ date, created: false, items: added ? await store.contentsOn(date) : existing });
           continue;
         }
         const plan = buildDayPlan({ date: new Date(0), dateKey: date, utcOffsetMinutes: BRASILIA_OFFSET_MIN, workspaceId, routine, pillars, recentPillarSlugs: history, newId: () => crypto.randomUUID(), now: new Date().toISOString(), directedBroll: business });
@@ -126,9 +166,9 @@ export function supabaseMcpStore(db: SupabaseClient, workspaceId: string, userId
       return out;
     },
     async pillarCounts(days) {
-      const scripts = await db.from("scripts").select("content_item_id").eq("workspace_id", workspaceId).gte("created_at", daysAgo(days));
+      const [scripts, pending] = await Promise.all([db.from("scripts").select("content_item_id").eq("workspace_id", workspaceId).gte("created_at", daysAgo(days)), pendingDrafts(days)]);
       if (scripts.error) throw new Error(scripts.error.message);
-      const ids = [...new Set((scripts.data ?? []).map((r) => r.content_item_id as string).filter(Boolean))];
+      const ids = [...new Set([...(scripts.data ?? []).map((r) => r.content_item_id as string), ...pending.map((p) => p.contentItemId)].filter(Boolean))];
       if (!ids.length) return {};
       const items = await db.from("content_items").select("pillar_slug").eq("workspace_id", workspaceId).in("id", ids);
       if (items.error) throw new Error(items.error.message);
@@ -139,9 +179,11 @@ export function supabaseMcpStore(db: SupabaseClient, workspaceId: string, userId
     async recentTopics(days) {
       const { data, error } = await db.from("scripts").select("draft, content_item_id").eq("workspace_id", workspaceId).gte("created_at", daysAgo(days)).order("created_at", { ascending: false }).limit(60);
       if (error) throw new Error(error.message);
-      return (data ?? [])
-        .map((r) => ({ topic: String((r.draft as { topic?: string } | null)?.topic ?? ""), contentItemId: (r.content_item_id as string | null) ?? null }))
-        .filter((r) => r.topic);
+      const pending = await pendingDrafts(days);
+      return [
+        ...pending.map((p) => ({ topic: p.draft.topic, contentItemId: p.contentItemId as string | null })),
+        ...(data ?? []).map((r) => ({ topic: String((r.draft as { topic?: string } | null)?.topic ?? ""), contentItemId: (r.content_item_id as string | null) ?? null })),
+      ].filter((r) => r.topic);
     },
     async saveImprovement(i) {
       const { data, error } = await db.from("melhorias").insert({ workspace_id: workspaceId, user_id: userId, ...i }).select("id").single();
@@ -160,8 +202,14 @@ export function supabaseMcpStore(db: SupabaseClient, workspaceId: string, userId
     },
     profile: () => memory.profile(workspaceId),
     pillarName: (slug) => memory.pillarName(workspaceId, slug),
-    recentFingerprints: () => memory.recentFingerprints(workspaceId),
-    recentSummaries: () => memory.recentSummaries(workspaceId),
+    async recentFingerprints() {
+      const [saved, pending] = await Promise.all([memory.recentFingerprints(workspaceId), pendingDrafts()]);
+      return [...pending.flatMap((p) => fingerprintsFor(p.draft).map((f) => ({ ...f, contentItemId: p.contentItemId, createdAt: p.createdAt }))), ...saved];
+    },
+    async recentSummaries() {
+      const [saved, pending] = await Promise.all([memory.recentSummaries(workspaceId), pendingDrafts()]);
+      return [...pending.map((p) => `${summarizeForMemory(p.draft)} (enviado pelo assistente, aguardando o app)`), ...saved].slice(0, 15);
+    },
     async saveDraft(contentId, draft) {
       const { error } = await db.from("assistant_drafts").insert({ workspace_id: workspaceId, content_item_id: contentId, draft, source: "mcp" });
       if (error) throw new Error(error.message);
@@ -251,12 +299,24 @@ export function supabaseMcpStore(db: SupabaseClient, workspaceId: string, userId
       return data.id as string;
     },
     async proofs() {
-      const { data, error } = await db.from("provas_filmaveis").select("descricao, status").eq("workspace_id", workspaceId).order("created_at");
+      const { data, error } = await db.from("provas_filmaveis").select("descricao, status, content_item_id").eq("workspace_id", workspaceId).order("created_at");
       if (error) throw new Error(error.message);
-      return (data ?? []) as FilmableProof[];
+      const rows = (data ?? []) as { descricao: string; status: FilmableProof["status"]; content_item_id: string | null }[];
+      // cena ligada já gravada e enviada = prova filmada (sem precisar marcar à mão)
+      const linked = [...new Set(rows.map((r) => r.content_item_id).filter((x): x is string => Boolean(x)))];
+      const shot = new Set<string>();
+      if (linked.length) {
+        const takes = await db.from("takes").select("content_item_id, tags, media_files(state)").eq("workspace_id", workspaceId).in("content_item_id", linked);
+        if (takes.error) throw new Error(takes.error.message);
+        for (const t of (takes.data ?? []) as unknown as { content_item_id: string; tags: string[] | null; media_files: { state: string } | null }[]) {
+          if (!(t.tags ?? []).includes("descartado") && t.media_files?.state === "uploaded_original") shot.add(t.content_item_id);
+        }
+      }
+      return rows.map((r) => ({ descricao: r.descricao, status: r.status === "filmada" || (r.content_item_id && shot.has(r.content_item_id)) ? "filmada" : "falta_filmar", contentItemId: r.content_item_id }));
     },
     async saveProof(p) {
-      const { error } = await db.from("provas_filmaveis").upsert({ workspace_id: workspaceId, descricao: p.descricao, status: p.status, updated_at: new Date().toISOString() }, { onConflict: "workspace_id,descricao" });
+      const row = { workspace_id: workspaceId, descricao: p.descricao, status: p.status, updated_at: new Date().toISOString(), ...(p.contentItemId ? { content_item_id: p.contentItemId } : {}) };
+      const { error } = await db.from("provas_filmaveis").upsert(row, { onConflict: "workspace_id,descricao" });
       if (error) throw new Error(error.message);
     },
   };

@@ -7,6 +7,7 @@ import { chosenTrack, nextTrack } from "../../src/musicChoice";
 import { getContent, getTake, setEditChoices, type ContentItem, type Take } from "../../src/db/repo";
 import { contentPlan, type ContentPlan } from "../../src/finalPlan";
 import { downloadFinal, kickRenderWorker, latestRenderJob, requestFinalRender, type RenderJob } from "../../src/finalRender";
+import { MusicPreview } from "../../src/components/MusicPreview";
 import { FinishOptions } from "../../src/components/FinishOptions";
 import { setContentOnScreen } from "../../src/renderWatch";
 import { syncNow } from "../../src/sync/engine";
@@ -143,6 +144,11 @@ export default function FinalizarScreen() {
             <Row label={`✓ Legenda: ${CAPTION_NAME[edit.captionStyle] ?? edit.captionStyle}`} />
             <Row label={track ? `✓ Música: ${track.title} — ${track.artist}` : "✓ Sem música"}
               action={track ? { label: "TROCAR", onPress: () => save({ ...edit, music: nextTrack(track).id }), testID: "swap-music" } : undefined} />
+            {track ? (
+              <MusicPreview track={track} volume={edit.musicVolume ?? c.draft?.direcao?.musica?.volume ?? DEFAULT_EDIT_CHOICES.musicVolume ?? 0.22}
+                entradaS={edit.music === "auto" && c.draft?.direcao?.musica?.id === track.id ? c.draft.direcao.musica.entrada : 0}
+                voiceUri={takes.find((t) => t.id === cp.plan!.clips[0]?.takeId)?.media.localUri ?? null} />
+            ) : null}
             <Row label={`✓ Embelezar a pele: ${RETOUCH_NAME[retouch]}`} />
             <Row label={`✓ Voz limpa, gancho na tela, capa e assinatura`} />
           </Card>

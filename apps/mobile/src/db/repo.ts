@@ -289,7 +289,11 @@ export async function ensureDayPlan(date: Date): Promise<void> {
     const ws = await requireWorkspace();
     const done = await db.getFirstAsync<{ value: string }>("SELECT value FROM kv WHERE key = ?", `plan:${ws.id}:${key}`);
     const hasTasks = await db.getFirstAsync<{ id: string }>("SELECT id FROM tasks WHERE workspace_id = ? AND date = ? LIMIT 1", ws.id, key);
-    if (done || hasTasks) return;
+    if (done || hasTasks) {
+      // dia já no aparelho: traz só o que o diretor acrescentou depois (ex.: cena de apoio da empresa), em segundo plano
+      if (ws.cloud) void pullDayAdditions(ws.id, key, date).catch(() => undefined);
+      return;
+    }
     // o diretor (Claude, pelo conector) pode ter planejado este dia antes: usa o mesmo plano, sem criar outro
     if (ws.cloud && (await adoptServerPlan(ws.id, key, date))) return;
     const recent = await db.getAllAsync<{ pillar_slug: string }>("SELECT pillar_slug FROM content_items WHERE workspace_id = ? AND format != 'broll' ORDER BY date DESC LIMIT 30", ws.id);
@@ -316,6 +320,31 @@ export async function ensureDayPlan(date: Date): Promise<void> {
 const SERVER_PLAN_TIMEOUT_MS = 4000;
 
 /** Traz para o celular o plano que já existe na nuvem para o dia (criado pelo diretor). false = não há (ou sem internet). */
+/** Conteúdos novos do dia criados no servidor e o vínculo missão → conteúdo (sem mexer no que já existe aqui). */
+async function pullDayAdditions(workspaceId: string, key: string, date: Date): Promise<void> {
+  if (!supabase) return;
+  const start = new Date(date.getFullYear(), date.getMonth(), date.getDate());
+  const end = new Date(start.getTime() + 24 * 60 * 60 * 1000);
+  const [items, tasks] = await Promise.all([
+    supabase.from("content_items").select("id, format, pillar_slug, title, status, scheduled_for").eq("workspace_id", workspaceId).eq("plan_date", key),
+    supabase.from("recording_tasks").select("id, content_item_id").eq("workspace_id", workspaceId).not("content_item_id", "is", null)
+      .gte("scheduled_for", start.toISOString()).lt("scheduled_for", end.toISOString()),
+  ]);
+  if (items.error || tasks.error) return;
+  const db = await getDb();
+  await db.withTransactionAsync(async () => {
+    for (const c of items.data ?? []) {
+      await db.runAsync(
+        "INSERT OR IGNORE INTO content_items(id, workspace_id, date, format, pillar_slug, title, status, scheduled_for, updated_at) VALUES (?,?,?,?,?,?,?,?,?)",
+        c.id, workspaceId, key, c.format, c.pillar_slug ?? "", c.title, c.status, c.scheduled_for, nowIso(),
+      );
+    }
+    for (const t of tasks.data ?? []) {
+      await db.runAsync("UPDATE tasks SET content_item_id = ? WHERE id = ? AND content_item_id IS NULL", t.content_item_id, t.id);
+    }
+  });
+}
+
 async function adoptServerPlan(workspaceId: string, key: string, date: Date): Promise<boolean> {
   if (!supabase) return false;
   const start = new Date(date.getFullYear(), date.getMonth(), date.getDate());

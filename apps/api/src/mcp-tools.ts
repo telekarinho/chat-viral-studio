@@ -1,5 +1,5 @@
 import {
-  MOOD_LABEL, MUSIC_LIBRARY, buildManualPrompt, buildSegments, checkRepetition, describeRepetition, directionIssues, directorIssues, engagementRate, finalizeDraft, fingerprintsFor, mentionsPrice, parseDraft,
+  MOOD_LABEL, MUSIC_LIBRARY, buildManualPrompt, contractLimits, directionReport, normalizeMood, buildSegments, checkRepetition, describeRepetition, directionIssues, directorIssues, engagementRate, finalizeDraft, fingerprintsFor, mentionsPrice, parseDraft,
   normalizeText, pendingClaimsIn, projectBrief, rankBy, sharesPer1k, type RankRow, type RankedPost,
   ScenesSchema, type ContentDraft, type CreatorProfile, type Scenes, type EditChoices, type Fingerprint, type PostMetrics, type ProjectInfo,
 } from "@postai/domain";
@@ -12,7 +12,11 @@ const CLIENT_STORY_PILLAR = "historias";
 
 /** Ferramentas do conector (o “diretor de gravações”): perfis, plano, roteiro, desempenho e melhorias. */
 
-export interface McpContent { id: string; format: string; pillarSlug: string; title: string; date: string; hasScript: boolean; project: ProjectInfo | null }
+export interface McpContent {
+  id: string; format: string; pillarSlug: string; title: string; date: string; hasScript: boolean; project: ProjectInfo | null;
+  /** roteiro/cenas do assistente enviados e ainda não abertos no app */
+  pendingDraft?: boolean;
+}
 export interface McpPost {
   id: string; title: string; pillarSlug: string; format: string; date: string; postedAt: string | null; postedTo: string[]; metrics: PostMetrics | null;
   /** gancho usado e música usada (para descobrir o que funciona) */
@@ -22,7 +26,10 @@ export interface McpStrategy {
   pillars: { slug: string; name: string; targetPercent: number }[];
   routine: { weekday: number; startTime: string; title: string; format: string }[];
 }
-export interface McpScript { draft: ContentDraft | null; edit: EditChoices | null; metrics: PostMetrics | null; postedAt: string | null; pendingFromAssistant: boolean; scenes?: Scenes | null }
+export interface McpScript {
+  draft: ContentDraft | null; edit: EditChoices | null; metrics: PostMetrics | null; postedAt: string | null; pendingFromAssistant: boolean; scenes?: Scenes | null;
+  pending?: { sentAt: string; draft: ContentDraft | null; scenes: Scenes | null } | null;
+}
 export interface McpImprovement { id: string; titulo: string; prioridade: string; status: string; issueNumber: number | null; createdAt: string }
 export interface McpProfile { id: string; name: string; kind: "pessoal" | "empresa"; signature: string }
 export interface McpRecording {
@@ -76,6 +83,7 @@ const MAX_PLAN_DAYS = 14;
 const PILLAR_WINDOW_DAYS = 30;
 const TOPIC_WINDOW_DAYS = 14;
 const MIN_POSTS_FOR_CONCLUSIONS = 5;
+const BPM_TOLERANCE = 10;
 const WEEKDAY = ["dom", "seg", "ter", "qua", "qui", "sex", "sáb"];
 
 /** Como preencher a direção completa (vai junto do roteiro em salvar_roteiro). */
@@ -102,7 +110,7 @@ export const MCP_TOOLS = [
   { name: "ler_roteiro", title: "Ler roteiro salvo", description: "Devolve o roteiro já salvo de um conteúdo (JSON completo), as escolhas de edição/música, os números e se há um roteiro do assistente esperando o app abrir.", inputSchema: obj({ content_id: { type: "string" } }, ["content_id"]), annotations: RO },
   { name: "instrucoes_do_roteiro", title: "Regras para o roteiro", description: "Regras do perfil (voz, formatos que viralizam, fechamento, o que não repetir), temas abaixo da meta nos últimos 30 dias, assuntos bloqueados por 14 dias e o JSON exato.", inputSchema: obj({ content_id: { type: "string", description: "id de conteudos_do_dia" }, acontecimento: { type: "string", description: "o que aconteceu hoje (opcional)" } }, ["content_id"]), annotations: RO },
   { name: "salvar_roteiro", title: "Salvar roteiro no app", description: "Valida (contrato, gancho ≤ 12 palavras, texto de tela 2–5 palavras, duração coerente, sem repetir, sem preço/alegação sem prova no comercial) e envia ao app. Se falhar, devolve o que corrigir.", inputSchema: obj({ content_id: { type: "string" }, roteiro: { type: "object", description: "o JSON completo do roteiro" } }, ["content_id", "roteiro"]), annotations: WRITE },
-  { name: "salvar_cenas", title: "Salvar cenas de apoio", description: "Para conteúdo de cena de apoio (B-roll / prova visual): a lista de takes com instrução de filmagem. O app mostra cada take para gravar.", inputSchema: obj({ content_id: { type: "string" }, takes: { type: "array", description: "takes {ordem, nome, duracao_segundos, enquadramento, movimento_camera, local, luz, olhar, emocao, broll, erro_comum, fala_exata (opcional)}", items: { type: "object" } } }, ["content_id", "takes"]), annotations: WRITE },
+  { name: "salvar_cenas", title: "Salvar cenas de apoio", description: "Para conteúdo de cena de apoio (B-roll / prova visual): a lista de takes com instrução de filmagem. O app mostra cada take para gravar.", inputSchema: obj({ content_id: { type: "string" }, takes: { type: "array", description: "takes {ordem, nome, duracao_segundos, enquadramento, movimento_camera, local, luz, olhar, emocao, broll, erro_comum, fala_exata (opcional)}", items: { type: "object" } }, provas: { type: "array", items: { type: "string" }, description: "provas filmáveis do perfil que esta cena filma (ficam 'filmada' quando a cena for gravada)" } }, ["content_id", "takes"]), annotations: WRITE },
   { name: "registrar_metricas", title: "Registrar números do post", description: "Salva os números REAIS de um post (ex.: lidos no Metricool ou no painel da rede) para o app e o ranking. Nunca invente números.", inputSchema: obj({ content_id: { type: "string" }, visualizacoes: { type: "number" }, curtidas: { type: "number" }, comentarios: { type: "number" }, compartilhamentos: { type: "number" }, salvamentos: { type: "number" }, retencao: { type: "number", description: "% de conclusão/retenção média (0–100)" }, tempo_medio_segundos: { type: "number" }, seguidores_ganhos: { type: "number" }, fonte: { type: "string", description: "ex.: Metricool, Instagram" } }, ["content_id", "visualizacoes"]), annotations: WRITE },
   { name: "listar_musicas", title: "Músicas licenciadas", description: "Faixas da biblioteca licenciada (id, clima, duração, licença). Use o id em direcao.musica.id. Conta de empresa só vê faixas com licença comercial.", inputSchema: obj({ clima: { type: "string", description: `opcional: ${Object.keys(MOOD_LABEL).join(", ")}` }, bpm: { type: "number", description: "opcional (as faixas ainda não têm BPM medido)" } }), annotations: RO },
   { name: "ler_status_gravacao", title: "Status da gravação", description: "O que já foi gravado (por take/parte), o que falta, se já subiu e como está a montagem do vídeo.", inputSchema: obj({ content_id: { type: "string" } }, ["content_id"]), annotations: RO },
@@ -135,6 +143,9 @@ async function describeStrategy(store: McpStore): Promise<string> {
     p.closingPhrase ? `Fechamento obrigatório: "${p.closingPhrase}"` : "",
     `Temas e meta: ${s.pillars.map((x) => `${x.name} ${x.targetPercent}%`).join(" · ")}`,
     `Rotina (horário de Brasília): ${s.routine.map((r) => `${WEEKDAY[r.weekday]} ${r.startTime} ${r.title} (${FORMAT_LABEL[r.format] ?? r.format})`).join(" · ") || "sem rotina"}`,
+    p.kind === "empresa"
+      ? "Como ler a rotina: Vídeo principal = conteúdo com roteiro (salvar_roteiro); Cena de apoio/prova visual = conteúdo sem fala com lista de takes (salvar_cenas, ligada às provas filmáveis)."
+      : "Como ler a rotina: só Pensamento do Dia e Vídeo principal têm roteiro (2 conteúdos por dia). Os demais horários são cenas de apoio de ~3s (café, trabalho, academia…) sem roteiro: o app guarda e usa por cima da fala na montagem do vídeo do dia. Sábado e domingo não têm rotina.",
   ];
   const b = p.kind === "empresa" ? p.business : undefined;
   if (b) {
@@ -223,6 +234,12 @@ export async function blockedTopics(store: McpStore): Promise<string> {
   return `Assuntos BLOQUEADOS (usados nos últimos ${TOPIC_WINDOW_DAYS} dias — escolha outro):\n${list.join("\n")}`;
 }
 
+/** " · já tem roteiro" / " · roteiro do assistente aguardando abertura no app" / "" */
+function scriptState(c: McpContent): string {
+  if (c.pendingDraft) return " · roteiro do assistente aguardando abertura no app (use ler_roteiro; salvar substitui)";
+  return c.hasScript ? " · já tem roteiro (use ler_roteiro; salvar substitui)" : "";
+}
+
 function clampDays(v: unknown): number {
   return typeof v === "number" && v >= 1 ? Math.min(MAX_PLAN_DAYS, Math.floor(v)) : 7;
 }
@@ -256,7 +273,7 @@ export async function callProfileTool(store: McpStore, name: string, args: Json,
     const start = typeof args.data_inicio === "string" && DATE.test(args.data_inicio) ? args.data_inicio : todayBrasilia(now);
     const days = await store.planDays(start, clampDays(args.dias));
     const lines = await Promise.all(days.map(async (d) => {
-      const items = await Promise.all(d.items.map(async (c) => `  · id ${c.id} · ${FORMAT_LABEL[c.format] ?? c.format} · ${await store.pillarName(c.pillarSlug)}${c.hasScript ? " · já tem roteiro" : ""}`));
+      const items = await Promise.all(d.items.map(async (c) => `  · id ${c.id} · ${FORMAT_LABEL[c.format] ?? c.format} · ${await store.pillarName(c.pillarSlug)}${scriptState(c)}`));
       return `${d.date}${d.created ? " (plano criado agora)" : ""}:\n${items.join("\n") || "  · sem gravação de roteiro neste dia"}`;
     }));
     return text(`Plano:\n${lines.join("\n")}\nUse instrucoes_do_roteiro e salvar_roteiro em cada id. O app mostra estes mesmos conteúdos no dia.`);
@@ -266,16 +283,17 @@ export async function callProfileTool(store: McpStore, name: string, args: Json,
     const items = await store.contentsOn(date);
     if (!items.length) return text(`Nada planejado para ${date}. Use criar_plano com data_inicio ${date} (ou o criador abre o Post.ai no dia).`);
     const lines = await Promise.all(items.map(async (c) =>
-      `- id ${c.id} · ${FORMAT_LABEL[c.format] ?? c.format} · tema: ${await store.pillarName(c.pillarSlug)} · ${c.hasScript ? "já tem roteiro (use ler_roteiro; salvar substitui)" : "sem roteiro"}`));
+      `- id ${c.id} · ${FORMAT_LABEL[c.format] ?? c.format} · tema: ${await store.pillarName(c.pillarSlug)} · ${scriptState(c).replace(/^ · /, "") || "sem roteiro"}`));
     return text(`Conteúdos de ${date}:\n${lines.join("\n")}`);
   }
   if (name === "listar_musicas") {
     const business = (await store.profile()).kind === "empresa";
-    const mood = typeof args.clima === "string" && args.clima in MOOD_LABEL ? args.clima : null;
-    const list = MUSIC_LIBRARY.filter((t) => (!business || t.license === "comercial") && (!mood || t.mood === mood));
-    if (!list.length) return text("Nenhuma faixa com esse filtro.");
-    const bpmNote = typeof args.bpm === "number" ? "\nObs.: as faixas ainda não têm BPM medido — escolha pelo clima." : "";
-    return text(`${list.map((t) => `- id ${t.id} · "${t.title}" — ${t.artist} · clima ${MOOD_LABEL[t.mood]} · ${t.durationSec}s · licença ${t.license}`).join("\n")}${bpmNote}`);
+    const mood = typeof args.clima === "string" ? normalizeMood(args.clima) || null : null;
+    const bpm = typeof args.bpm === "number" ? args.bpm : null;
+    const list = MUSIC_LIBRARY.filter((t) => (!business || t.license === "comercial") && (!mood || t.mood === mood) && (bpm === null || (t.bpm !== null && Math.abs(t.bpm - bpm) <= BPM_TOLERANCE)));
+    if (!list.length) return text(`Nenhuma faixa com esse filtro${bpm !== null ? ` (BPM ${bpm} ± ${BPM_TOLERANCE})` : ""}.`);
+    const rows = list.map((t) => `- id ${t.id} · "${t.title}" — ${t.artist} · clima ${t.mood} (${MOOD_LABEL[t.mood]}) · ${t.bpm ? `${t.bpm} BPM` : "sem batida definida"} · ${t.durationSec}s · licença ${t.license}`);
+    return text(`${rows.join("\n")}\nUse o valor de "clima" (ex.: ${list[0]!.mood}) em direcao.musica.clima. BPM medido no áudio. Tendência ("em alta"): ainda sem fonte de dados — não informada.`);
   }
   if (name === "registrar_melhoria") {
     const titulo = String(args.titulo ?? "").trim().slice(0, 140);
@@ -296,14 +314,23 @@ export async function callProfileTool(store: McpStore, name: string, args: Json,
   if (!content) return text("Conteúdo não encontrado neste perfil. Use um id de conteudos_do_dia ou criar_plano.", true);
 
   if (name === "ler_roteiro") {
-    const s = await store.readScript(content.id);
-    return text(JSON.stringify({ content_id: content.id, data: content.date, formato: content.format, tema: await store.pillarName(content.pillarSlug), ...s }, null, 2));
+    const { pending, ...s } = await store.readScript(content.id);
+    const current = pending?.draft ?? s.draft;
+    return text(JSON.stringify({
+      content_id: content.id, data: content.date, formato: content.format, tema: await store.pillarName(content.pillarSlug), ...s,
+      // o que o assistente enviou e o app ainda não abriu
+      pendente: pending ?? null,
+      // o que o app e a montagem fazem com a direção deste roteiro (o que não for aplicado vem dito)
+      aplicacao: current?.direcao ? directionReport(current.direcao) : null,
+    }, null, 2));
   }
   if (name === "ler_status_gravacao") {
     const [rec, script, profile] = await Promise.all([store.recordingStatus(content.id), store.readScript(content.id), store.profile()]);
     const lines: string[] = [];
-    if (script.draft) {
-      const segs = buildSegments(script.draft, { selectedHook: 0, userEdited: false, closingPhrase: profile.closingPhrase, business: profile.kind === "empresa" });
+    const draft = script.draft ?? script.pending?.draft ?? null;
+    if (!script.draft && draft) lines.push("(roteiro do assistente ainda não aberto no app — as partes abaixo valem depois que o criador abrir o conteúdo)");
+    if (draft) {
+      const segs = buildSegments(draft, { selectedHook: 0, userEdited: false, closingPhrase: profile.closingPhrase, business: profile.kind === "empresa" });
       for (const sg of segs) {
         const t = rec.takes.filter((x) => x.segmentIndex === sg.index);
         lines.push(`- ${sg.index + 1}. ${sg.label}: ${!t.length ? "falta gravar" : t.some((x) => x.synced) ? "gravado e enviado" : "gravado, ainda subindo"}`);
@@ -325,7 +352,11 @@ export async function callProfileTool(store: McpStore, name: string, args: Json,
     const unproven = biz ? pendingClaimsIn(parsed.data.map((t) => `${t.fala_exata} ${t.broll}`).join(" "), biz.pendingClaims ?? []) : [];
     if (unproven.length) return text(`A cena afirma algo ainda sem prova: ${unproven.join("; ")}.`, true);
     await store.saveScenes(content.id, parsed.data);
-    return text(`${parsed.data.length} take(s) de "${content.title}" enviados para o Post.ai. Aparecem no app ao abrir esta cena.`);
+    // provas que esta cena filma: ficam ligadas a ela e viram "filmada" quando a cena for gravada e enviada
+    const provas = Array.isArray(args.provas) ? args.provas.filter((x): x is string => typeof x === "string" && x.trim().length >= 3).map((x) => x.trim().slice(0, 300)) : [];
+    const current = new Map((await store.proofs()).map((p) => [p.descricao.toLowerCase(), p.status]));
+    for (const d of provas) await store.saveProof({ descricao: d, status: current.get(d.toLowerCase()) ?? "falta_filmar", contentItemId: content.id });
+    return text(`${parsed.data.length} take(s) de "${content.title}" enviados para o Post.ai. Aparecem no app ao abrir esta cena.${provas.length ? ` Provas ligadas: ${provas.join("; ")}.` : ""}`);
   }
   if (content.format === "broll") return text("Cena de apoio (B-roll, sem roteiro falado): use salvar_cenas com a lista de takes (nome, duracao_segundos, enquadramento, movimento_camera, local, luz, broll, erro_comum).", true);
   if (content.format !== "thought" && content.format !== "main_video") return text("Este conteúdo não usa roteiro falado (é story).", true);
@@ -337,7 +368,8 @@ export async function callProfileTool(store: McpStore, name: string, args: Json,
     const eventText = typeof args.acontecimento === "string" && args.acontecimento.trim() ? args.acontecimento.trim().slice(0, 1500) : null;
     const prompt = buildManualPrompt({ profile, pillarName, format: content.format, eventText, brief: content.project ? projectBrief(content.project) : null, recentSummaries, avoid: "" });
     const cases = profile.kind === "empresa" ? describeCases(await store.realCases()) : "";
-    return text([prompt, deficit, blocked, cases, "Regras do diretor: gancho ≤ 12 palavras; screen_text 2–5 palavras; duration_seconds ≈ palavras do script ÷ 2,5.", DIRECTION_GUIDE].filter(Boolean).join("\n\n"));
+    const limits = `LIMITES DE CADA CAMPO (o validador confere exatamente isto; erros voltam todos juntos com o caminho do campo):\n${contractLimits().join("\n")}`;
+    return text([prompt, deficit, blocked, cases, "Regras do diretor: gancho ≤ 12 palavras; screen_text 2–5 palavras; duration_seconds ≈ palavras do script ÷ 2,5.", DIRECTION_GUIDE, limits].filter(Boolean).join("\n\n"));
   }
 
   if (name === "salvar_roteiro") {
@@ -345,20 +377,19 @@ export async function callProfileTool(store: McpStore, name: string, args: Json,
     const parsed = parseDraft({ ...(args.roteiro as Json), format: content.format });
     if (!parsed.ok) return text(`O roteiro não passou na validação. Corrija e salve de novo:\n- ${parsed.errors.join("\n- ")}`, true);
     const draft = finalizeDraft(parsed.draft, profile);
-    const rules = [
+    // todas as checagens de uma vez: o assistente corrige tudo numa rodada só
+    const biz = profile.kind === "empresa" ? profile.business : undefined;
+    const problems: string[] = [
       ...directorIssues(draft),
       ...(draft.direcao ? directionIssues(draft.direcao, { durationSeconds: draft.duration_seconds, spoken: true, business: profile.kind === "empresa" }) : []),
     ];
-    if (rules.length) return text(`Ajuste e salve de novo:\n- ${rules.join("\n- ")}`, true);
-    const biz = profile.kind === "empresa" ? profile.business : undefined;
-    if (biz?.noPrice && mentionsPrice(draft)) return text("O roteiro fala preço/valor. Neste perfil de empresa preço não aparece no vídeo: reescreva sem preço.", true);
-    const unproven = biz ? pendingClaimsIn(`${draft.script} ${draft.cta}`, biz.pendingClaims ?? []) : [];
-    if (unproven.length) return text(`O roteiro afirma algo ainda sem prova: ${unproven.join("; ")}. Reescreva sem isso.`, true);
+    if (biz?.noPrice && mentionsPrice(draft)) problems.push("preço: o roteiro fala preço/valor — neste perfil de empresa preço não aparece no vídeo.");
+    for (const c of biz ? pendingClaimsIn(`${draft.script} ${draft.cta}`, biz.pendingClaims ?? []) : []) problems.push(`alegação sem prova: "${c}" — reescreva sem isso.`);
     // história de cliente só com caso real autorizado (nunca inventar depoimento)
     if (biz && content.pillarSlug === CLIENT_STORY_PILLAR && !(await store.realCases()).some(authorized)) {
-      return text("Este perfil não tem caso real de cliente autorizado. Cadastre com cadastrar_caso_real (com autorização) antes de escrever 'Histórias de cliente'.", true);
+      problems.push("histórias de cliente: este perfil não tem caso real autorizado — cadastre com cadastrar_caso_real (com autorização) antes.");
     }
-    // memória de repetição + assuntos bloqueados (14 dias), sem contar o próprio conteúdo (reescrever é permitido)
+    // memória de repetição + assuntos bloqueados (14 dias, inclusive roteiros enviados e ainda não abertos), sem contar o próprio conteúdo
     const [fps, topics] = await Promise.all([store.recentFingerprints(), store.recentTopics(TOPIC_WINDOW_DAYS)]);
     const recent: Fingerprint[] = [...fps, ...topics.map((t) => ({ type: "topic" as const, value: normalizeText(t.topic), contentItemId: t.contentItemId }))]
       .filter((f) => f.contentItemId !== content.id);
@@ -370,8 +401,9 @@ export async function callProfileTool(store: McpStore, name: string, args: Json,
         const c = olds.get(i);
         return c ? `"${c.title}" · ${FORMAT_LABEL[c.format] ?? c.format} de ${c.date} · id ${c.id}` : undefined;
       };
-      return text(`Parece repetir conteúdo recente. Mude isto e salve de novo:\n- ${describeRepetition(report, label).join("\n- ")}`, true);
+      problems.push(...describeRepetition(report, label).map((x) => `repetição — ${x}`));
     }
+    if (problems.length) return text(`Ajuste tudo isto e salve de novo (${problems.length} ${problems.length === 1 ? "ponto" : "pontos"}):\n- ${problems.join("\n- ")}`, true);
     await store.saveDraft(content.id, draft);
     return text(`Roteiro "${draft.title}" enviado para o Post.ai. Ele aparece no app ao abrir este conteúdo.`);
   }

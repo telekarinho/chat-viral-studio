@@ -46,7 +46,14 @@ describe.skipIf(!(url && anon && service))("conector MCP (Supabase local)", () =
     expect(await tool("salvar_roteiro", { content_id: contentId, roteiro: draft })).toContain("enviado para o Post.ai");
     // diretor: perfis do dono, roteiro salvo legível, plano de dia futuro no fuso de Brasília, melhoria no backlog
     expect(await tool("listar_perfis", {})).toContain(`id ${ws}`);
-    expect(JSON.parse(await tool("ler_roteiro", { content_id: contentId }))).toMatchObject({ content_id: contentId, pendingFromAssistant: true });
+    const lido = JSON.parse(await tool("ler_roteiro", { content_id: contentId }));
+    expect(lido).toMatchObject({ content_id: contentId, pendingFromAssistant: true, draft: null });
+    expect(lido.pendente.draft.title).toBe(draft.title);
+    expect(await tool("conteudos_do_dia", { data: "2026-10-01" })).toContain("roteiro do assistente aguardando abertura no app");
+    // o roteiro pendente já bloqueia o mesmo assunto em outro conteúdo
+    const other = randomUUID();
+    await user.from("content_items").insert({ id: other, workspace_id: ws, format: "thought", pillar_slug: "familia", plan_date: "2026-10-01", title: "Pensamento do Dia" });
+    expect(await tool("salvar_roteiro", { content_id: other, roteiro: draft })).toContain("repetição — assunto");
     const plano = await tool("criar_plano", { data_inicio: "2027-03-01", dias: 2 });
     expect(plano).toContain("2027-03-01 (plano criado agora)");
     const future = await admin.from("recording_tasks").select("scheduled_for").eq("workspace_id", ws).gte("scheduled_for", "2027-03-01T03:00:00Z").lt("scheduled_for", "2027-03-02T03:00:00Z");
