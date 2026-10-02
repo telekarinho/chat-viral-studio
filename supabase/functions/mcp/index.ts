@@ -359,11 +359,25 @@ var DirectionSchema = z.object({
   teste_ab: z.object({ ganchos: z.array(req(200)).min(2).max(3), metrica: s(120).default("") }).nullable().default(null)
 });
 var ScenesSchema = z.array(TakeSchema).min(1).max(12);
+var QUOTE_FIELDS = ["ritmo", "emocao", "olhar", "erro_comum"];
+var plainText = (s2) => plain(s2).replace(/[^\p{L}\p{N} ]/gu, " ").replace(/\s+/g, " ").trim();
+function quotedFragments(s2) {
+  return [...s2.matchAll(/['"“‘]([^'"”’]{2,120})['"”’]/g)].map((m) => m[1].trim()).filter(Boolean);
+}
 function directionIssues(d, opts) {
   const out2 = [];
   const orders = d.takes.map((t) => t.ordem);
   if (new Set(orders).size !== orders.length) out2.push("direcao.takes: cada take precisa de uma ordem diferente.");
   if (opts.spoken && !d.takes.some((t) => t.fala_exata.trim())) out2.push("direcao.takes: nenhum take tem fala_exata \u2014 o app grava a fala por take.");
+  for (const [i, t] of d.takes.entries()) {
+    if (!t.fala_exata.trim()) continue;
+    const fala = plainText(t.fala_exata);
+    for (const field of QUOTE_FIELDS) {
+      for (const q of quotedFragments(t[field])) {
+        if (!fala.includes(plainText(q))) out2.push(`direcao.takes[${i}].${field}: cita "${q}", que n\xE3o est\xE1 na fala_exata deste take ("${t.fala_exata.slice(0, 80)}").`);
+      }
+    }
+  }
   const total = d.takes.reduce((a, t) => a + t.duracao_segundos, 0);
   if (total > opts.durationSeconds * 1.6 + 5) out2.push(`direcao.takes: somam ${Math.round(total)}s, bem mais que os ${opts.durationSeconds}s do v\xEDdeo.`);
   for (const [i, l] of d.legendas_na_tela.entries()) {

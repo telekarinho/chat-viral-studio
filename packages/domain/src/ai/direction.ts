@@ -76,12 +76,30 @@ export const ScenesSchema = z.array(TakeSchema).min(1).max(12);
 export type Scenes = z.infer<typeof ScenesSchema>;
 export type DirectionTake = z.infer<typeof TakeSchema>;
 
+/** Campos de instrução que costumam citar trechos da fala (ex.: "pausa depois de 'eu sei'"). */
+const QUOTE_FIELDS = ["ritmo", "emocao", "olhar", "erro_comum"] as const;
+const plainText = (s: string) => plain(s).replace(/[^\p{L}\p{N} ]/gu, " ").replace(/\s+/g, " ").trim();
+/** Trechos entre aspas simples, duplas ou curvas. */
+export function quotedFragments(s: string): string[] {
+  return [...s.matchAll(/['"“‘]([^'"”’]{2,120})['"”’]/g)].map((m) => m[1]!.trim()).filter(Boolean);
+}
+
 /** Problemas da direção que impedem gravar/montar só com o que o app mostra. */
 export function directionIssues(d: Direction, opts: { durationSeconds: number; spoken: boolean; business: boolean }): string[] {
   const out: string[] = [];
   const orders = d.takes.map((t) => t.ordem);
   if (new Set(orders).size !== orders.length) out.push("direcao.takes: cada take precisa de uma ordem diferente.");
   if (opts.spoken && !d.takes.some((t) => t.fala_exata.trim())) out.push("direcao.takes: nenhum take tem fala_exata — o app grava a fala por take.");
+  // a instrução de cada take tem que bater com a fala DESSE take: trecho citado que não está na fala = erro
+  for (const [i, t] of d.takes.entries()) {
+    if (!t.fala_exata.trim()) continue;
+    const fala = plainText(t.fala_exata);
+    for (const field of QUOTE_FIELDS) {
+      for (const q of quotedFragments(t[field])) {
+        if (!fala.includes(plainText(q))) out.push(`direcao.takes[${i}].${field}: cita "${q}", que não está na fala_exata deste take ("${t.fala_exata.slice(0, 80)}").`);
+      }
+    }
+  }
   const total = d.takes.reduce((a, t) => a + t.duracao_segundos, 0);
   if (total > opts.durationSeconds * 1.6 + 5) out.push(`direcao.takes: somam ${Math.round(total)}s, bem mais que os ${opts.durationSeconds}s do vídeo.`);
   for (const [i, l] of d.legendas_na_tela.entries()) {
