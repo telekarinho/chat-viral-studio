@@ -148,6 +148,16 @@ describe("renderizador (comando)", () => {
     expect(editChoices({ edit: { music: "mixkit-22" } }, "academia", false, "c1", direction).music?.trackId).toBe("mixkit-22");
     expect(editChoices({ edit: { music: "none" } }, "academia", false, "c1", direction).music).toBeNull();
   });
+  it("música própria: escolhida no app ou pela direção; empresa só com licença comercial declarada", () => {
+    const own = { id: "11111111-1111-4111-8111-111111111111", titulo: "Minha trilha", comercial: false, storageKey: "ws/music/x.mp3" };
+    const id = `own:${own.id}`;
+    expect(editChoices({ edit: { music: id } }, "academia", false, "c", null, own).music).toMatchObject({ trackId: id, storageKey: "ws/music/x.mp3", title: "Minha trilha" });
+    const dir = { musica: { id, clima: "", bpm: null, volume: 0.3, entrada: 1, saida: null } } as unknown as Parameters<typeof editChoices>[4];
+    expect(editChoices(null, "academia", false, "c", dir, own).music).toMatchObject({ trackId: id, volume: 0.3, startMs: 1000, endMs: null });
+    // empresa sem licença comercial: volta para a biblioteca
+    expect(editChoices({ edit: { music: id } }, "educacao", true, "c", null, own).music?.trackId).toMatch(/^mixkit-/);
+    expect(editChoices({ edit: { music: id } }, "educacao", true, "c", null, { ...own, comercial: true }).music?.trackId).toBe(id);
+  });
   it("música com janela: entra atrasada e completa até o fim do vídeo", () => {
     const p = { ...plan, music: { trackId: "mixkit-839", mood: "familia" as const, volume: 0.3, startMs: 2000, endMs: 5000 } };
     const args = ffmpegArgs({ plan: p, inputs: ["a.mp4", "b.mp4", "c.mp4"], fontFile: "f.ttf", output: "o.mp4", hasAudio: [true, true, true], musicFile: "m.mp3" }).join(" ");

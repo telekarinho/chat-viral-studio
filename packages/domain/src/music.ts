@@ -73,3 +73,11 @@ export function pickTrack(mood: MusicMood, seed: string): MusicTrack {
 }
 
 export const trackById = (id: string): MusicTrack | undefined => MUSIC_LIBRARY.find((t) => t.id === id);
+
+/** Música própria enviada pelo criador: id "own:<uuid>" (arquivo no armazenamento do perfil). */
+export const OWN_MUSIC_PREFIX = "own:";
+export const ownMusicId = (uuid: string) => `${OWN_MUSIC_PREFIX}${uuid}`;
+export const ownMusicUuid = (id: string): string | null =>
+  id.startsWith(OWN_MUSIC_PREFIX) && /^[0-9a-f-]{36}$/i.test(id.slice(OWN_MUSIC_PREFIX.length)) ? id.slice(OWN_MUSIC_PREFIX.length) : null;
+
+export interface OwnMusic { id: string; titulo: string; comercial: boolean; storageKey: string }
