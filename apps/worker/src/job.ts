@@ -147,7 +147,9 @@ export async function buildServerPlan(db: SupabaseClient, job: RenderJobRow): Pr
     closingPhrase: profile.data.closing_phrase ?? "",
   });
   const segments = variant === "curto" ? all.filter((s) => SHORT_ROLES.includes(s.role)) : all;
-  if (segments.length < 2) throw new Error("a versão curta precisa de gancho e chamada gravados por partes");
+  // só a versão curta exige gancho + chamada; o vídeo completo pode ter uma parte só (ex.: direção com um take)
+  if (variant === "curto" && segments.length < 2) throw new Error("a versão curta precisa de gancho e chamada gravados por partes");
+  if (!segments.length) throw new Error("nenhuma parte do roteiro para montar");
   const chosen = segments.map((s) => latest.get(s.index));
   const notReady = segments.filter((_, i) => !ready(chosen[i]?.media_files ?? null)).map((s) => s.index + 1);
   if (notReady.length) throw new NotReadyError(`partes ainda não sincronizadas: ${notReady.join(", ")}`);
