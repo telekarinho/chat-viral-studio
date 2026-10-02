@@ -259,7 +259,7 @@ export async function processJob(db: SupabaseClient, job: RenderJobRow, fontFile
     if (track && !musicFile) warnings.push("A música não pôde ser baixada agora: o vídeo saiu sem música. Toque em REFAZER para tentar de novo.");
 
     const output = join(dir, "final.mp4");
-    const probed = await render({ plan: musicFile ? plan : { ...plan, music: null }, inputs, fontFile, output, assFile, fontsDir: process.env.FONTS_DIR ?? null, musicFile, brollFiles });
+    const probed = await render({ plan: musicFile ? plan : { ...plan, music: null }, inputs, fontFile, output, assFile, fontsDir: process.env.FONTS_DIR ?? null, musicFile, brollFiles, denoiseModel: process.env.RNNOISE_MODEL ?? null });
     if (probed.width !== plan.width || probed.height !== plan.height) throw new Error(`saída inesperada ${probed.width}x${probed.height}`);
     if (Math.abs(probed.durationMs - plan.totalMs) > 1500) warnings.push("A duração final ficou diferente do planejado — confira o vídeo antes de postar.");
 

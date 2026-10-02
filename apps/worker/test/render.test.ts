@@ -89,6 +89,9 @@ describe("renderizador (comando)", () => {
     expect(graph).toContain(String.raw`aselect='between(t\,0.300\,1.200)+between(t\,1.900\,2.800)',asetpts=N/SR/TB`);
     expect(graph).toContain("highpass=f=90,afftdn=nr=10:nf=-28,equalizer=f=3200");
     expect(graph).toContain("acompressor=");
+    expect(graph).not.toContain("arnndn"); // sem modelo: só a limpeza leve
+    const neural = ffmpegArgs({ plan: p, inputs: ["a.mp4", "b.mp4", "c.mp4"], hasAudio: [true, true, true], fontFile: "f.ttf", output: "o.mp4", denoiseModel: String.raw`C:\m\lq.rnnn` });
+    expect(neural[neural.indexOf("-filter_complex") + 1]).toContain(String.raw`[0:a]aresample=48000,aformat=channel_layouts=mono,arnndn=m='C\:/m/lq.rnnn':mix=0.85,aformat=sample_fmts=fltp:channel_layouts=stereo,aselect=`);
     expect(graph).toContain("[3:v]trim=start=0.15:duration=1.200,setpts=PTS-STARTPTS+0.900/TB");
     expect(graph).toContain(String.raw`[z1][br1]overlay=enable='between(t\,0.900\,2.100)'`);
     expect(graph).toContain("[4:a]aresample=48000"); // música vem depois da cena de apoio
@@ -183,7 +186,7 @@ describe.skipIf(!hasFfmpeg || !FONT)("renderizador (FFmpeg real)", () => {
     const assFile = join(dir, "legendas.ass");
     writeFileSync(assFile, buildAss(plan), "utf8");
     const out = join(dir, "final.mp4");
-    const res = await render({ plan, inputs, fontFile: FONT, output: out, assFile, musicFile: music, brollFiles: { b: broll } });
+    const res = await render({ plan, inputs, fontFile: FONT, output: out, assFile, musicFile: music, brollFiles: { b: broll }, denoiseModel: process.env.RNNOISE_MODEL ?? null });
     expect(res.width).toBe(1080);
     expect(res.height).toBe(1920);
     expect(res.hasAudio).toBe(true);
