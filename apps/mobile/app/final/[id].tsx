@@ -4,8 +4,9 @@ import * as Sharing from "expo-sharing";
 import * as Clipboard from "expo-clipboard";
 import { router, useFocusEffect, useLocalSearchParams } from "expo-router";
 import { useVideoPlayer, VideoView } from "expo-video";
-import { PLATFORMS, PLATFORM_LABEL, type Platform } from "@postai/domain";
-import { getContent, markPosted, type ContentItem } from "../../src/db/repo";
+import { DEFAULT_EDIT_CHOICES, PLATFORMS, PLATFORM_LABEL, isBusiness, type Platform } from "@postai/domain";
+import { getContent, markPosted, setEditChoices, workspaceById, type ContentItem } from "../../src/db/repo";
+import { chosenTrack, nextTrack } from "../../src/musicChoice";
 import { describeResult, localCover, localFinal, localResult, type RenderResult } from "../../src/finalRender";
 import { FREE_SPEECH_MODEL } from "../../src/freeSpeech";
 import { MetricsCard } from "../../src/components/MetricsCard";
@@ -31,11 +32,15 @@ export default function FinalScreen() {
   const [platform, setPlatform] = useState<Platform>("instagram");
   const [copied, setCopied] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
+  const [business, setBusiness] = useState(false);
   useFocusEffect(useCallback(() => {
     void localFinal(id, variant).then(setUri);
     void localCover(id, variant).then(setCover);
     void localResult(id, variant).then(setResult);
-    void getContent(id).then(setC);
+    void getContent(id).then(async (item) => {
+      setC(item);
+      if (item) setBusiness(isBusiness((await workspaceById(item.workspaceId)).profile));
+    });
   }, [id, variant]));
 
   if (!uri || !c?.draft) return <Screen><Loading label="Abrindo vídeo final…" /></Screen>;
@@ -76,6 +81,7 @@ export default function FinalScreen() {
       {notice ? <Text style={{ color: colors.good, fontWeight: "800" }} accessibilityLiveRegion="polite">{notice}</Text> : null}
       {describeResult(result) ? <Text style={s.muted}>{describeResult(result)}</Text> : null}
       {result?.warnings?.map((w) => <Text key={w} style={{ color: colors.warn, fontWeight: "700" }}>{`⚠ ${w}`}</Text>)}
+      {variant === "completo" ? <RedoCard c={c} business={business} /> : null}
       <Player uri={uri} />
       {cover ? (
         <Card style={{ gap: 8 }}>
@@ -94,5 +100,22 @@ export default function FinalScreen() {
       <Button variant="ghost" label={copied ? "LEGENDA COPIADA ✓" : "COPIAR ESTA LEGENDA"} onPress={async () => { await Clipboard.setStringAsync(caption); setCopied(true); }} />
       <MetricsCard content={c} onSaved={setC} />
     </Screen>
+  );
+}
+
+/** Não gostou? Troca a música (mesmo clima) e monta de novo, ou volta para mudar as outras opções. */
+function RedoCard({ c, business }: { c: ContentItem; business: boolean }) {
+  const edit = c.edit ?? { ...DEFAULT_EDIT_CHOICES, retouch: business ? "leve" : "forte" };
+  const track = chosenTrack(edit, c.id, c.pillarSlug, business);
+  const redo = async (music?: string) => {
+    if (music) await setEditChoices(c.id, { ...edit, music });
+    router.replace({ pathname: "/finalizar/[id]", params: { id: c.id, refazer: "1" } });
+  };
+  return (
+    <Card style={{ gap: 8 }} testID="redo-card">
+      <Text style={s.label}>{track ? `Música: ${track.title} — ${track.artist}` : "Sem música"}</Text>
+      {track ? <Button compact variant="secondary" label="🎵 TROCAR MÚSICA E REFAZER" onPress={() => void redo(nextTrack(track).id)} testID="redo-music" /> : null}
+      <Button compact variant="ghost" label="Mudar legenda, embelezar… e refazer" onPress={() => router.push(`/finalizar/${c.id}`)} testID="redo-options" />
+    </Card>
   );
 }

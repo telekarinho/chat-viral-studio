@@ -22,8 +22,8 @@ export interface CutReport {
 
 const LEAD_MS = 150;
 const TAIL_MS = 280;
-const MAX_PAUSE_MS = 800; // pausa maior que isso é encurtada
-const PAUSE_LEFT_MS = 320; // quanto de respiro fica
+const MAX_PAUSE_MS = 450; // pausa maior que isso é encurtada (corte seco de Shorts: sem silêncio)
+const PAUSE_LEFT_MS = 160; // quanto de respiro fica entre frases
 const MIN_RANGE_MS = 250;
 const FILLERS = new Set(["ahn", "ahm", "hum", "hmm", "hm", "uh", "uhm", "eh", "ehh", "aah", "ee", "eee", "eeh"]);
 

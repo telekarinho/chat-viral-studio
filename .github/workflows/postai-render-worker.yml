@@ -52,6 +52,8 @@ jobs:
           mkdir -p "$RUNNER_TEMP/fonts"
           curl -fsSL -o "$RUNNER_TEMP/fonts/CaveatBrush-Regular.ttf" https://github.com/google/fonts/raw/main/ofl/caveatbrush/CaveatBrush-Regular.ttf
           curl -fsSL -o "$RUNNER_TEMP/fonts/Anton-Regular.ttf" https://github.com/google/fonts/raw/main/ofl/anton/Anton-Regular.ttf
+          # legenda, gancho e assinatura "Manuscrito" (escolhida pelo Rodrigo; OFL)
+          curl -fsSL -o "$RUNNER_TEMP/fonts/CoveredByYourGrace.ttf" https://github.com/google/fonts/raw/main/ofl/coveredbyyourgrace/CoveredByYourGrace.ttf
           cp /usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf "$RUNNER_TEMP/fonts/"
       # legenda sincronizada com a fala: Whisper local (grátis, sem API); modelo e pacotes em cache entre execuções
       - uses: actions/setup-python@v5

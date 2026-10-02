@@ -41,9 +41,10 @@ describe("arquivo ASS", () => {
 
   it("manuscrito: creme do print, contorno, tempos globais depois de juntar as partes", () => {
     const ass = buildAss({ clips: [clip(c1, 3000), clip(c2, 2000)], captionStyle: "manuscrito", width: 1080, height: 1920 });
-    expect(ass).toContain("Style: manuscrito,Caveat Brush,108,&H00CFE6F3");
+    expect(ass).toContain("Style: manuscrito,Covered By Your Grace,118,&H00CFE6F3");
     expect(ass).toContain("PlayResY: 1920");
-    expect(ass).toMatch(/Dialogue: 0,0:00:00\.20,[^,]+,manuscrito,,0,0,0,,\{\\fad\(90,70\)\}PORQUE EU SOU CONTIGO/);
+    // entra com "pop" (92% → 100%), em caixa alta
+    expect(ass).toMatch(/Dialogue: 0,0:00:00\.20,[^,]+,manuscrito,,0,0,0,,\{\\fad\(70,50\)\\fscx92\\fscy92\\t\(0,140,\\fscx100\\fscy100\)\}PORQUE EU SOU CONTIGO/);
     // 2ª parte começa em 3.000s + 0.100s
     expect(ass).toMatch(/Dialogue: 0,0:00:03\.10,/);
     // com transição de 300ms, a 2ª parte entra 0.3s antes — a legenda acompanha

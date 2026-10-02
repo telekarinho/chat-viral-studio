@@ -28,8 +28,9 @@ describe("corte automático de erros de gravação", () => {
     expect(r.pauses).toBe(1);
     expect(r.keep).toHaveLength(2);
     const gapLeft = r.words[2]!.startMs - r.words[1]!.endMs;
-    expect(gapLeft).toBeGreaterThan(200);
-    expect(gapLeft).toBeLessThan(500);
+    // corte seco de Shorts: sobra só um respiro curto entre as frases
+    expect(gapLeft).toBeGreaterThanOrEqual(100);
+    expect(gapLeft).toBeLessThan(300);
   });
 
   it("falso começo: frase repetida em seguida fica só a última", () => {
@@ -92,6 +93,15 @@ describe("B-roll, gancho na tela e recálculo do plano", () => {
   it("gancho aparece nos 3 primeiros segundos, mesmo sem legenda", () => {
     const ass = buildAss({ ...plan, captionStyle: "nenhuma" });
     expect(ass).toMatch(/Dialogue: 1,0:00:00\.00,0:00:03\.00,gancho,,0,0,0,,\{\\fad\(120,200\)\}UMA COISA HOJE/);
-    expect(buildAss({ ...plan, hookText: null, captionStyle: "nenhuma" })).not.toContain("Dialogue");
+    expect(buildAss({ ...plan, hookText: null, captionStyle: "nenhuma", signature: "" })).not.toContain("Dialogue");
+  });
+
+  it("assinatura do perfil o vídeo inteiro, na fonte manuscrita, embaixo no centro por padrão", () => {
+    const ass = buildAss({ ...plan, captionStyle: "nenhuma", signature: "@rodrigoserra.me" });
+    expect(ass).toContain("Style: assinatura,Covered By Your Grace,");
+    expect(ass).toMatch(new RegExp(`Dialogue: 2,0:00:00\\.00,[^,]+,assinatura,,0,0,0,,\\{\\\\an2\\}@RODRIGOSERRA\\.ME`));
+    expect(ass).toContain(`,assinatura,`);
+    expect(buildAss({ ...plan, signature: "ControlPot", watermark: "sup-dir" })).toMatch(/\{\\an9\\pos\(1020,134\)\}CONTROLPOT/);
+    expect(buildAss({ ...plan, signature: "ControlPot", watermark: "off" })).not.toContain(",assinatura,,");
   });
 });

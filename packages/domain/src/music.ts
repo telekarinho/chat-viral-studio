@@ -8,7 +8,7 @@ export type MusicMood = "reflexao" | "motivacional" | "treino" | "familia" | "hu
 
 export const MOOD_LABEL: Record<MusicMood, string> = {
   reflexao: "Reflexão (piano)", motivacional: "Motivacional", treino: "Treino (energia)", familia: "Família (acústico)",
-  humor: "Humor", empresa: "Empresa / produto", calmo: "Calmo",
+  humor: "Humor", empresa: "Vendas / produto", calmo: "Calmo",
 };
 
 export interface MusicTrack {
