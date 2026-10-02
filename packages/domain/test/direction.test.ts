@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { RODRIGO_PROFILE, buildAss, buildEditPlan, buildSegments, directionIssues, generateLocal, parseDraft, type ContentDraft } from "../src";
+import { BUSINESS_PILLARS, RODRIGO_PILLARS, RODRIGO_PROFILE, ScenesSchema, buildAss, buildDayPlan, buildEditPlan, buildSegments, businessRoutine, directionIssues, generateLocal, parseDraft, rodrigoRoutine, type ContentDraft } from "../src";
 
 const base = generateLocal({ profile: RODRIGO_PROFILE, pillarSlug: "familia", pillarName: "Família", format: "main_video", eventText: null, recent: [] }).draft;
 const direcao = {
@@ -63,5 +63,18 @@ describe("direção completa do diretor", () => {
     expect(plan.hookText).toBeNull();
     expect(ass).toContain("{\\an5\\fad(120,200)}VIDA REAL 40+");
     expect(ass).not.toContain("GANCHO AUTOMÁTICO");
+  });
+});
+
+describe("plano da empresa com cena de apoio dirigida", () => {
+  it("o B-roll de prova visual vira conteúdo (sem entrar no rodízio de temas); perfil pessoal continua só com missões", () => {
+    let n = 0;
+    const newId = () => `id-${++n}`;
+    const biz = buildDayPlan({ date: new Date(0), dateKey: "2026-10-05", utcOffsetMinutes: -180, workspaceId: "w", routine: businessRoutine(newId), pillars: BUSINESS_PILLARS, recentPillarSlugs: [], newId, now: "x", directedBroll: true });
+    expect(biz.contentItems.map((c) => [c.format, c.title, c.pillarSlug])).toEqual([["main_video", "Vídeo principal", expect.any(String)], ["broll", "Prova visual / B-roll do produto", "demonstracao"]]);
+    expect(biz.tasks.find((t) => t.kind === "broll")!.contentItemId).toBe(biz.contentItems[1]!.id);
+    const pessoal = buildDayPlan({ date: new Date(0), dateKey: "2026-10-05", utcOffsetMinutes: -180, workspaceId: "w", routine: rodrigoRoutine(newId), pillars: RODRIGO_PILLARS, recentPillarSlugs: [], newId, now: "x" });
+    expect(pessoal.contentItems.map((c) => c.format)).toEqual(["thought", "main_video"]);
+    expect(ScenesSchema.safeParse([{ ordem: 1, nome: "Close", duracao_segundos: 3 }]).success).toBe(true);
   });
 });

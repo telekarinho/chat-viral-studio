@@ -70,6 +70,7 @@ export function supabaseMemory(db: SupabaseClient, userId: string): MemoryStore 
         // kind + sales strategy of a business profile live in creator_profiles.tone
         kind: data.tone?.kind === "empresa" ? "empresa" : "pessoal",
         business: data.tone?.kind === "empresa" ? data.tone.business : undefined,
+        ...(data.tone?.extras ? { extras: data.tone.extras } : {}),
       } satisfies CreatorProfile;
     },
     async pillarName(ws, slug) {

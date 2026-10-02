@@ -53,8 +53,8 @@ export function TodayView(p: TodayViewProps) {
           {nextContent ? (
             <Button
               variant="ghost"
-              label={nextContent.draft ? "VER ROTEIRO" : "GERAR ROTEIRO"}
-              onPress={() => (nextContent.draft ? p.onOpenContent(nextContent.id) : p.onGenerate(nextContent.id))}
+              label={nextContent.format === "broll" ? "VER CENAS" : nextContent.draft ? "VER ROTEIRO" : "GERAR ROTEIRO"}
+              onPress={() => (nextContent.draft || nextContent.format === "broll" ? p.onOpenContent(nextContent.id) : p.onGenerate(nextContent.id))}
               loading={p.generatingId === nextContent.id}
               testID="hero-script"
             />
@@ -95,9 +95,11 @@ export function TodayView(p: TodayViewProps) {
               <Text style={{ fontSize: 16, fontWeight: "800", color: colors.ink }}>{FORMAT_LABEL[c.format]}</Text>
               <Text style={{ fontSize: 11, fontWeight: "900", color: st.color }}>{st.label}</Text>
             </View>
-            <Text style={s.muted} numberOfLines={2}>{c.draft ? c.draft.title : `Pilar: ${p.pillarNames?.[c.pillarSlug] ?? c.pillarSlug}`}</Text>
+            <Text style={s.muted} numberOfLines={2}>{c.format === "broll" ? `${c.title}${c.cenas?.length ? ` · ${c.cenas.length} takes` : ""}` : c.draft ? c.draft.title : `Pilar: ${p.pillarNames?.[c.pillarSlug] ?? c.pillarSlug}`}</Text>
             <View style={[s.row, { marginTop: 6 }]}>
-              {c.draft ? (
+              {c.format === "broll" ? (
+                <Button compact label="VER CENAS" onPress={() => p.onOpenContent(c.id)} testID={`open-${c.format}`} />
+              ) : c.draft ? (
                 <Button compact label="VER ROTEIRO" onPress={() => p.onOpenContent(c.id)} testID={`open-${c.format}`} />
               ) : (
                 <Button compact label="GERAR ROTEIRO" onPress={() => p.onGenerate(c.id)} loading={p.generatingId === c.id} testID={`generate-${c.format}`} />

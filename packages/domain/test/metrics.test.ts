@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { engagementRate, metricsInsights, parseMetric, type PostMetrics } from "../src";
+import { engagementRate, metricsInsights, parseDecimal, parseMetric, rankBy, type PostMetrics, type RankedPost } from "../src";
 
 const m = (views: number, likes = 0): PostMetrics => ({ views, likes, comments: 0, shares: 0, saves: 0, updatedAt: "2026-09-30T00:00:00Z" });
 
@@ -40,5 +40,24 @@ describe("envios por alcance", () => {
     const { sharesPer1k } = await import("../src");
     expect(sharesPer1k({ views: 2000, shares: 10 })).toBe(5);
     expect(sharesPer1k({ views: 0, shares: 3 })).toBe(0);
+  });
+});
+
+describe("números extras e o que funciona (top 3)", () => {
+  it("retenção e tempo assistido aceitam % e vírgula; vazio fica sem número", () => {
+    expect(parseDecimal("45%")).toBe(45);
+    expect(parseDecimal("12,5")).toBe(12.5);
+    expect(parseDecimal("8s")).toBe(8);
+    expect(parseDecimal("")).toBeUndefined();
+    expect(parseDecimal("muito")).toBeNull();
+  });
+  it("ranqueia por média de visualizações, com envios/mil e retenção", () => {
+    const mk = (views: number, shares: number, extra: Partial<RankedPost> = {}, completionRate?: number): RankedPost =>
+      ({ hook: null, format: "main_video", hour: null, music: null, ...extra, metrics: { views, likes: 0, comments: 0, shares, saves: 0, updatedAt: "x", ...(completionRate !== undefined ? { completionRate } : {}) } });
+    const posts = [mk(1000, 10, { hour: 19, music: "Karma" }, 40), mk(3000, 9, { hour: 19, music: "Karma" }, 60), mk(500, 1, { hour: 7 }), mk(5000, 50, { hour: 12, music: "Skyline" })];
+    expect(rankBy(posts, (p) => (p.hour === null ? null : `${p.hour}h`)).map((r) => r.key)).toEqual(["12h", "19h", "7h"]);
+    const music = rankBy(posts, (p) => p.music);
+    expect(music[1]).toMatchObject({ key: "Karma", posts: 2, avgViews: 2000, avgCompletion: 50 });
+    expect(music[1]!.avgSharesPer1k).toBeCloseTo(6.5);
   });
 });

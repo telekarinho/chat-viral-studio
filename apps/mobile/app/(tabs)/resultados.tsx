@@ -3,7 +3,7 @@ import { Pressable, Text, View } from "react-native";
 import { router, useFocusEffect } from "expo-router";
 import { engagementRate, metricsInsights, pillarBalance, sharesPer1k } from "@postai/domain";
 import { useApp } from "../../src/app-state";
-import { donePillarSlugs, history, listContentWithMetrics, type ContentItem, type DayHistory } from "../../src/db/repo";
+import { donePillarSlugs, history, listContentWithMetrics, pullImportedMetrics, type ContentItem, type DayHistory } from "../../src/db/repo";
 import { Card, Empty, Eyebrow, H1, Screen, Section, colors, s } from "../../src/ui";
 
 export default function Resultados() {
@@ -15,7 +15,9 @@ export default function Resultados() {
     void history(14).then(setDays);
     void donePillarSlugs(60).then(setRecent);
     void listContentWithMetrics().then(setPosts);
-  }, []));
+    // números que o assistente trouxe (ex.: do Metricool) entram aqui também
+    if (workspace?.cloud) void pullImportedMetrics(workspace.id).then((n) => (n ? listContentWithMetrics().then(setPosts) : undefined)).catch(() => undefined);
+  }, [workspace?.id, workspace?.cloud]));
   const pillarName = (slug: string) => workspace?.pillars.find((p) => p.slug === slug)?.name ?? slug;
   const insights = metricsInsights(posts.map((p) => ({ id: p.id, title: p.draft?.title ?? p.title, pillarSlug: p.pillarSlug, metrics: p.metrics! })), pillarName);
   const fmt = (n: number) => n.toLocaleString("pt-BR");

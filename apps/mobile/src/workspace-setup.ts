@@ -1,6 +1,6 @@
-import { PROFILE_TEMPLATES, RODRIGO_PILLARS, RODRIGO_PROFILE, rodrigoRoutine, type BusinessStrategy, type ContentFormat, type CreatorProfile, type Pillar, type ProfileTemplate, type RoutineBlock, watermarkCorner } from "@postai/domain";
+import { PROFILE_TEMPLATES, RODRIGO_PILLARS, RODRIGO_PROFILE, rodrigoRoutine, type BusinessStrategy, type ContentFormat, type ProfileExtras, type CreatorProfile, type Pillar, type ProfileTemplate, type RoutineBlock, watermarkCorner } from "@postai/domain";
 import { newId } from "./config";
-import { DEFAULT_SETTINGS, getWorkspace, saveWorkspace, type Workspace } from "./db/repo";
+import { DEFAULT_SETTINGS, getWorkspace, listWorkspaces, pendingProfileIds, saveWorkspace, type Workspace } from "./db/repo";
 import { supabase } from "./supabase";
 
 export interface OnboardingInput { name: string; profile: CreatorProfile; pillars: Pillar[] }
@@ -8,7 +8,7 @@ export interface OnboardingInput { name: string; profile: CreatorProfile; pillar
 export const defaultOnboarding = (): OnboardingInput => ({ name: "RodrigoSerra.me", profile: { ...RODRIGO_PROFILE, kind: "pessoal" }, pillars: RODRIGO_PILLARS.map((p) => ({ ...p })) });
 
 /** Kind + sales strategy travel in creator_profiles.tone. */
-const rpcProfile = (p: CreatorProfile) => ({ ...p, tone: { kind: p.kind ?? "pessoal", business: p.business ?? null } });
+const rpcProfile = (p: CreatorProfile) => ({ ...p, tone: { kind: p.kind ?? "pessoal", business: p.business ?? null, extras: p.extras ?? null } });
 
 /** Cloud: creates (or reuses) the workspace server-side, then mirrors it locally. Local mode: device only. */
 export async function setupWorkspace(input: OnboardingInput): Promise<Workspace> {
@@ -50,7 +50,7 @@ export async function pullWorkspace(wsId: string, settings = DEFAULT_SETTINGS, a
   ]);
   const err = ws.error ?? prof.error ?? pillars.error ?? blocks.error;
   if (err) throw new Error(`Falha ao carregar seu workspace: ${err.message}`);
-  const tone = (prof.data.tone ?? {}) as { kind?: string; business?: BusinessStrategy | null; watermark?: unknown };
+  const tone = (prof.data.tone ?? {}) as { kind?: string; business?: BusinessStrategy | null; watermark?: unknown; extras?: ProfileExtras | null };
   const workspace: Workspace = {
     id: wsId,
     name: ws.data?.name ?? "Meu workspace",
@@ -60,6 +60,7 @@ export async function pullWorkspace(wsId: string, settings = DEFAULT_SETTINGS, a
       closingPhrase: prof.data.closing_phrase ?? "", voiceRules: prof.data.voice_rules ?? RODRIGO_PROFILE.voiceRules,
       kind: tone.kind === "empresa" ? "empresa" : "pessoal", business: tone.kind === "empresa" && tone.business ? tone.business : undefined,
       watermark: watermarkCorner(tone.watermark),
+      ...(tone.extras ? { extras: tone.extras } : {}),
     },
     pillars: (pillars.data ?? []).map((p) => ({ slug: p.slug, name: p.name, targetPercent: Number(p.target_percent), active: p.active })),
     routine: (blocks.data ?? []).map((b): RoutineBlock => ({
@@ -83,6 +84,26 @@ export async function findRemoteWorkspaces(): Promise<string[]> {
 /** Pulls every profile; the first (oldest) one stays active. */
 export async function pullAllWorkspaces(ids: readonly string[]): Promise<void> {
   for (const [i, id] of [...ids].reverse().entries()) await pullWorkspace(id, DEFAULT_SETTINGS, i === ids.length - 1);
+}
+
+/**
+ * Perfis criados/alterados fora do aparelho (pelo Claude, no conector): baixa os novos e atualiza os existentes.
+ * Perfil com edição local ainda não enviada fica como está (a edição do criador não é atropelada).
+ */
+export async function refreshProfilesFromCloud(): Promise<boolean> {
+  if (!supabase) return false;
+  const ids = await findRemoteWorkspaces();
+  if (!ids.length) return false;
+  const [local, active, pending] = await Promise.all([listWorkspaces(), getWorkspace(), pendingProfileIds()]);
+  if (active?.cloud === false) return false;
+  let changed = false;
+  for (const id of ids) {
+    if (pending.has(id)) continue;
+    const before = local.find((w) => w.id === id);
+    const after = await pullWorkspace(id, active?.settings ?? DEFAULT_SETTINGS, false);
+    if (!before || JSON.stringify([before.name, before.profile, before.pillars, before.routine]) !== JSON.stringify([after.name, after.profile, after.pillars, after.routine])) changed = true;
+  }
+  return changed;
 }
 
 export { PROFILE_TEMPLATES };

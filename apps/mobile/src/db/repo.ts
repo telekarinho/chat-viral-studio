@@ -1,7 +1,7 @@
 import {
   applyTaskAction, buildDayPlan, toLocalDateKey, type ContentDraft, type ContentFormat, type CreatorProfile, type Fingerprint,
   type FingerprintType, type GenerationMeta, type MediaRecord, type MediaState, type Pillar, type RecordingTask, type ResolutionPreset,
-  type RoutineBlock, type TaskAction, type TaskStatus, type ClipMeta, type ProjectInfo, type UseTarget, PRODUCTION_MODES, type EditChoices, type PostMetrics, watermarkCorner,
+  type RoutineBlock, type TaskAction, type TaskStatus, type ClipMeta, type ProjectInfo, type UseTarget, PRODUCTION_MODES, type EditChoices, type PostMetrics, type Scenes, watermarkCorner,
 } from "@postai/domain";
 import { config, newId, nowIso } from "../config";
 import { getDb } from "./database";
@@ -54,6 +54,8 @@ export interface ContentItem {
   metrics?: PostMetrics | null;
   /** primeira vez que tocou em POSTAR e em quais redes */
   posted?: { at: string; to: string[] } | null;
+  /** cena de apoio dirigida: takes para filmar (vem do assistente) */
+  cenas?: Scenes | null;
 }
 
 export interface Take {
@@ -144,7 +146,7 @@ export async function updateProfile(profile: CreatorProfile, name: string): Prom
     onConflict: "workspace_id",
     rows: [{
       workspace_id: ws.id, display_name: profile.displayName, handle: profile.handle, positioning: profile.positioning, signature: profile.signature,
-      closing_phrase: profile.closingPhrase, voice_rules: profile.voiceRules, tone: { kind: profile.kind ?? "pessoal", business: profile.business ?? null, watermark: watermarkCorner(profile.watermark) }, updated_at: nowIso(),
+      closing_phrase: profile.closingPhrase, voice_rules: profile.voiceRules, tone: { kind: profile.kind ?? "pessoal", business: profile.business ?? null, watermark: watermarkCorner(profile.watermark), extras: profile.extras ?? null }, updated_at: nowIso(),
     }],
   });
   return next;
@@ -227,6 +229,20 @@ export async function stuckOutbox(): Promise<{ count: number; table: string; err
   return { count: n, table: first?.table_name ?? "", error: first?.last_error ?? "" };
 }
 
+/** Perfis com mudança local ainda na fila de envio (não sobrescrever com a cópia da nuvem). */
+export async function pendingProfileIds(): Promise<Set<string>> {
+  const db = await getDb();
+  const rows = await db.getAllAsync<{ row_id: string; payload: string }>("SELECT row_id, payload FROM outbox WHERE table_name IN ('creator_profiles', 'content_pillars', 'routine_blocks', 'workspaces')");
+  // bloco de rotina usa o id do bloco: o perfil vem do workspace_id da linha
+  return new Set(rows.map((r) => {
+    try {
+      return (JSON.parse(r.payload) as { rows?: { workspace_id?: string }[] }).rows?.[0]?.workspace_id ?? r.row_id;
+    } catch {
+      return r.row_id;
+    }
+  }));
+}
+
 export async function outboxCount(): Promise<number> {
   const db = await getDb();
   return (await db.getFirstAsync<{ n: number }>("SELECT COUNT(*) AS n FROM outbox"))?.n ?? 0;
@@ -276,10 +292,10 @@ export async function ensureDayPlan(date: Date): Promise<void> {
     if (done || hasTasks) return;
     // o diretor (Claude, pelo conector) pode ter planejado este dia antes: usa o mesmo plano, sem criar outro
     if (ws.cloud && (await adoptServerPlan(ws.id, key, date))) return;
-    const recent = await db.getAllAsync<{ pillar_slug: string }>("SELECT pillar_slug FROM content_items WHERE workspace_id = ? ORDER BY date DESC LIMIT 30", ws.id);
+    const recent = await db.getAllAsync<{ pillar_slug: string }>("SELECT pillar_slug FROM content_items WHERE workspace_id = ? AND format != 'broll' ORDER BY date DESC LIMIT 30", ws.id);
     const plan = buildDayPlan({ date, workspaceId: ws.id, routine: ws.routine, pillars: ws.pillars, recentPillarSlugs: recent.map((r) => r.pillar_slug).reverse(), newId, now: nowIso(),
       // E2E builds only: CI may run on a weekend, when Rodrigo's routine is empty
-      weekdayOverride: config.e2e && (date.getDay() === 0 || date.getDay() === 6) ? 1 : undefined });
+      weekdayOverride: config.e2e && (date.getDay() === 0 || date.getDay() === 6) ? 1 : undefined, directedBroll: ws.profile.kind === "empresa" });
     await db.withTransactionAsync(async () => {
       for (const c of plan.contentItems) {
         await db.runAsync(
@@ -370,7 +386,7 @@ export async function runTaskAction(taskId: string, action: TaskAction): Promise
 type ContentRow = {
   id: string; workspace_id: string; date: string; format: string; pillar_slug: string; title: string; status: string; scheduled_for: string;
   draft: string | null; meta: string | null; selected_hook: number | null;
-  project?: string | null; derived_from?: string | null; precisa_revisao?: string | null; edit?: string | null; metrics?: string | null; posted?: string | null;
+  project?: string | null; derived_from?: string | null; precisa_revisao?: string | null; edit?: string | null; metrics?: string | null; posted?: string | null; cenas?: string | null;
 };
 
 const toContent = (r: ContentRow): ContentItem => ({
@@ -381,11 +397,12 @@ const toContent = (r: ContentRow): ContentItem => ({
   edit: r.edit ? JSON.parse(r.edit) : null,
   metrics: r.metrics ? JSON.parse(r.metrics) : null,
   posted: r.posted ? JSON.parse(r.posted) : null,
+  cenas: r.cenas ? JSON.parse(r.cenas) : null,
 });
 
 const contentServerRow = (c: Omit<ContentItem, "draft" | "meta"> & { draft: ContentDraft | null; meta: ContentItem["meta"] }) => ({
   id: c.id, workspace_id: c.workspaceId, pillar_slug: c.pillarSlug, plan_date: c.date, scheduled_for: c.scheduledFor, format: c.format,
-  title: c.title, duration_seconds: c.draft?.duration_seconds ?? null, status: c.status, structured_payload: { selected_hook: c.selectedHook, project: c.project ?? null, edit: c.edit ?? null, metrics: c.metrics ?? null, posted_at: c.posted?.at ?? null, posted_to: c.posted?.to ?? [] },
+  title: c.title, duration_seconds: c.draft?.duration_seconds ?? null, status: c.status, structured_payload: { selected_hook: c.selectedHook, project: c.project ?? null, edit: c.edit ?? null, metrics: c.metrics ?? null, posted_at: c.posted?.at ?? null, posted_to: c.posted?.to ?? [], cenas: c.cenas ?? null },
   derived_from: c.derivedFrom ?? null, precisa_revisao: c.precisaRevisao ?? null, updated_at: nowIso(),
 });
 
@@ -457,6 +474,32 @@ export async function setEditChoices(contentId: string, edit: EditChoices): Prom
 }
 
 /** Números do post (visualizações, curtidas…) anotados pelo criador; vão junto para a nuvem. */
+export async function setContentScenes(contentId: string, scenes: Scenes): Promise<ContentItem> {
+  const db = await getDb();
+  await db.runAsync("UPDATE content_items SET cenas = ?, updated_at = ? WHERE id = ?", JSON.stringify(scenes), nowIso(), contentId);
+  const c = (await getContent(contentId))!;
+  await enqueue(await workspaceById(c.workspaceId), "content_items", contentId, { rows: [contentServerRow(c)] });
+  return c;
+}
+
+/**
+ * Números que o assistente registrou no conector (ex.: lidos no Metricool): entram no aparelho quando são
+ * mais novos que os digitados aqui. Sem internet: segue com o que tem.
+ */
+export async function pullImportedMetrics(workspaceId: string): Promise<number> {
+  if (!supabase) return 0;
+  const { data, error } = await supabase.from("post_metrics").select("content_item_id, metrics").eq("workspace_id", workspaceId).limit(200);
+  if (error || !data) return 0;
+  let n = 0;
+  for (const r of data as { content_item_id: string; metrics: PostMetrics }[]) {
+    const c = await getContent(r.content_item_id);
+    if (!c || (c.metrics && c.metrics.updatedAt >= r.metrics.updatedAt)) continue;
+    await setContentMetrics(c.id, r.metrics);
+    n++;
+  }
+  return n;
+}
+
 export async function setContentMetrics(contentId: string, metrics: PostMetrics): Promise<ContentItem> {
   const db = await getDb();
   await db.runAsync("UPDATE content_items SET metrics = ?, updated_at = ? WHERE id = ?", JSON.stringify(metrics), nowIso(), contentId);

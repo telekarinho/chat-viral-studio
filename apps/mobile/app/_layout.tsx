@@ -7,6 +7,7 @@ import { SafeAreaProvider } from "react-native-safe-area-context";
 import { AppProvider, useApp } from "../src/app-state";
 import { notifyFinishedRenders } from "../src/renderWatch";
 import { startSyncEngine } from "../src/sync/engine";
+import { refreshProfilesFromCloud } from "../src/workspace-setup";
 import { initTelemetry, reportError, wrapRoot } from "../src/telemetry";
 
 initTelemetry();
@@ -16,6 +17,19 @@ function SyncBoot() {
   useEffect(() => {
     if (workspace) startSyncEngine().catch((e) => reportError(e, "sync boot"));
   }, [workspace]);
+  return null;
+}
+
+/** Perfis que o Claude criou/alterou pelo conector aparecem no app ao abrir ou voltar para ele. */
+function ProfileRefresh() {
+  const { workspace, reload } = useApp();
+  useEffect(() => {
+    if (!workspace?.cloud) return;
+    const run = () => void refreshProfilesFromCloud().then((changed) => (changed ? reload() : undefined)).catch((e) => reportError(e, "profile refresh"));
+    run();
+    const sub = AppState.addEventListener("change", (st) => { if (st === "active") run(); });
+    return () => sub.remove();
+  }, [workspace?.cloud, reload]);
   return null;
 }
 
@@ -53,6 +67,7 @@ function RootLayout() {
         <StatusBar style="dark" />
         <SyncBoot />
         <RenderWatch />
+        <ProfileRefresh />
         <Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: "#F4F3EF" } }}>
           <Stack.Screen name="record" options={{ presentation: "fullScreenModal", animation: "fade" }} />
         </Stack>

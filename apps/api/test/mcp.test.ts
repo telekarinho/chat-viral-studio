@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
-import { CONTROLPOT_PROFILE, RODRIGO_PROFILE, fingerprintsFor, generateLocal, type ContentDraft } from "@postai/domain";
+import { CONTROLPOT_PROFILE, RODRIGO_PROFILE, fingerprintsFor, generateLocal, type ContentDraft, type Pillar, type PostMetrics } from "@postai/domain";
 import { MCP_TOOLS, handleMcp, todayBrasilia, type McpContent, type McpContext, type McpStore } from "../src/mcp";
+import type { FilmableProof, NewProfile, RealCase } from "../src/mcp-profiles";
 
 const PESSOAL = "11111111-1111-4111-8111-111111111111";
 const EMPRESA = "44444444-4444-4444-8444-444444444444";
@@ -16,20 +17,25 @@ const draft: ContentDraft = {
 
 function fakeStore(opts: { profile?: typeof RODRIGO_PROFILE; recent?: ContentDraft; content?: McpContent | null } = {}) {
   const saved: { contentId: string; draft: ContentDraft }[] = [];
+  const scenes: { contentId: string; takes: unknown[] }[] = [];
+  const metrics: { contentId: string; m: PostMetrics }[] = [];
   const improvements: { titulo: string }[] = [];
   const own = opts.content === undefined ? thought : opts.content;
+  const state = { profile: opts.profile ?? RODRIGO_PROFILE, pillars: null as Pillar[] | null, cases: [] as RealCase[], proofs: [] as FilmableProof[] };
   const store: McpStore = {
     contentsOn: async (date) => (date === "2026-10-01" && own ? [own] : []),
     content: async (id) => (own && id === own.id ? own : null),
-    profile: async () => opts.profile ?? RODRIGO_PROFILE,
+    profile: async () => state.profile,
     pillarName: async (slug) => (slug === "familia" ? "Família" : slug === "humor" ? "Humor" : slug),
     recentFingerprints: async () => (opts.recent ? fingerprintsFor(opts.recent).map((f) => ({ ...f, contentItemId: "outro" })) : []),
     recentSummaries: async () => [],
     saveDraft: async (contentId, d) => void saved.push({ contentId, draft: d }),
+    saveScenes: async (contentId, takes) => void scenes.push({ contentId, takes }),
+    saveMetrics: async (contentId, m) => void metrics.push({ contentId, m }),
     strategy: async () => ({ pillars: [{ slug: "familia", name: "Família", targetPercent: 30 }, { slug: "humor", name: "Humor", targetPercent: 10 }], routine: [{ weekday: 1, startTime: "07:30", title: "Pensamento", format: "thought" }] }),
     posts: async () => [{
       id: ID, title: "Pequenas escolhas", pillarSlug: "familia", format: "thought", date: "2026-09-30", postedAt: "2026-09-30T22:30:00.000Z", postedTo: ["Instagram"],
-      metrics: { views: 2000, likes: 100, comments: 10, shares: 10, saves: 5, updatedAt: "2026-10-01T00:00:00Z" },
+      metrics: { views: 2000, likes: 100, comments: 10, shares: 10, saves: 5, updatedAt: "2026-10-01T00:00:00Z", completionRate: 42 }, hook: "Eu quase desisti hoje", music: "Karma",
     }],
     readScript: async () => ({ draft: raw, edit: null, metrics: null, postedAt: null, pendingFromAssistant: true }),
     recordingStatus: async () => ({ takes: [{ segmentIndex: 0, synced: true }, { segmentIndex: 1, synced: false }], renders: [{ status: "failed", error: "parte 3 faltando", createdAt: "x", variant: "completo", warnings: [] }] }),
@@ -41,20 +47,27 @@ function fakeStore(opts: { profile?: typeof RODRIGO_PROFILE; recent?: ContentDra
     ],
     saveImprovement: async (i) => { improvements.push(i); return "m1"; },
     improvements: async () => improvements.map((m) => ({ id: "m1", titulo: m.titulo, prioridade: "alta", status: "nova", issueNumber: null, createdAt: "x" })),
+    updateProfile: async (pr, pl) => { state.profile = pr; state.pillars = pl; },
+    realCases: async () => state.cases,
+    saveRealCase: async (c) => { const id = c.id ?? `00000000-0000-4000-8000-00000000000${state.cases.length + 1}`; state.cases = [...state.cases.filter((x) => x.id !== id), { ...c, id }]; return id; },
+    proofs: async () => state.proofs,
+    saveProof: async (pf) => { state.proofs = [...state.proofs.filter((x) => x.descricao !== pf.descricao), pf]; },
   };
-  return { store, saved, improvements };
+  return { store, saved, improvements, state, scenes, metrics };
 }
 
 /** link do perfil pessoal; o mesmo dono também tem a empresa */
 function fakeCtx() {
   const pessoal = fakeStore();
   const empresa = fakeStore({ profile: CONTROLPOT_PROFILE, content: { ...thought, id: "55555555-5555-4555-8555-555555555555" } });
+  const created: NewProfile[] = [];
   const ctx: McpContext = {
     defaultProfileId: PESSOAL,
     profiles: async () => [{ id: PESSOAL, name: "RodrigoSerra.me", kind: "pessoal", signature: "RodrigoSerra.me" }, { id: EMPRESA, name: "ControlPot", kind: "empresa", signature: "ControlPot" }],
     store: async (id) => (id === PESSOAL ? pessoal.store : id === EMPRESA ? empresa.store : null),
+    createProfile: async (np) => { created.push(np); return "66666666-6666-4666-8666-666666666666"; },
   };
-  return { ctx, pessoal, empresa };
+  return { ctx, pessoal, empresa, created };
 }
 
 const call = (ctx: McpContext, name: string, args: Record<string, unknown> = {}) =>
@@ -161,6 +174,72 @@ describe("conector MCP do Post.ai (diretor de gravações)", () => {
     expect(st).toMatch(/2\. .*: gravado, ainda subindo/);
     expect(st).toContain("falta gravar");
     expect(st).toContain("montagem falhou: parte 3 faltando");
+  });
+
+  it("perfil dinâmico: entrevista, criar (pilares somando 100) e atualizar só o que veio", async () => {
+    const { ctx, created, pessoal } = fakeCtx();
+    expect(textOf(await call(ctx, "entrevista_de_perfil"))).toContain("ENTREVISTA PARA CRIAR UM PERFIL");
+    const base = {
+      nome: "Clube do Natural", tipo: "empresa", posicionamento: "Produtos naturais para quem quer comer melhor sem complicar.", voz: ["simples e acolhedor"], assinatura: "Clube do Natural",
+      publico: "mães 30–45 que cozinham em casa", ofertas: ["assinatura mensal de cestas"], dores: ["não sabe o que é natural de verdade"], ctas: ["Me chama no direct."],
+      nao_prometer: ["emagrecimento garantido"], pilares: [{ nome: "Educação", meta: 60 }, { nome: "Histórias de cliente", meta: 30 }], redes: ["Instagram"], tipo_conta: "comercial",
+    };
+    expect(textOf(await call(ctx, "criar_perfil", { perfil: base }))).toContain("somam 90%");
+    expect(created).toHaveLength(0);
+    const ok = textOf(await call(ctx, "criar_perfil", { perfil: { ...base, pilares: [{ nome: "Educação", meta: 70 }, { nome: "Histórias de cliente", meta: 30 }] } }));
+    expect(ok).toContain("Perfil \"Clube do Natural\" criado");
+    const np = created[0]!;
+    expect(np.pillars.map((p) => p.slug)).toEqual(["educacao", "historias-de-cliente"]);
+    expect(np.profile.business).toMatchObject({ pains: ["não sabe o que é natural de verdade"], pendingClaims: ["emagrecimento garantido"], noPrice: true });
+    expect(np.profile.extras).toMatchObject({ audience: "mães 30–45 que cozinham em casa", networks: ["Instagram"], accountType: "comercial" });
+    expect(np.routine.some((b) => b.format === "broll")).toBe(true);
+
+    await call(ctx, "atualizar_perfil", { campos: { voz: ["direto", "sem guru"], metas: "1.000 seguidores até dezembro" } });
+    expect(pessoal.state.profile.voiceRules).toEqual(["direto", "sem guru"]);
+    expect(pessoal.state.profile.closingPhrase).toBe("E se der certo!");
+    expect(pessoal.state.profile.extras?.goals).toBe("1.000 seguidores até dezembro");
+    expect(pessoal.state.pillars).toBeNull();
+  });
+
+  it("histórias de cliente: só com caso real autorizado; provas com status", async () => {
+    const story = fakeStore({ profile: CONTROLPOT_PROFILE, content: { ...thought, pillarSlug: "historias" } });
+    const ctx: McpContext = { defaultProfileId: EMPRESA, profiles: async () => [], store: async () => story.store, createProfile: async () => "x" };
+    const roteiro = { ...draft, hook_options: ["O que mudou na lanchonete do Zé", "Eu duvidei disso", "Você já passou por isso?"] };
+    expect(textOf(await call(ctx, "salvar_roteiro", { content_id: ID, roteiro }))).toContain("não tem caso real de cliente autorizado");
+    expect(textOf(await call(ctx, "cadastrar_caso_real", { cliente_segmento: "lanchonete de bairro", problema: "milk-shake aguado", resultado: "textura igual todo dia" }))).toContain("SEM autorização");
+    expect(textOf(await call(ctx, "salvar_roteiro", { content_id: ID, roteiro }))).toContain("não tem caso real de cliente autorizado");
+    const caseId = "00000000-0000-4000-8000-000000000001";
+    expect(textOf(await call(ctx, "cadastrar_caso_real", { id: caseId, cliente_segmento: "lanchonete de bairro", problema: "milk-shake aguado", resultado: "textura igual todo dia", autorizacao: "dono autorizou por WhatsApp em 02/10" }))).toContain("liberado");
+    expect(textOf(await call(ctx, "instrucoes_do_roteiro", { content_id: ID }))).toContain(`[${caseId}] lanchonete de bairro`);
+    expect(textOf(await call(ctx, "salvar_roteiro", { content_id: ID, roteiro }))).not.toContain("caso real");
+    await call(ctx, "atualizar_prova", { descricao: "close da caneca cônica", status: "filmada" });
+    const list = textOf(await call(ctx, "listar_casos_reais"));
+    expect(list).toContain("close da caneca cônica: já filmada");
+    expect(list).toContain("máquina batendo por 20 segundos: falta filmar");
+  });
+
+  it("cena de apoio da empresa: salvar_cenas com takes; roteiro falado não serve para ela", async () => {
+    const broll = fakeStore({ profile: CONTROLPOT_PROFILE, content: { ...thought, format: "broll", title: "Prova visual / B-roll do produto" } });
+    const ctx: McpContext = { defaultProfileId: EMPRESA, profiles: async () => [], store: async () => broll.store, createProfile: async () => "x" };
+    expect(textOf(await call(ctx, "salvar_roteiro", { content_id: ID, roteiro: draft }))).toContain("use salvar_cenas");
+    expect(isError(await call(ctx, "salvar_cenas", { content_id: ID, takes: [] }))).toBe(true);
+    expect(textOf(await call(ctx, "salvar_cenas", { content_id: ID, takes: [{ ordem: 1, nome: "Mixer batendo", duracao_segundos: 4, broll: "mais de 4.000 máquinas" }] }))).toContain("sem prova");
+    const ok = await call(ctx, "salvar_cenas", { content_id: ID, takes: [{ ordem: 1, nome: "Close da textura", duracao_segundos: 4, enquadramento: "macro no copo", luz: "lateral" }] });
+    expect(textOf(ok)).toContain("1 take(s)");
+    expect(broll.scenes[0]!.takes[0]).toMatchObject({ nome: "Close da textura", fala_exata: "" });
+  });
+
+  it("métricas: o assistente registra números reais (sem inventar) e o desempenho mostra o top 3", async () => {
+    const { ctx, pessoal } = fakeCtx();
+    expect(textOf(await call(ctx, "registrar_metricas", { content_id: ID }))).toContain("Informe pelo menos visualizacoes");
+    expect(textOf(await call(ctx, "registrar_metricas", { content_id: ID, visualizacoes: 10, retencao: 140 }))).toContain("0 a 100");
+    expect(textOf(await call(ctx, "registrar_metricas", { content_id: ID, visualizacoes: 3200, compartilhamentos: 40, retencao: 55.5, seguidores_ganhos: 12, fonte: "Metricool" }))).toContain("fonte Metricool");
+    expect(pessoal.metrics[0]!.m).toMatchObject({ views: 3200, shares: 40, completionRate: 55.5, followersGained: 12, source: "Metricool", likes: 0 });
+    const perf = textOf(await call(ctx, "desempenho_dos_posts"));
+    expect(perf).toContain('gancho "Eu quase desisti hoje" · música Karma');
+    expect(perf).toContain("retenção 42%");
+    expect(perf).toContain("O QUE ESTÁ FUNCIONANDO");
+    expect(perf).toMatch(/Horários \(Brasília\):\n {2}1\. 19h — 2\.000 visualizações/);
   });
 
   it("empresa: roteiro com preço é recusado", async () => {

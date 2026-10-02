@@ -1,13 +1,15 @@
 import { useState } from "react";
 import { Text, TextInput, View } from "react-native";
-import { METRIC_FIELDS, METRIC_LABEL, engagementRate, parseMetric, type MetricField, type PostMetrics } from "@postai/domain";
+import { EXTRA_METRIC_FIELDS, EXTRA_METRIC_LABEL, METRIC_FIELDS, METRIC_LABEL, engagementRate, parseDecimal, parseMetric, type ExtraMetricField, type MetricField, type PostMetrics } from "@postai/domain";
 import { setContentMetrics, type ContentItem } from "../db/repo";
 import { Button, Card, colors, s } from "../ui";
 
-type Form = Record<MetricField, string>;
+type Form = Record<MetricField | ExtraMetricField, string>;
 
-const toForm = (m: PostMetrics | null | undefined): Form =>
-  Object.fromEntries(METRIC_FIELDS.map((f) => [f, m ? String(m[f]) : ""])) as Form;
+const toForm = (m: PostMetrics | null | undefined): Form => Object.fromEntries([
+  ...METRIC_FIELDS.map((f) => [f, m ? String(m[f]) : ""]),
+  ...EXTRA_METRIC_FIELDS.map((f) => [f, m?.[f] !== undefined ? String(m[f]).replace(".", ",") : ""]),
+]) as Form;
 
 /** "Como foi este post?": o criador anota os números (soma das redes) e o app aprende o que funciona. */
 export function MetricsCard({ content, onSaved }: { content: ContentItem; onSaved: (c: ContentItem) => void }) {
@@ -15,13 +17,19 @@ export function MetricsCard({ content, onSaved }: { content: ContentItem; onSave
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
   const parsed = METRIC_FIELDS.map((f) => [f, parseMetric(form[f])] as const);
-  const invalid = parsed.filter(([, v]) => v === null).map(([f]) => METRIC_LABEL[f]);
+  const extras = EXTRA_METRIC_FIELDS.map((f) => [f, parseDecimal(form[f])] as const);
+  const badRate = (extras.find(([f]) => f === "completionRate")?.[1] ?? 0) > 100;
+  const invalid = [
+    ...parsed.filter(([, v]) => v === null).map(([f]) => METRIC_LABEL[f]),
+    ...extras.filter(([f, v]) => v === null || (f === "completionRate" && badRate)).map(([f]) => EXTRA_METRIC_LABEL[f]),
+  ];
 
   async function save() {
     setBusy(true);
     setMsg(null);
     try {
-      const m = { ...Object.fromEntries(parsed), updatedAt: new Date().toISOString() } as PostMetrics;
+      const filled = extras.filter(([, v]) => typeof v === "number");
+      const m = { ...Object.fromEntries(parsed), ...Object.fromEntries(filled), updatedAt: new Date().toISOString(), source: "app" } as PostMetrics;
       onSaved(await setContentMetrics(content.id, m));
       setMsg(`Salvo. Engajamento: ${(engagementRate(m) * 100).toFixed(1)}%. Veja a comparação em Resultados.`);
     } catch (e) {
@@ -40,6 +48,14 @@ export function MetricsCard({ content, onSaved }: { content: ContentItem; onSave
           <Text style={[s.body, { flex: 1 }]}>{METRIC_LABEL[f]}</Text>
           <TextInput testID={`metric-${f}`} accessibilityLabel={METRIC_LABEL[f]} style={[s.input, { width: 130, textAlign: "right" }]} keyboardType="numeric"
             value={form[f]} onChangeText={(v) => setForm({ ...form, [f]: v })} placeholder="0" />
+        </View>
+      ))}
+      <Text style={s.label}>Se a rede mostrar (opcional)</Text>
+      {EXTRA_METRIC_FIELDS.map((f) => (
+        <View key={f} style={[s.row, { alignItems: "center", gap: 8 }]}>
+          <Text style={[s.body, { flex: 1 }]}>{EXTRA_METRIC_LABEL[f]}</Text>
+          <TextInput testID={`metric-${f}`} accessibilityLabel={EXTRA_METRIC_LABEL[f]} style={[s.input, { width: 130, textAlign: "right" }]} keyboardType="decimal-pad"
+            value={form[f]} onChangeText={(v) => setForm({ ...form, [f]: v })} placeholder="—" />
         </View>
       ))}
       {invalid.length ? <Text style={{ color: colors.bad }}>{`Não entendi: ${invalid.join(", ")}. Use só números (ex.: 1.200 ou 3k).`}</Text> : null}
