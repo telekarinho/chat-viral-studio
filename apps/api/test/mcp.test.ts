@@ -15,7 +15,7 @@ const draft: ContentDraft = {
   duration_seconds: Math.max(3, Math.round(words(`${raw.script}`) / 2.5)),
 };
 
-function fakeStore(opts: { profile?: typeof RODRIGO_PROFILE; recent?: ContentDraft; content?: McpContent | null } = {}) {
+function fakeStore(opts: { profile?: typeof RODRIGO_PROFILE; recent?: ContentDraft; content?: McpContent | null; pending?: ContentDraft } = {}) {
   const saved: { contentId: string; draft: ContentDraft }[] = [];
   const scenes: { contentId: string; takes: unknown[] }[] = [];
   const metrics: { contentId: string; m: PostMetrics }[] = [];
@@ -37,7 +37,9 @@ function fakeStore(opts: { profile?: typeof RODRIGO_PROFILE; recent?: ContentDra
       id: ID, title: "Pequenas escolhas", pillarSlug: "familia", format: "thought", date: "2026-09-30", postedAt: "2026-09-30T22:30:00.000Z", postedTo: ["Instagram"],
       metrics: { views: 2000, likes: 100, comments: 10, shares: 10, saves: 5, updatedAt: "2026-10-01T00:00:00Z", completionRate: 42 }, hook: "Eu quase desisti hoje", music: "Karma",
     }],
-    readScript: async () => ({ draft: raw, edit: null, metrics: null, postedAt: null, pendingFromAssistant: true }),
+    readScript: async () => (opts.pending
+      ? { draft: null, edit: null, metrics: null, postedAt: null, pendingFromAssistant: true, pending: { sentAt: "2026-10-02T12:00:00Z", draft: opts.pending, scenes: null } }
+      : { draft: raw, edit: null, metrics: null, postedAt: null, pendingFromAssistant: true }),
     recordingStatus: async () => ({ takes: [{ segmentIndex: 0, synced: true }, { segmentIndex: 1, synced: false }], renders: [{ status: "failed", error: "parte 3 faltando", createdAt: "x", variant: "completo", warnings: [] }] }),
     planDays: async (start, days) => Array.from({ length: days }, (_, i) => ({ date: i === 0 ? start : `dia+${i}`, created: i > 0, items: i === 0 && own ? [own] : [] })),
     pillarCounts: async () => ({ familia: 3 }),
@@ -165,10 +167,13 @@ describe("conector MCP do Post.ai (diretor de gravações)", () => {
 
   it("listar_musicas filtra por clima; ler_status_gravacao mostra o que falta e a montagem", async () => {
     const { ctx } = fakeCtx();
-    const m = textOf(await call(ctx, "listar_musicas", { clima: "familia", bpm: 90 }));
-    expect(m).toContain("id mixkit-839");
+    const m = textOf(await call(ctx, "listar_musicas", { clima: "Família (acústico)" }));
+    expect(m).toContain('id mixkit-839 · "Tears of Joy" — Michael Ramir C. · clima familia (Família (acústico)) · 124 BPM');
     expect(m).not.toContain("mixkit-22 ");
-    expect(m).toContain("ainda não têm BPM medido");
+    const fast = textOf(await call(ctx, "listar_musicas", { clima: "familia", bpm: 120 }));
+    expect(fast).toContain("mixkit-839");
+    expect(fast).not.toContain("mixkit-963"); // 96 BPM, fora de 120 ± 10
+    expect(textOf(await call(ctx, "listar_musicas", { clima: "reflexao" }))).toContain("Skyline\" — Eugenio Mininni · clima reflexao (Reflexão (piano)) · sem batida definida");
     const st = textOf(await call(ctx, "ler_status_gravacao", { content_id: ID }));
     expect(st).toMatch(/1\. .*: gravado e enviado/);
     expect(st).toMatch(/2\. .*: gravado, ainda subindo/);
@@ -205,9 +210,9 @@ describe("conector MCP do Post.ai (diretor de gravações)", () => {
     const story = fakeStore({ profile: CONTROLPOT_PROFILE, content: { ...thought, pillarSlug: "historias" } });
     const ctx: McpContext = { defaultProfileId: EMPRESA, profiles: async () => [], store: async () => story.store, createProfile: async () => "x" };
     const roteiro = { ...draft, hook_options: ["O que mudou na lanchonete do Zé", "Eu duvidei disso", "Você já passou por isso?"] };
-    expect(textOf(await call(ctx, "salvar_roteiro", { content_id: ID, roteiro }))).toContain("não tem caso real de cliente autorizado");
+    expect(textOf(await call(ctx, "salvar_roteiro", { content_id: ID, roteiro }))).toContain("não tem caso real autorizado");
     expect(textOf(await call(ctx, "cadastrar_caso_real", { cliente_segmento: "lanchonete de bairro", problema: "milk-shake aguado", resultado: "textura igual todo dia" }))).toContain("SEM autorização");
-    expect(textOf(await call(ctx, "salvar_roteiro", { content_id: ID, roteiro }))).toContain("não tem caso real de cliente autorizado");
+    expect(textOf(await call(ctx, "salvar_roteiro", { content_id: ID, roteiro }))).toContain("não tem caso real autorizado");
     const caseId = "00000000-0000-4000-8000-000000000001";
     expect(textOf(await call(ctx, "cadastrar_caso_real", { id: caseId, cliente_segmento: "lanchonete de bairro", problema: "milk-shake aguado", resultado: "textura igual todo dia", autorizacao: "dono autorizou por WhatsApp em 02/10" }))).toContain("liberado");
     expect(textOf(await call(ctx, "instrucoes_do_roteiro", { content_id: ID }))).toContain(`[${caseId}] lanchonete de bairro`);
@@ -240,6 +245,42 @@ describe("conector MCP do Post.ai (diretor de gravações)", () => {
     expect(perf).toContain("retenção 42%");
     expect(perf).toContain("O QUE ESTÁ FUNCIONANDO");
     expect(perf).toMatch(/Horários \(Brasília\):\n {2}1\. 19h — 2\.000 visualizações/);
+  });
+
+  it("fila do assistente: ler_roteiro mostra o pendente e o que a direção aplica; o dia marca 'aguardando abertura'", async () => {
+    const direcao = { takes: [{ ordem: 1, nome: "Gancho", fala_exata: "Ninguém te conta isso.", duracao_segundos: 3 }], publicacao_por_rede: [{ rede: "instagram", horario: "19:30" }], legendas_na_tela: [{ texto: "Vida real", inicio: 0, fim: 2, estilo: "amarelo" }] };
+    const parsed = (await import("@postai/domain")).parseDraft({ ...draft, direcao });
+    if (!parsed.ok) throw new Error(parsed.errors.join());
+    const st = fakeStore({ pending: parsed.draft, content: { ...thought, pendingDraft: true } });
+    const ctx: McpContext = { defaultProfileId: PESSOAL, profiles: async () => [], store: async () => st.store, createProfile: async () => "x" };
+    const lido = JSON.parse(textOf(await call(ctx, "ler_roteiro", { content_id: ID })));
+    expect(lido.draft).toBeNull();
+    expect(lido.pendente.draft.title).toBe(draft.title);
+    const ap = lido.aplicacao as { campo: string; aplicado: boolean }[];
+    expect(ap.find((a) => a.campo === "takes (fala_exata)")!.aplicado).toBe(true);
+    expect(ap.find((a) => a.campo === "publicacao_por_rede")!.aplicado).toBe(false);
+    expect(ap.find((a) => a.campo === "legendas_na_tela[].estilo")!.aplicado).toBe(false);
+    expect(textOf(await call(ctx, "conteudos_do_dia"))).toContain("roteiro do assistente aguardando abertura no app");
+    expect(textOf(await call(ctx, "ler_status_gravacao", { content_id: ID }))).toContain("ainda não aberto no app");
+  });
+
+  it("validador: todos os erros de uma vez com o caminho; limites documentados; '20 segundos' passa", async () => {
+    const { ctx } = fakeCtx();
+    const many = textOf(await call(ctx, "salvar_roteiro", { content_id: ID, roteiro: { ...draft, hook_options: ["um dois três quatro cinco seis sete oito nove dez onze doze treze", "b c", "d e"], direcao: { takes: [{ ordem: 1, nome: "A", fala_exata: "x y z", duracao_segundos: 3 }], musica: { id: "nao-existe" }, legendas_na_tela: [{ texto: "t", inicio: 4, fim: 1 }] } } }));
+    expect(many).toMatch(/Ajuste tudo isto e salve de novo \(3 pontos\)/);
+    expect(many).toContain("gancho 1 tem 13 palavras");
+    expect(many).toContain('direcao.musica.id "nao-existe"');
+    expect(many).toContain("direcao.legendas_na_tela[0]: fim precisa ser depois do início");
+    const bad = textOf(await call(ctx, "salvar_roteiro", { content_id: ID, roteiro: { ...draft, direcao: { takes: [{ ordem: 1, nome: "A", duracao_segundos: 3 }], legendas_na_tela: [{ texto: "t", inicio: 0, fim: 1, estilo: "x".repeat(61) }] } } }));
+    expect(bad).toContain("direcao.legendas_na_tela.0.estilo");
+    const inst = textOf(await call(ctx, "instrucoes_do_roteiro", { content_id: ID }));
+    expect(inst).toContain("direcao.legendas_na_tela[].estilo: string (0–60 caracteres)");
+    expect(inst).toContain("direcao.musica.volume: number (0.05 a 0.6)");
+    // empresa: "20 segundos" não é "20 anos de mercado"
+    const empresa = fakeStore({ profile: CONTROLPOT_PROFILE });
+    const ectx: McpContext = { defaultProfileId: EMPRESA, profiles: async () => [], store: async () => empresa.store, createProfile: async () => "x" };
+    const r = textOf(await call(ectx, "salvar_roteiro", { content_id: ID, roteiro: { ...draft, script: `${draft.script} Bate por 20 segundos e fica cremoso.` } }));
+    expect(r).not.toContain("alegação sem prova");
   });
 
   it("empresa: roteiro com preço é recusado", async () => {

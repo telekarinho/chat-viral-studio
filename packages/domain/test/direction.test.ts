@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { BUSINESS_PILLARS, RODRIGO_PILLARS, RODRIGO_PROFILE, ScenesSchema, buildAss, buildDayPlan, buildEditPlan, buildSegments, businessRoutine, directionIssues, generateLocal, parseDraft, rodrigoRoutine, type ContentDraft } from "../src";
+import { BUSINESS_PILLARS, RODRIGO_PILLARS, RODRIGO_PROFILE, ScenesSchema, buildAss, buildDayPlan, buildEditPlan, buildSegments, businessRoutine, directionIssues, generateLocal, normalizeMood, parseDraft, rodrigoRoutine, type ContentDraft } from "../src";
 
 const base = generateLocal({ profile: RODRIGO_PROFILE, pillarSlug: "familia", pillarName: "Família", format: "main_video", eventText: null, recent: [] }).draft;
 const direcao = {
@@ -76,5 +76,16 @@ describe("plano da empresa com cena de apoio dirigida", () => {
     const pessoal = buildDayPlan({ date: new Date(0), dateKey: "2026-10-05", utcOffsetMinutes: -180, workspaceId: "w", routine: rodrigoRoutine(newId), pillars: RODRIGO_PILLARS, recentPillarSlugs: [], newId, now: "x" });
     expect(pessoal.contentItems.map((c) => c.format)).toEqual(["thought", "main_video"]);
     expect(ScenesSchema.safeParse([{ ordem: 1, nome: "Close", duracao_segundos: 3 }]).success).toBe(true);
+  });
+});
+
+describe("clima da música padronizado", () => {
+  it("aceita o valor de listar_musicas ou o nome; texto livre vira vazio", () => {
+    expect(normalizeMood("familia")).toBe("familia");
+    expect(normalizeMood("Família (acústico)")).toBe("familia");
+    expect(normalizeMood("Reflexão")).toBe("reflexao");
+    expect(normalizeMood("lofi chill")).toBe("");
+    const r = parseDraft({ ...base, direcao: { takes: [{ ordem: 1, nome: "A", fala_exata: "x", duracao_segundos: 2 }], musica: { id: "mixkit-22", clima: "Reflexão (piano)" } } });
+    expect(r.ok && r.draft.direcao?.musica?.clima).toBe("reflexao");
   });
 });

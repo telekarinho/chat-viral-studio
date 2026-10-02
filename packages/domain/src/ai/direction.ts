@@ -1,5 +1,14 @@
 import { z } from "zod";
-import { trackById, type MusicTrack } from "../music";
+import { MOOD_LABEL, trackById, type MusicMood, type MusicTrack } from "../music";
+
+const MOODS = Object.keys(MOOD_LABEL) as MusicMood[];
+const plain = (s: string) => s.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase().trim();
+/** Clima aceito: o valor de listar_musicas (ex.: "reflexao"); nome ("Reflexão (piano)") também vale; outro texto vira "". */
+export function normalizeMood(s: string): MusicMood | "" {
+  const p = plain(s);
+  if (!p) return "";
+  return MOODS.find((m) => m === p || plain(MOOD_LABEL[m]) === p || plain(MOOD_LABEL[m]).startsWith(p)) ?? "";
+}
 
 /**
  * Direção completa do vídeo (o “diretor de gravações”): tomada por tomada, texto na tela, música, edição, capa,
@@ -40,7 +49,8 @@ export const DirectionSchema = z.object({
   legendas_na_tela: z.array(OnScreenTextSchema).max(12).default([]),
   musica: z.object({
     id: req(40),
-    clima: s(40).default(""),
+    /** um de listar_musicas: reflexao | motivacional | treino | familia | humor | empresa | calmo */
+    clima: s(40).default("").transform(normalizeMood),
     bpm: z.number().int().min(40).max(220).nullable().default(null),
     /** volume da música em relação à voz, 0.05–0.6 (0.22 = padrão) */
     volume: z.number().min(0.05).max(0.6).default(0.22),
@@ -100,4 +110,31 @@ export function takeInstructions(t: DirectionTake): { label: string; value: stri
     ["Olhar", t.olhar], ["Emoção", t.emocao], ["B-roll", t.broll], ["Cuidado", t.erro_comum],
   ];
   return rows.filter(([, v]) => v.trim()).map(([label, value]) => ({ label, value }));
+}
+
+/**
+ * O que o app e a montagem fazem com cada parte da direção — e o que NÃO é aplicado (dito com clareza,
+ * para o diretor não supor que algo foi feito).
+ */
+export function directionReport(d: Direction): { campo: string; aplicado: boolean; como: string }[] {
+  const spoken = spokenTakes(d);
+  const silent = d.takes.filter((t) => !t.fala_exata.trim());
+  const out: { campo: string; aplicado: boolean; como: string }[] = [
+    { campo: "takes (fala_exata)", aplicado: spoken.length > 0, como: spoken.length ? `${spoken.length} parte(s) gravada(s) na ordem, com teleprompter da fala_exata: ${spoken.map((t) => t.nome).join(" → ")}` : "nenhum take com fala — o app grava o roteiro (script) por partes" },
+    { campo: "takes (instruções)", aplicado: spoken.some((t) => takeInstructions(t).length > 0), como: "enquadramento, câmera, local, luz, olhar, emoção, B-roll e erro comum aparecem na tela de gravação de cada take" },
+  ];
+  if (silent.length) out.push({ campo: "takes sem fala", aplicado: false, como: `${silent.length} take(s) sem fala aparecem como instrução no conteúdo, mas não viram parte do vídeo — grave como cena de apoio (B-roll) do dia para a montagem usar` });
+  if (d.legendas_na_tela.length) {
+    out.push({ campo: "legendas_na_tela", aplicado: true, como: `${d.legendas_na_tela.length} texto(s) na tela nos tempos e posições pedidos (substituem o gancho automático)` });
+    if (d.legendas_na_tela.some((l) => l.estilo.trim())) out.push({ campo: "legendas_na_tela[].estilo", aplicado: false, como: "o estilo é sempre a letra manuscrita do perfil; o texto de estilo fica só como referência" });
+  }
+  if (d.musica) {
+    const track = trackById(d.musica.id);
+    out.push({ campo: "musica", aplicado: Boolean(track), como: track ? `"${track.title}" com volume ${Math.round(d.musica.volume * 100)}%, entrando em ${d.musica.entrada}s${d.musica.saida !== null ? ` e saindo em ${d.musica.saida}s` : ""}; abaixa sozinha quando há fala (ducking). Vale se a música do vídeo estiver em “automática” no app` : "id fora da biblioteca — o vídeo sai com a música automática" });
+  }
+  if (d.edicao.cortes || d.edicao.transicao || d.edicao.zoom) out.push({ campo: "edicao", aplicado: false, como: "cortes de pausa, transições e zoom são automáticos; o texto de edição aparece no app como orientação" });
+  if (d.capa) out.push({ campo: "capa", aplicado: true, como: `capa tirada do segundo ${d.capa.frame}${d.capa.texto ? ` com o texto “${d.capa.texto}”` : ""}` });
+  if (d.publicacao_por_rede.length) out.push({ campo: "publicacao_por_rede", aplicado: false, como: "horário, hashtags e 1º comentário aparecem no app para o criador copiar; o app não agenda nem posta sozinho" });
+  if (d.teste_ab) out.push({ campo: "teste_ab", aplicado: false, como: "os ganchos aparecem no app; o vídeo usa o gancho escolhido pelo criador (não gera 3 versões)" });
+  return out;
 }

@@ -1,6 +1,9 @@
 import { z } from "zod";
 import { DirectionSchema } from "./direction";
 
+// mensagens de validação em português (o criador e o assistente leem os erros)
+z.config(z.locales.pt());
+
 export const PROMPT_VERSION = "content-v1.3.0";
 
 export const NARRATIVE_STRUCTURES = ["confissao", "pergunta", "contraste", "historia", "conselho", "observacao"] as const;
@@ -102,4 +105,36 @@ function strip(node: unknown): unknown {
     return out;
   }
   return node;
+}
+
+type JsonNode = { type?: string | string[]; properties?: Record<string, JsonNode>; items?: JsonNode; required?: string[]; enum?: unknown[]; anyOf?: JsonNode[];
+  minLength?: number; maxLength?: number; minItems?: number; maxItems?: number; minimum?: number; maximum?: number; pattern?: string; default?: unknown };
+
+/**
+ * Todos os limites do roteiro (inclusive "direcao"), tirados do próprio contrato — a documentação nunca
+ * diverge da validação. Uma linha por campo: caminho, tipo, limites, valores aceitos e padrão.
+ */
+export function contractLimits(): string[] {
+  const root = z.toJSONSchema(ContentDraftSchema, { target: "draft-7", io: "input" }) as JsonNode;
+  const out: string[] = [];
+  const walk = (n: JsonNode, path: string, required: boolean) => {
+    const alt = n.anyOf?.find((x) => x.type !== "null");
+    const nullable = Boolean(n.anyOf?.some((x) => x.type === "null"));
+    const node = alt ? { ...alt, default: n.default ?? alt.default } : n;
+    const t = Array.isArray(node.type) ? node.type.join("|") : node.type ?? "?";
+    const lim: string[] = [];
+    if (node.minLength !== undefined || node.maxLength !== undefined) lim.push(`${node.minLength ?? 0}–${node.maxLength ?? "∞"} caracteres`);
+    if (node.minItems !== undefined || node.maxItems !== undefined) lim.push(`${node.minItems ?? 0}–${node.maxItems ?? "∞"} itens`);
+    if (node.minimum !== undefined || node.maximum !== undefined) lim.push(`${node.minimum ?? "-∞"} a ${node.maximum ?? "∞"}`);
+    if (node.enum) lim.push(`um de: ${node.enum.join(" | ")}`);
+    if (node.pattern) lim.push(`formato ${node.pattern}`);
+    if (path && (t !== "object" || !node.properties)) {
+      const flags = [required ? "obrigatório" : "opcional", nullable ? "pode ser null" : "", node.default !== undefined ? `padrão ${JSON.stringify(node.default)}` : ""].filter(Boolean).join(", ");
+      out.push(`${path}: ${t}${lim.length ? ` (${lim.join("; ")})` : ""} — ${flags}`);
+    } else if (path) out.push(`${path}: objeto — ${required ? "obrigatório" : "opcional"}${nullable ? ", pode ser null" : ""}`);
+    if (node.properties) for (const [k, v] of Object.entries(node.properties)) walk(v, path ? `${path}.${k}` : k, node.required?.includes(k) ?? false);
+    if (node.items) walk(node.items, `${path}[]`, true);
+  };
+  walk(root, "", true);
+  return out;
 }
