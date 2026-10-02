@@ -7,10 +7,11 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import {
   CAPTION_STYLES, MOOD_LABEL, RETOUCH_LEVELS, SHORT_ROLES, assignBroll, buildAss, buildEditPlan, buildSegments, cuesFromWords, moodForPillar, parseDraft, pickTrack,
   planCuts, trackById, watermarkCorner, wholeTakeSegment, withClips,
-  type CaptionStyle, type EditClip, type EditPlan, type MusicMood, type PlanMusic, type RenderVariant, type Retouch,
+  type CaptionStyle, type Direction, type EditClip, type EditPlan, type MusicMood, type PlanMusic, type RenderVariant, type Retouch,
 } from "@postai/domain";
 import { fetchTrack, transcribeClip } from "./media-extras";
 import { probe, render } from "./ffmpeg";
+import { filterPath } from "./render";
 
 const run = promisify(execFile);
 
@@ -50,17 +51,23 @@ export interface ServerChoices {
  * Escolhas do criador para a montagem (content_items.structured_payload.edit), validadas no servidor.
  * Tudo que não vier (ou vier inválido) cai no padrão automático.
  */
-export function editChoices(payload: Record<string, unknown> | null | undefined, pillarSlug: string, business: boolean, seed: string): ServerChoices {
+export function editChoices(payload: Record<string, unknown> | null | undefined, pillarSlug: string, business: boolean, seed: string, direction?: Direction | null): ServerChoices {
   const edit = (payload?.edit ?? {}) as Record<string, unknown>;
   const flag = (k: string) => (typeof edit[k] === "boolean" ? (edit[k] as boolean) : true);
   // pessoal: "forte" (tipo iPhone); empresa: "leve" (não alisa a textura do produto que aparece junto)
   const retouch: Retouch = RETOUCH_LEVELS.includes(edit.retouch as Retouch) ? (edit.retouch as Retouch) : business ? "leve" : "forte";
   const captionStyle = CAPTION_STYLES.includes(edit.captionStyle as CaptionStyle) ? (edit.captionStyle as CaptionStyle) : "manuscrito";
   const accentColor = typeof edit.accentColor === "string" && /^#[0-9a-fA-F]{6}$/.test(edit.accentColor) ? edit.accentColor : undefined;
-  const volume = typeof edit.musicVolume === "number" && edit.musicVolume >= 0.05 && edit.musicVolume <= 0.6 ? edit.musicVolume : 0.22;
+  const dm = direction?.musica ?? null;
+  const volume = typeof edit.musicVolume === "number" && edit.musicVolume >= 0.05 && edit.musicVolume <= 0.6 ? edit.musicVolume : (dm?.volume ?? 0.22);
   const base = { captionStyle, accentColor, retouch, stabilize: flag("stabilize"), autoCut: flag("autoCut"), voiceClean: flag("voiceClean"), broll: flag("broll"), hook: flag("hook") };
   const choice = typeof edit.music === "string" ? edit.music : "auto";
   if (choice === "none") return { ...base, music: null };
+  // "auto" + direção com música da biblioteca: a faixa, o volume e a janela que o diretor pediu
+  const directed = choice === "auto" && dm ? trackById(dm.id) : undefined;
+  if (directed && !(business && directed.license !== "comercial")) {
+    return { ...base, music: { trackId: directed.id, mood: directed.mood, volume, startMs: Math.round(dm!.entrada * 1000), endMs: dm!.saida === null ? null : Math.round(dm!.saida * 1000) } };
+  }
   const exact = trackById(choice);
   const mood: MusicMood = exact?.mood ?? (choice in MOOD_LABEL ? (choice as MusicMood) : moodForPillar(pillarSlug, business));
   const track = exact ?? pickTrack(mood, seed);
@@ -84,6 +91,8 @@ export interface ServerPlan {
   brolls: { takeId: string; key: string; durationMs: number }[];
   /** refaz o plano com a duração REAL medida nos arquivos (vídeo importado não traz duração do aparelho) */
   replan: (durationsMs: number[]) => EditPlan;
+  /** direção do roteiro (capa etc.), quando veio do assistente */
+  direction: Direction | null;
 }
 
 /**
@@ -105,13 +114,17 @@ export async function buildServerPlan(db: SupabaseClient, job: RenderJobRow): Pr
   if (!parsed.ok) throw new Error("roteiro inválido ou ausente");
   const tone = profile.data.tone as { kind?: string; watermark?: unknown } | null;
   const business = tone?.kind === "empresa";
-  const choices = editChoices(content.data.structured_payload, content.data.pillar_slug ?? "", business, job.content_item_id);
+  const direction = parsed.draft.direcao ?? null;
+  const choices = editChoices(content.data.structured_payload, content.data.pillar_slug ?? "", business, job.content_item_id, direction);
   const variant = jobVariant(job);
   const freeSpeech = script.data?.model === "fala-livre";
   const prompt = freeSpeech ? "" : parsed.draft.script.slice(0, 600);
   const hookText = choices.hook && !freeSpeech ? parsed.draft.screen_text.trim() || null : null;
   const signature = profile.data.signature ?? "";
-  const planOpts = { signature, watermark: watermarkCorner(tone?.watermark), hookText, captionStyle: choices.captionStyle, accentColor: choices.accentColor, music: choices.music, retouch: choices.retouch, stabilize: choices.stabilize, voiceClean: choices.voiceClean };
+  const overlays = choices.hook && !freeSpeech && variant === "completo"
+    ? (direction?.legendas_na_tela ?? []).map((l) => ({ text: l.texto, startMs: Math.round(l.inicio * 1000), endMs: Math.round(l.fim * 1000), position: l.posicao }))
+    : [];
+  const planOpts = { signature, watermark: watermarkCorner(tone?.watermark), hookText, overlays, captionStyle: choices.captionStyle, accentColor: choices.accentColor, music: choices.music, retouch: choices.retouch, stabilize: choices.stabilize, voiceClean: choices.voiceClean };
 
   const brolls = choices.broll && variant === "completo" ? await findBrolls(db, job.workspace_id, content.data.plan_date as string | null) : [];
   const own = ((takes.data ?? []) as unknown as TakeRow[]).filter((t) => t.workspace_id === job.workspace_id && !(t.tags ?? []).includes("descartado"));
@@ -126,7 +139,7 @@ export async function buildServerPlan(db: SupabaseClient, job: RenderJobRow): Pr
     if (!ready(whole.media_files)) throw new NotReadyError("take ainda não sincronizado");
     if (variant === "curto") throw new Error("a versão curta precisa do vídeo gravado por partes");
     const replan = (d: number[]) => buildEditPlan({ ...planOpts, segments: [wholeTakeSegment(parsed.draft)], takes: [{ segmentIndex: 0, takeId: whole.id, durationMs: d[0] ?? 0 }] });
-    return { plan: replan([whole.media_files.duration_ms ?? 0]), keys: [whole.media_files.storage_key], prompt, choices, variant, freeSpeech, brolls, replan };
+    return { plan: replan([whole.media_files.duration_ms ?? 0]), keys: [whole.media_files.storage_key], prompt, choices, variant, freeSpeech, brolls, replan, direction };
   }
   const all = buildSegments(parsed.draft, {
     selectedHook: Number(content.data.structured_payload?.selected_hook ?? 0),
@@ -139,7 +152,7 @@ export async function buildServerPlan(db: SupabaseClient, job: RenderJobRow): Pr
   const notReady = segments.filter((_, i) => !ready(chosen[i]?.media_files ?? null)).map((s) => s.index + 1);
   if (notReady.length) throw new NotReadyError(`partes ainda não sincronizadas: ${notReady.join(", ")}`);
   const replan = (d: number[]) => buildEditPlan({ ...planOpts, segments, takes: segments.map((s, i) => ({ segmentIndex: s.index, takeId: chosen[i]!.id, durationMs: d[i] ?? 0 })) });
-  return { plan: replan(chosen.map((t) => t!.media_files!.duration_ms ?? 0)), keys: chosen.map((t) => t!.media_files!.storage_key!), prompt, choices, variant, freeSpeech, brolls, replan };
+  return { plan: replan(chosen.map((t) => t!.media_files!.duration_ms ?? 0)), keys: chosen.map((t) => t!.media_files!.storage_key!), prompt, choices, variant, freeSpeech, brolls, replan, direction };
 }
 
 /** Cenas de apoio (B-roll) do mesmo dia do conteúdo, mais recentes primeiro. */
@@ -259,7 +272,17 @@ export async function processJob(db: SupabaseClient, job: RenderJobRow, fontFile
     let coverKey: string | null = null;
     try {
       const cover = join(dir, "capa.jpg");
-      await run("ffmpeg", ["-y", "-loglevel", "error", "-ss", (Math.min(1200, plan.totalMs / 3) / 1000).toFixed(2), "-i", output, "-frames:v", "1", "-q:v", "3", cover]);
+      // direção: quadro e texto da capa escolhidos pelo diretor
+      const capa = sp.direction?.capa ?? null;
+      const atMs = capa ? Math.min(Math.max(0, plan.totalMs - 100), capa.frame * 1000) : Math.min(1200, plan.totalMs / 3);
+      const coverText = capa?.texto.trim() ?? "";
+      const vf: string[] = [];
+      if (coverText) {
+        const tf = join(dir, "capa.txt");
+        writeFileSync(tf, coverText.toLocaleUpperCase("pt-BR"), "utf8");
+        vf.push("-vf", `drawtext=fontfile='${filterPath(fontFile)}':textfile='${filterPath(tf)}':fontsize=110:fontcolor=white:borderw=6:bordercolor=black@0.7:x=(w-text_w)/2:y=h*0.12`);
+      }
+      await run("ffmpeg", ["-y", "-loglevel", "error", "-ss", (atMs / 1000).toFixed(2), "-i", output, ...vf, "-frames:v", "1", "-q:v", "3", cover]);
       const cu = await db.storage.from("takes").upload(`${base}.jpg`, readFileSync(cover), { contentType: "image/jpeg", upsert: true });
       if (cu.error) throw new Error(cu.error.message);
       coverKey = `${base}.jpg`;

@@ -1,4 +1,5 @@
 import type { ContentDraft } from "./ai/contract";
+import { spokenTakes, takeInstructions } from "./ai/direction";
 
 export const SEGMENT_ROLES = ["hook", "e", "mas", "por_isso", "cta", "closing", "free"] as const;
 export type SegmentRole = (typeof SEGMENT_ROLES)[number];
@@ -8,6 +9,8 @@ export interface ScriptSegment {
   role: SegmentRole;
   label: string;
   text: string;
+  /** instruções do diretor para este take (enquadramento, luz, olhar…), quando o roteiro trouxe direção */
+  direction?: { label: string; value: string }[];
 }
 
 export const SEGMENT_LABEL: Record<SegmentRole, string> = {
@@ -33,9 +36,20 @@ const MIN_WORDS = 3;
 export function buildSegments(draft: ContentDraft, opts: { selectedHook: number; userEdited: boolean; closingPhrase: string; business?: boolean }): ScriptSegment[] {
   const hook = draft.hook_options[opts.selectedHook] ?? draft.hook_options[0] ?? "";
   const closing = opts.closingPhrase.trim();
-  let parts: { role: SegmentRole; text: string; label?: string }[];
+  let parts: { role: SegmentRole; text: string; label?: string; direction?: { label: string; value: string }[] }[];
 
-  if (draft.format === "thought") {
+  const takes = opts.userEdited ? [] : spokenTakes(draft.direcao);
+  if (takes.length) {
+    // direção do assistente: grava take por take, na ordem; 1º = gancho, último antes do fechamento = chamada
+    const hasClosing = closing && takes.some((t) => t.fala_exata.toLowerCase().includes(closing.toLowerCase()));
+    parts = takes.map((t, i) => ({
+      role: i === 0 ? "hook" : i === takes.length - 1 && takes.length > 2 && !hasClosing ? "cta" : "free",
+      text: t.fala_exata,
+      label: `Take ${t.ordem} — ${t.nome}`,
+      direction: takeInstructions(t),
+    }));
+    if (closing && !hasClosing) parts.push({ role: "closing", text: closing });
+  } else if (draft.format === "thought") {
     // gancho = 1ª frase (o que prende); o resto é a mensagem; fechamento sozinho
     const [first, ...rest] = sentences(stripClosing(draft.script, closing));
     parts = [{ role: "hook", text: first ?? "" }, { role: "free", text: rest.join(" "), label: "Mensagem" }, { role: "closing", text: closing }];
@@ -53,14 +67,18 @@ export function buildSegments(draft: ContentDraft, opts: { selectedHook: number;
     ];
   }
 
-  const merged: { role: SegmentRole; text: string; label?: string }[] = [];
+  const merged: typeof parts = [];
   for (const p of parts.filter((p) => p.text.trim())) {
     const prev = merged[merged.length - 1];
     // "E se der certo!" alone is a legit short part; other tiny fragments ride with the next/previous one
-    if (prev && p.role !== "closing" && wordCount(prev.text) < MIN_WORDS) prev.text = `${prev.text} ${p.text}`.trim();
+    // takes do diretor são gravados como vieram (cada um tem sua instrução)
+    if (!takes.length && prev && p.role !== "closing" && wordCount(prev.text) < MIN_WORDS) prev.text = `${prev.text} ${p.text}`.trim();
     else merged.push({ ...p, text: p.text.trim() });
   }
-  return merged.map((p, index) => ({ index, role: p.role, label: p.label ?? ((opts.business && BUSINESS_SEGMENT_LABEL[p.role]) || SEGMENT_LABEL[p.role]), text: p.text }));
+  return merged.map((p, index) => ({
+    index, role: p.role, label: p.label ?? ((opts.business && BUSINESS_SEGMENT_LABEL[p.role]) || SEGMENT_LABEL[p.role]), text: p.text,
+    ...(p.direction?.length ? { direction: p.direction } : {}),
+  }));
 }
 
 export interface SegmentProgress {

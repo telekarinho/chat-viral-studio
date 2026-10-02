@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { DirectionSchema } from "./direction";
 
 export const PROMPT_VERSION = "content-v1.3.0";
 
@@ -44,6 +45,8 @@ export const ContentDraftSchema = z.object({
     .min(1)
     .max(8),
   versions: z.array(z.object({ duration_seconds: z.number().int().min(5).max(180), script: text(5, 4000) })).max(4),
+  /** direção completa (takes, texto na tela, música, capa, publicação, teste A/B) — opcional */
+  direcao: DirectionSchema.optional(),
 });
 
 export type ContentDraft = z.infer<typeof ContentDraftSchema>;
@@ -82,7 +85,8 @@ const STRIP_KEYS = new Set(["$schema", "minItems", "maxItems", "minLength", "max
  * because strict mode does not accept all of them; Zod re-validates them after the call.
  */
 export function contentDraftJsonSchema(): Record<string, unknown> {
-  const raw = z.toJSONSchema(ContentDraftSchema, { target: "draft-7" }) as Record<string, unknown>;
+  // a direção completa vem do assistente (conector); a geração automática segue o contrato básico
+  const raw = z.toJSONSchema(ContentDraftSchema.omit({ direcao: true }), { target: "draft-7" }) as Record<string, unknown>;
   return strip(raw) as Record<string, unknown>;
 }
 

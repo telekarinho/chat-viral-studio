@@ -32,9 +32,13 @@ function fakeStore(opts: { profile?: typeof RODRIGO_PROFILE; recent?: ContentDra
       metrics: { views: 2000, likes: 100, comments: 10, shares: 10, saves: 5, updatedAt: "2026-10-01T00:00:00Z" },
     }],
     readScript: async () => ({ draft: raw, edit: null, metrics: null, postedAt: null, pendingFromAssistant: true }),
+    recordingStatus: async () => ({ takes: [{ segmentIndex: 0, synced: true }, { segmentIndex: 1, synced: false }], renders: [{ status: "failed", error: "parte 3 faltando", createdAt: "x", variant: "completo", warnings: [] }] }),
     planDays: async (start, days) => Array.from({ length: days }, (_, i) => ({ date: i === 0 ? start : `dia+${i}`, created: i > 0, items: i === 0 && own ? [own] : [] })),
     pillarCounts: async () => ({ familia: 3 }),
-    recentTopics: async () => ["treinar sem vontade", "Treinar sem vontade", "cansaço não é desistir"],
+    recentTopics: async () => [
+      { topic: "treinar sem vontade", contentItemId: "a" }, { topic: "Treinar sem vontade", contentItemId: "b" },
+      { topic: "chegar aos 40 sem ter tudo resolvido", contentItemId: "c" },
+    ],
     saveImprovement: async (i) => { improvements.push(i); return "m1"; },
     improvements: async () => improvements.map((m) => ({ id: "m1", titulo: m.titulo, prioridade: "alta", status: "nova", issueNumber: null, createdAt: "x" })),
   };
@@ -122,6 +126,41 @@ describe("conector MCP do Post.ai (diretor de gravações)", () => {
     const ok = await call(ctx, "salvar_roteiro", { content_id: ID, roteiro: draft });
     expect(textOf(ok)).toContain("enviado para o Post.ai");
     expect(pessoal.saved[0]!.draft.script.trim().endsWith("E se der certo!")).toBe(true);
+  });
+
+  it("assunto bloqueado por tema ('Aos 40') e erro diz qual conteúdo, campo e trecho", async () => {
+    const { ctx, pessoal } = fakeCtx();
+    const r = textOf(await call(ctx, "salvar_roteiro", { content_id: ID, roteiro: { ...draft, topic: "Aos 40" } }));
+    expect(r).toContain('assunto: "aos 40" parece com "chegar aos 40 sem ter tudo resolvido"');
+    expect(pessoal.saved).toHaveLength(0);
+  });
+
+  it("direção completa: salva quando está certa, aponta o erro quando a música não existe", async () => {
+    const { ctx, pessoal } = fakeCtx();
+    const direcao = {
+      takes: [{ ordem: 1, nome: "Gancho", fala_exata: draft.hook_options[0], duracao_segundos: 3, enquadramento: "close", olhar: "na lente" }, { ordem: 2, nome: "Mensagem", fala_exata: draft.script, duracao_segundos: draft.duration_seconds }],
+      musica: { id: "mixkit-839", volume: 0.25 },
+      legendas_na_tela: [{ texto: "Vida real 40+", inicio: 0, fim: 2.5 }],
+    };
+    const bad = await call(ctx, "salvar_roteiro", { content_id: ID, roteiro: { ...draft, direcao: { ...direcao, musica: { id: "hit-do-momento" } } } });
+    expect(textOf(bad)).toContain('direcao.musica.id "hit-do-momento" não existe');
+    expect(pessoal.saved).toHaveLength(0);
+    expect(textOf(await call(ctx, "salvar_roteiro", { content_id: ID, roteiro: { ...draft, direcao } }))).toContain("enviado para o Post.ai");
+    expect(pessoal.saved[0]!.draft.direcao?.takes[0]).toMatchObject({ nome: "Gancho", enquadramento: "close", luz: "" });
+    expect(textOf(await call(ctx, "instrucoes_do_roteiro", { content_id: ID }))).toContain("DIREÇÃO COMPLETA");
+  });
+
+  it("listar_musicas filtra por clima; ler_status_gravacao mostra o que falta e a montagem", async () => {
+    const { ctx } = fakeCtx();
+    const m = textOf(await call(ctx, "listar_musicas", { clima: "familia", bpm: 90 }));
+    expect(m).toContain("id mixkit-839");
+    expect(m).not.toContain("mixkit-22 ");
+    expect(m).toContain("ainda não têm BPM medido");
+    const st = textOf(await call(ctx, "ler_status_gravacao", { content_id: ID }));
+    expect(st).toMatch(/1\. .*: gravado e enviado/);
+    expect(st).toMatch(/2\. .*: gravado, ainda subindo/);
+    expect(st).toContain("falta gravar");
+    expect(st).toContain("montagem falhou: parte 3 faltando");
   });
 
   it("empresa: roteiro com preço é recusado", async () => {

@@ -1,7 +1,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { BRASILIA_OFFSET_MIN, buildDayPlan, type ContentDraft, type ContentFormat, type EditChoices, type Pillar, type PostMetrics, type ProjectInfo, type RoutineBlock } from "@postai/domain";
 import { supabaseMemory } from "./adapters";
-import type { McpContent, McpContext, McpPost, McpProfile, McpScript, McpStore } from "./mcp-tools";
+import type { McpContent, McpContext, McpPost, McpProfile, McpRecording, McpScript, McpStore } from "./mcp-tools";
 
 type ContentRow = { id: string; format: string; pillar_slug: string | null; title: string; plan_date: string | null; structured_payload: Record<string, unknown> | null };
 const COLS = "id, format, pillar_slug, title, plan_date, structured_payload";
@@ -35,6 +35,24 @@ export function supabaseMcpStore(db: SupabaseClient, workspaceId: string, userId
       const { data, error } = await db.from("content_items").select(COLS).eq("workspace_id", workspaceId).eq("plan_date", date).order("scheduled_for");
       if (error) throw new Error(error.message);
       return withScript((data ?? []) as ContentRow[]);
+    },
+    async recordingStatus(contentId): Promise<McpRecording> {
+      const [takes, renders] = await Promise.all([
+        db.from("takes").select("segment_index, tags, media_files(state)").eq("workspace_id", workspaceId).eq("content_item_id", contentId),
+        db.from("render_jobs").select("status, error, plan, result, created_at").eq("workspace_id", workspaceId).eq("content_item_id", contentId).order("created_at", { ascending: false }).limit(3),
+      ]);
+      const err = takes.error ?? renders.error;
+      if (err) throw new Error(err.message);
+      type T = { segment_index: number | null; tags: string[] | null; media_files: { state: string } | null };
+      return {
+        takes: ((takes.data ?? []) as unknown as T[])
+          .filter((t) => !(t.tags ?? []).includes("descartado"))
+          .map((t) => ({ segmentIndex: t.segment_index, synced: t.media_files?.state === "uploaded_original" })),
+        renders: (renders.data ?? []).map((r) => ({
+          status: r.status as string, error: (r.error as string | null) ?? null, createdAt: r.created_at as string,
+          variant: ((r.plan as { variant?: string } | null)?.variant ?? "completo"), warnings: ((r.result as { warnings?: string[] } | null)?.warnings ?? []),
+        })),
+      };
     },
     async readScript(contentId): Promise<McpScript> {
       const [script, content, pending] = await Promise.all([
@@ -107,9 +125,11 @@ export function supabaseMcpStore(db: SupabaseClient, workspaceId: string, userId
       return counts;
     },
     async recentTopics(days) {
-      const { data, error } = await db.from("scripts").select("draft").eq("workspace_id", workspaceId).gte("created_at", daysAgo(days)).order("created_at", { ascending: false }).limit(60);
+      const { data, error } = await db.from("scripts").select("draft, content_item_id").eq("workspace_id", workspaceId).gte("created_at", daysAgo(days)).order("created_at", { ascending: false }).limit(60);
       if (error) throw new Error(error.message);
-      return (data ?? []).map((r) => String((r.draft as { topic?: string } | null)?.topic ?? "")).filter(Boolean);
+      return (data ?? [])
+        .map((r) => ({ topic: String((r.draft as { topic?: string } | null)?.topic ?? ""), contentItemId: (r.content_item_id as string | null) ?? null }))
+        .filter((r) => r.topic);
     },
     async saveImprovement(i) {
       const { data, error } = await db.from("melhorias").insert({ workspace_id: workspaceId, user_id: userId, ...i }).select("id").single();

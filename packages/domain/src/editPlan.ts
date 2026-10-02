@@ -64,6 +64,17 @@ export interface PlanMusic {
   mood: MusicMood;
   /** volume da música sob a voz, 0–1 (padrão 0.22) */
   volume: number;
+  /** direção: segundo do vídeo em que a música entra / sai (sem = o vídeo todo) */
+  startMs?: number;
+  endMs?: number | null;
+}
+
+/** Texto na tela escrito pelo diretor (tempos na linha do tempo final). */
+export interface PlanOverlay {
+  text: string;
+  startMs: number;
+  endMs: number;
+  position: "topo" | "centro" | "base";
 }
 
 export interface EditPlan {
@@ -80,6 +91,8 @@ export interface EditPlan {
   voiceClean?: boolean;
   /** texto grande nos 3 primeiros segundos (gancho na tela) */
   hookText?: string | null;
+  /** textos na tela da direção (substituem o gancho automático) */
+  overlays?: PlanOverlay[];
   signature: string;
   /** assinatura pequena num canto durante o vídeo todo */
   watermark?: WatermarkCorner;
@@ -112,6 +125,7 @@ export interface PlanInput {
   stabilize?: boolean;
   voiceClean?: boolean;
   hookText?: string | null;
+  overlays?: PlanOverlay[];
   signature: string;
   /** assinatura pequena num canto durante o vídeo todo */
   watermark?: WatermarkCorner;
@@ -215,7 +229,8 @@ export function buildEditPlan(input: PlanInput): EditPlan {
   }));
   return {
     version: "edit-v1", width: 1080, height: 1920, fps: 30, captionStyle: style, retouch: input.retouch ?? "leve", stabilize: input.stabilize ?? false,
-    voiceClean: input.voiceClean ?? false, hookText: input.hookText ?? null, signature: input.signature,
+    voiceClean: input.voiceClean ?? false, hookText: input.overlays?.length ? null : (input.hookText ?? null), signature: input.signature,
+    ...(input.overlays?.length ? { overlays: input.overlays } : {}),
     ...(input.watermark ? { watermark: input.watermark } : {}),
     ...(input.accentColor ? { accentColor: input.accentColor } : {}), music: input.music ?? null, clips, transitions,
     totalMs: clips.reduce((a, c) => a + c.durationMs, 0) - transitions.reduce((a, t) => a + t.durationMs, 0),

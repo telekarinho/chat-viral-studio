@@ -43,17 +43,17 @@ var STOPWORDS = new Set(
     " "
   ).map((w) => stripAccents(w))
 );
-function stripAccents(s) {
-  return s.normalize("NFD").replace(/[̀-ͯ]/g, "");
+function stripAccents(s2) {
+  return s2.normalize("NFD").replace(/[̀-ͯ]/g, "");
 }
-function normalizeText(s) {
-  return stripAccents(s.toLowerCase()).replace(/[^\p{L}\p{N}\s]/gu, " ").replace(/\s+/g, " ").trim();
+function normalizeText(s2) {
+  return stripAccents(s2.toLowerCase()).replace(/[^\p{L}\p{N}\s]/gu, " ").replace(/\s+/g, " ").trim();
 }
 function stem(w) {
   return w.length > 4 ? w.replace(/(mente|coes|cao|oes|ais|eis|res|es|as|os|s)$/u, "") : w;
 }
-function contentTokens(s) {
-  return normalizeText(s).split(" ").filter((w) => w.length > 1 && !STOPWORDS.has(w)).map(stem);
+function contentTokens(s2) {
+  return normalizeText(s2).split(" ").filter((w) => w.length > 1 && !STOPWORDS.has(w)).map(stem);
 }
 function similarity(a, b) {
   const ta = contentTokens(a);
@@ -67,9 +67,9 @@ function similarity(a, b) {
   return round(Math.max(uni, bi, containment * 0.9));
 }
 function bigrams(tokens) {
-  const s = /* @__PURE__ */ new Set();
-  for (let i = 0; i < tokens.length - 1; i++) s.add(`${tokens[i]} ${tokens[i + 1]}`);
-  return s;
+  const s2 = /* @__PURE__ */ new Set();
+  for (let i = 0; i < tokens.length - 1; i++) s2.add(`${tokens[i]} ${tokens[i + 1]}`);
+  return s2;
 }
 function jaccard(a, b) {
   if (a.size === 0 || b.size === 0) return 0;
@@ -99,7 +99,7 @@ function checkRepetition(candidate, recent, config = DEFAULT_REPETITION_CONFIG) 
     }
     if (c.type === "cta") {
       const same = recent.filter((r) => r.type === "cta" && similarity(r.value, c.value) >= 0.8);
-      if (same.length >= config.ctaMaxRepeats) hits.push({ type: "cta", candidate: c.value, previous: same[0].value, similarity: 1 });
+      if (same.length >= config.ctaMaxRepeats) hits.push({ type: "cta", candidate: c.value, previous: same[0].value, similarity: 1, previousContentId: same[0].contentItemId ?? null });
       continue;
     }
     const threshold = config.thresholds[c.type];
@@ -107,12 +107,18 @@ function checkRepetition(candidate, recent, config = DEFAULT_REPETITION_CONFIG) 
     let best = null;
     for (const r of recent) {
       if (!comparable.includes(r.type)) continue;
-      const sim = similarity(c.value, r.value);
-      if (sim >= threshold && (!best || sim > best.similarity)) best = { type: c.type, candidate: c.value, previous: r.value, similarity: sim };
+      const sim = c.type === "topic" ? Math.max(similarity(c.value, r.value), topicContainment(c.value, r.value)) : similarity(c.value, r.value);
+      if (sim >= threshold && (!best || sim > best.similarity)) best = { type: c.type, candidate: c.value, previous: r.value, similarity: sim, previousContentId: r.contentItemId ?? null };
     }
     if (best) hits.push(best);
   }
   return { repeated: hits.length > 0, hits };
+}
+function topicContainment(a, b) {
+  const ta = contentTokens(a);
+  const tb = contentTokens(b);
+  const [small, big] = ta.length <= tb.length ? [ta, new Set(tb)] : [tb, new Set(ta)];
+  return small.length > 0 && small.every((w) => big.has(w)) ? 0.9 : 0;
 }
 function uniqueByItem(fps) {
   const seen = /* @__PURE__ */ new Set();
@@ -125,7 +131,7 @@ function uniqueByItem(fps) {
 }
 var TYPE_LABEL = {
   topic: "assunto",
-  phrase: "frase",
+  phrase: "frase-chave",
   metaphor: "met\xE1fora",
   hook: "gancho",
   cta: "CTA",
@@ -149,43 +155,129 @@ function round(n) {
 var SYNC_POLICY = { baseDelayMs: 5e3, maxDelayMs: 30 * 6e4, maxAttempts: 8 };
 
 // ../../packages/domain/src/ai/contract.ts
+import { z as z2 } from "npm:zod@4";
+
+// ../../packages/domain/src/ai/direction.ts
 import { z } from "npm:zod@4";
+
+// ../../packages/domain/src/music.ts
+var mk = (id, mood, title, artist, sha256, durationSec) => (
+  // licença Mixkit Free: inclui uso comercial
+  { id: `mixkit-${id}`, mood, title, artist, url: `https://assets.mixkit.co/music/${id}/${id}.mp3`, sha256, durationSec, license: "comercial" }
+);
+var MUSIC_LIBRARY = [
+  mk(22, "reflexao", "Piano Reflections", "Ahjay Stelino", "7d58c4255d91f58e29e61520b6011cabd5a54b3e89b54646cebac9d37295bbec", 199),
+  mk(601, "reflexao", "Skyline", "Eugenio Mininni", "2fcb36e7e58c4b6bc1505b7980237fdad86696589572a958bb6ee2084c592cc5", 206),
+  mk(599, "reflexao", "Possible Dreams", "Eugenio Mininni", "ee6d055c20cccda716b6b63a154ef0dc825195b7061dc439abb8a623973f4798", 159),
+  mk(32, "motivacional", "Driving Ambition", "Ahjay Stelino", "e3c88488e65b8c87a6f06120983ce2cb12ea3aeba99f8cadb7ee5d6d284ef2c6", 102),
+  mk(31, "motivacional", "Dreaming Big", "Ahjay Stelino", "8c89819547b42a80750fb25f37a960a1f45f6fd66bc8d784ac817b98b002897c", 110),
+  mk(34, "motivacional", "Raising Me Higher", "Ahjay Stelino", "619b82cea299230cca5beac36d049291a1cb2be8ce0afdafda3e06fb30d06525", 98),
+  mk(1183, "treino", "Karma", "Michael Ramir C.", "56f331c37552486a1a31c65a443f1669ed37f7fb3bd99d9078d23ec55caa052f", 135),
+  mk(470, "treino", "Golden Storm", "Diego Nava", "32e5a363ce84f0b633579d0b10cf3c758ae3c02f5121147a321e2483e3384e26", 95),
+  mk(1e3, "treino", "I Can Hear Your Heartbeat", "Michael Ramir C.", "a23c959605dc4a53f7e3b8c8949fcc0d082c29989b944bb2a7f8d9601ddca0d1", 110),
+  mk(839, "familia", "Tears of Joy", "Michael Ramir C.", "30717c4e8d2a954a6163477b831e5b8981b406d2c34d72820fce4d40a8686ddc", 140),
+  mk(963, "familia", "Just Keep Walking", "Michael Ramir C.", "fa93f4808cecc643eee8d74647bd8b823991f2155672b7d37f3db79f9beb7e16", 125),
+  mk(801, "familia", "Happy Home", "Michael Ramir C.", "76b82159ba1d6821a5ac9465e8ff19007446c1b657dfe53b5917fc8896b3bf21", 110),
+  mk(2, "humor", "Comical", "Ahjay Stelino", "2f5ed23f2c51b5aa28b237563ee1249d12094fefce7afdaddee4f5a330e010cb", 114),
+  mk(466, "humor", "Games Worldbeat", "Bernardo R.", "a1c70e5719bdfbe5dd8ec064939b27e3baed8c2b7f9375ae5b361e6ba71d4922", 107),
+  mk(474, "empresa", "What About Action?", "Diego Nava", "4bcd99a13f3d71c6d356c2459f6f585f0d3f91ca8912aeef81ac626b8c8e3133", 117),
+  mk(729, "empresa", "Pop Track 03", "Lily J", "0bb90793c71a07e6d698afdd434b32ffb4fe93dbbdb0577d3e71a4de80b0337b", 97),
+  mk(1167, "empresa", "Close Up", "Michael Ramir C.", "a7f05a29d07a84d38072ccd2b35204bca812db86e75b2a837e71cc144d3e739b", 95),
+  mk(441, "calmo", "Meditation", "Arulo", "6ffb81be8ab2447eb7b9357d6ae3d1b58eb8bc85376a724fafa5fe4d1acf562a", 118),
+  mk(175, "calmo", "Digital Clouds", "Alejandro Maga\xF1a (A. M.)", "71cd4ea39edcc7532672bd97311abadfd318d00e7a828310a88b4f57fad9cd48", 101)
+];
+
+// ../../packages/domain/src/ai/direction.ts
+var s = (max) => z.string().trim().max(max);
+var req = (max) => z.string().trim().min(1).max(max);
+var sec = z.number().min(0).max(600);
+var TakeSchema = z.object({
+  ordem: z.number().int().min(1).max(30),
+  nome: req(80),
+  /** o que falar, palavra por palavra (vazio = cena sem fala / B-roll) */
+  fala_exata: s(1500).default(""),
+  ritmo: s(200).default(""),
+  duracao_segundos: z.number().min(1).max(180),
+  enquadramento: s(160).default(""),
+  movimento_camera: s(160).default(""),
+  local: s(160).default(""),
+  luz: s(160).default(""),
+  olhar: s(160).default(""),
+  emocao: s(120).default(""),
+  broll: s(300).default(""),
+  erro_comum: s(240).default("")
+});
+var ON_SCREEN_POSITIONS = ["topo", "centro", "base"];
+var OnScreenTextSchema = z.object({
+  texto: req(80),
+  inicio: sec,
+  fim: sec,
+  posicao: z.enum(ON_SCREEN_POSITIONS).default("topo"),
+  estilo: s(60).default("")
+});
+var DirectionSchema = z.object({
+  takes: z.array(TakeSchema).min(1).max(20),
+  legendas_na_tela: z.array(OnScreenTextSchema).max(12).default([]),
+  musica: z.object({
+    id: req(40),
+    clima: s(40).default(""),
+    bpm: z.number().int().min(40).max(220).nullable().default(null),
+    /** volume da música em relação à voz, 0.05–0.6 (0.22 = padrão) */
+    volume: z.number().min(0.05).max(0.6).default(0.22),
+    entrada: sec.default(0),
+    /** segundo em que a música sai (null = até o fim) */
+    saida: sec.nullable().default(null)
+  }).nullable().default(null),
+  edicao: z.object({ cortes: s(300).default(""), transicao: s(200).default(""), zoom: s(200).default("") }).default({ cortes: "", transicao: "", zoom: "" }),
+  capa: z.object({ frame: sec, texto: s(60).default("") }).nullable().default(null),
+  publicacao_por_rede: z.array(z.object({
+    rede: z.enum(["instagram", "tiktok", "facebook", "youtube_shorts"]),
+    horario: z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/),
+    hashtags: z.array(z.string().trim().regex(/^#[\p{L}\p{N}_]+$/u)).max(15).default([]),
+    primeiro_comentario: s(500).default("")
+  })).max(4).default([]),
+  teste_ab: z.object({ ganchos: z.array(req(200)).min(2).max(3), metrica: s(120).default("") }).nullable().default(null)
+});
+
+// ../../packages/domain/src/ai/contract.ts
 var PROMPT_VERSION = "content-v1.3.0";
 var NARRATIVE_STRUCTURES = ["confissao", "pergunta", "contraste", "historia", "conselho", "observacao"];
 var PLATFORMS = ["instagram", "tiktok", "facebook", "youtube_shorts"];
-var text = (min = 1, max = 2e3) => z.string().trim().min(min).max(max);
-var ContentDraftSchema = z.object({
+var text = (min = 1, max = 2e3) => z2.string().trim().min(min).max(max);
+var ContentDraftSchema = z2.object({
   title: text(3, 120),
   pillar: text(2, 60),
-  format: z.enum(["thought", "main_video", "story", "broll"]),
-  duration_seconds: z.number().int().min(3).max(180),
-  structure: z.enum(NARRATIVE_STRUCTURES),
+  format: z2.enum(["thought", "main_video", "story", "broll"]),
+  duration_seconds: z2.number().int().min(3).max(180),
+  structure: z2.enum(NARRATIVE_STRUCTURES),
   topic: text(3, 200),
   key_phrase: text(3, 300),
-  metaphor: z.string().trim().max(200),
-  hook_options: z.array(text(3, 200)).length(3),
-  narrative: z.object({ e: text(3, 800), mas: text(3, 800), por_isso: text(3, 800) }),
+  metaphor: z2.string().trim().max(200),
+  hook_options: z2.array(text(3, 200)).length(3),
+  narrative: z2.object({ e: text(3, 800), mas: text(3, 800), por_isso: text(3, 800) }),
   script: text(10, 4e3),
-  screen_text: z.string().trim().max(120),
+  screen_text: z2.string().trim().max(120),
   cta: text(2, 200),
-  caption: z.object({
+  caption: z2.object({
     instagram: text(3, 2200),
     tiktok: text(3, 2200),
     facebook: text(3, 5e3),
     youtube_shorts: text(3, 5e3)
   }),
-  hashtags: z.array(z.string().trim().regex(/^#[\p{L}\p{N}_]+$/u)).min(1).max(15),
-  recording_suggestions: z.array(z.object({ scene: text(2, 200), duration_seconds: z.number().int().min(1).max(60), location_hint: z.string().trim().max(200) })).min(1).max(8),
-  versions: z.array(z.object({ duration_seconds: z.number().int().min(5).max(180), script: text(5, 4e3) })).max(4)
+  hashtags: z2.array(z2.string().trim().regex(/^#[\p{L}\p{N}_]+$/u)).min(1).max(15),
+  recording_suggestions: z2.array(z2.object({ scene: text(2, 200), duration_seconds: z2.number().int().min(1).max(60), location_hint: z2.string().trim().max(200) })).min(1).max(8),
+  versions: z2.array(z2.object({ duration_seconds: z2.number().int().min(5).max(180), script: text(5, 4e3) })).max(4),
+  /** direção completa (takes, texto na tela, música, capa, publicação, teste A/B) — opcional */
+  direcao: DirectionSchema.optional()
 });
-var GenerateRequestSchema = z.object({
-  workspace_id: z.uuid(),
-  content_item_id: z.uuid().nullable(),
-  format: z.enum(["thought", "main_video"]),
+var GenerateRequestSchema = z2.object({
+  workspace_id: z2.uuid(),
+  content_item_id: z2.uuid().nullable(),
+  format: z2.enum(["thought", "main_video"]),
   pillar_slug: text(2, 60),
-  event_text: z.string().trim().max(1500).nullable(),
+  event_text: z2.string().trim().max(1500).nullable(),
   /** project briefing from the studio (mode, filmed SKU, ice-cream source, recipe) — optional */
-  brief: z.string().trim().max(1500).nullable().optional()
+  brief: z2.string().trim().max(1500).nullable().optional()
 });
 function parseDraft(input) {
   const r = ContentDraftSchema.safeParse(input);
@@ -194,7 +286,7 @@ function parseDraft(input) {
 }
 var STRIP_KEYS = /* @__PURE__ */ new Set(["$schema", "minItems", "maxItems", "minLength", "maxLength", "minimum", "maximum", "pattern", "format"]);
 function contentDraftJsonSchema() {
-  const raw = z.toJSONSchema(ContentDraftSchema, { target: "draft-7" });
+  const raw = z2.toJSONSchema(ContentDraftSchema.omit({ direcao: true }), { target: "draft-7" });
   return strip(raw);
 }
 function strip(node) {
@@ -279,7 +371,7 @@ function buildPrompt(input) {
     input.brief ? `Briefing do projeto (siga \xE0 risca; dados do equipamento s\xF3 os daqui): ${input.brief}` : "",
     input.format === "main_video" ? "Inclua em 'versions' varia\xE7\xF5es de 15s, 30s e 60s quando fizer sentido." : "Pensamento do Dia: 3 a 5 frases curtas no 'script'. A 1\xAA frase \xC9 o gancho (at\xE9 12 palavras; \xE9 gravada sozinha como 'Gancho'); as do meio desenvolvem UMA ideia; a \xFAltima antes do fechamento \xE9 a virada que d\xE1 vontade de mandar para algu\xE9m. Em 'versions' inclua no m\xE1ximo uma varia\xE7\xE3o de at\xE9 15s.",
     input.recentSummaries.length ? `Conte\xFAdos recentes (n\xE3o repita assunto, frase, met\xE1fora, gancho, CTA nem estrutura):
-${input.recentSummaries.map((s) => `- ${s}`).join("\n")}` : "",
+${input.recentSummaries.map((s2) => `- ${s2}`).join("\n")}` : "",
     input.avoid
   ].filter(Boolean).join("\n\n");
   return { system, user, promptVersion: PROMPT_VERSION };
@@ -494,39 +586,19 @@ function mentionsPrice(d) {
 function pendingClaimsIn(text2, pendingClaims) {
   const t = norm(text2);
   const hits = pendingClaims.filter((c) => {
-    const words = norm(c).split(" ").filter((w) => w.length > 3 || /\d/.test(w));
-    const key = words.filter((w) => /\d/.test(w));
-    if (key.length) return key.some((k) => t.includes(k.replace(/\./g, "")) || t.includes(k));
+    const all = norm(c).split(" ");
+    const words = all.filter((w) => w.length > 3 || /\d/.test(w));
+    const numbered = all.flatMap((w, i) => /\d/.test(w) && all[i + 1] ? [{ n: w.replace(/\./g, ""), unit: all[i + 1].slice(0, 5) }] : []);
+    if (numbered.length) {
+      const flat = t.replace(/(\d)\.(\d)/g, "$1$2");
+      return numbered.some(({ n, unit }) => new RegExp(`(^| )${n} (de )?${unit}`).test(flat));
+    }
     const found = words.filter((w) => t.includes(w)).length;
     return found >= 2 && found / words.length >= 0.5;
   });
   return hits;
 }
-var norm = (s) => s.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase().replace(/[^a-z0-9. ]/g, " ").replace(/\s+/g, " ").trim();
-
-// ../../packages/domain/src/music.ts
-var mk = (id, mood, title, artist, sha256, durationSec) => ({ id: `mixkit-${id}`, mood, title, artist, url: `https://assets.mixkit.co/music/${id}/${id}.mp3`, sha256, durationSec });
-var MUSIC_LIBRARY = [
-  mk(22, "reflexao", "Piano Reflections", "Ahjay Stelino", "7d58c4255d91f58e29e61520b6011cabd5a54b3e89b54646cebac9d37295bbec", 199),
-  mk(601, "reflexao", "Skyline", "Eugenio Mininni", "2fcb36e7e58c4b6bc1505b7980237fdad86696589572a958bb6ee2084c592cc5", 206),
-  mk(599, "reflexao", "Possible Dreams", "Eugenio Mininni", "ee6d055c20cccda716b6b63a154ef0dc825195b7061dc439abb8a623973f4798", 159),
-  mk(32, "motivacional", "Driving Ambition", "Ahjay Stelino", "e3c88488e65b8c87a6f06120983ce2cb12ea3aeba99f8cadb7ee5d6d284ef2c6", 102),
-  mk(31, "motivacional", "Dreaming Big", "Ahjay Stelino", "8c89819547b42a80750fb25f37a960a1f45f6fd66bc8d784ac817b98b002897c", 110),
-  mk(34, "motivacional", "Raising Me Higher", "Ahjay Stelino", "619b82cea299230cca5beac36d049291a1cb2be8ce0afdafda3e06fb30d06525", 98),
-  mk(1183, "treino", "Karma", "Michael Ramir C.", "56f331c37552486a1a31c65a443f1669ed37f7fb3bd99d9078d23ec55caa052f", 135),
-  mk(470, "treino", "Golden Storm", "Diego Nava", "32e5a363ce84f0b633579d0b10cf3c758ae3c02f5121147a321e2483e3384e26", 95),
-  mk(1e3, "treino", "I Can Hear Your Heartbeat", "Michael Ramir C.", "a23c959605dc4a53f7e3b8c8949fcc0d082c29989b944bb2a7f8d9601ddca0d1", 110),
-  mk(839, "familia", "Tears of Joy", "Michael Ramir C.", "30717c4e8d2a954a6163477b831e5b8981b406d2c34d72820fce4d40a8686ddc", 140),
-  mk(963, "familia", "Just Keep Walking", "Michael Ramir C.", "fa93f4808cecc643eee8d74647bd8b823991f2155672b7d37f3db79f9beb7e16", 125),
-  mk(801, "familia", "Happy Home", "Michael Ramir C.", "76b82159ba1d6821a5ac9465e8ff19007446c1b657dfe53b5917fc8896b3bf21", 110),
-  mk(2, "humor", "Comical", "Ahjay Stelino", "2f5ed23f2c51b5aa28b237563ee1249d12094fefce7afdaddee4f5a330e010cb", 114),
-  mk(466, "humor", "Games Worldbeat", "Bernardo R.", "a1c70e5719bdfbe5dd8ec064939b27e3baed8c2b7f9375ae5b361e6ba71d4922", 107),
-  mk(474, "empresa", "What About Action?", "Diego Nava", "4bcd99a13f3d71c6d356c2459f6f585f0d3f91ca8912aeef81ac626b8c8e3133", 117),
-  mk(729, "empresa", "Pop Track 03", "Lily J", "0bb90793c71a07e6d698afdd434b32ffb4fe93dbbdb0577d3e71a4de80b0337b", 97),
-  mk(1167, "empresa", "Close Up", "Michael Ramir C.", "a7f05a29d07a84d38072ccd2b35204bca812db86e75b2a837e71cc144d3e739b", 95),
-  mk(441, "calmo", "Meditation", "Arulo", "6ffb81be8ab2447eb7b9357d6ae3d1b58eb8bc85376a724fafa5fe4d1acf562a", 118),
-  mk(175, "calmo", "Digital Clouds", "Alejandro Maga\xF1a (A. M.)", "71cd4ea39edcc7532672bd97311abadfd318d00e7a828310a88b4f57fad9cd48", 101)
-];
+var norm = (s2) => s2.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase().replace(/[^a-z0-9. ]/g, " ").replace(/\s+/g, " ").trim();
 
 // src/edge.ts
 import { createClient as createClient2 } from "npm:@supabase/supabase-js@2";
@@ -632,20 +704,20 @@ function supabaseMemory(db, userId) {
 var LlmUnavailableError = class extends Error {
 };
 var MAX_ATTEMPTS = 3;
-async function generateContent(req, llm, memory) {
-  if (!await memory.canWrite(req.workspace_id)) throw Object.assign(new Error("forbidden"), { status: 403 });
+async function generateContent(req2, llm, memory) {
+  if (!await memory.canWrite(req2.workspace_id)) throw Object.assign(new Error("forbidden"), { status: 403 });
   const [profile, pillarName, recent, summaries] = await Promise.all([
-    memory.profile(req.workspace_id),
-    memory.pillarName(req.workspace_id, req.pillar_slug),
-    memory.recentFingerprints(req.workspace_id),
-    memory.recentSummaries(req.workspace_id)
+    memory.profile(req2.workspace_id),
+    memory.pillarName(req2.workspace_id, req2.pillar_slug),
+    memory.recentFingerprints(req2.workspace_id),
+    memory.recentSummaries(req2.workspace_id)
   ]);
   const schema = contentDraftJsonSchema();
   let avoid = "";
   const avoided = [];
   let fallback = null;
   for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
-    const prompt = buildPrompt({ profile, pillarName, format: req.format, eventText: req.event_text, brief: req.brief ?? null, recentSummaries: summaries, avoid });
+    const prompt = buildPrompt({ profile, pillarName, format: req2.format, eventText: req2.event_text, brief: req2.brief ?? null, recentSummaries: summaries, avoid });
     const started = Date.now();
     let raw;
     try {
@@ -653,7 +725,7 @@ async function generateContent(req, llm, memory) {
     } catch (e) {
       throw new LlmUnavailableError(e instanceof Error ? e.message : "llm error");
     }
-    const base = { workspaceId: req.workspace_id, contentItemId: req.content_item_id, model: llm.model, promptVersion: prompt.promptVersion, request: { ...req, attempt }, response: raw, latencyMs: Date.now() - started };
+    const base = { workspaceId: req2.workspace_id, contentItemId: req2.content_item_id, model: llm.model, promptVersion: prompt.promptVersion, request: { ...req2, attempt }, response: raw, latencyMs: Date.now() - started };
     const parsed = parseDraft(raw);
     if (!parsed.ok) {
       await memory.saveRun({ ...base, accepted: false, rejectionReason: `schema: ${parsed.errors.slice(0, 5).join("; ")}`, repetition: null });
@@ -700,16 +772,16 @@ function respond(draft, llm, attempts, avoided, extra) {
 
 // src/edge.ts
 var json = (status, body) => new Response(JSON.stringify(body), { status, headers: { "Content-Type": "application/json" } });
-Deno.serve(async (req) => {
-  if (req.method !== "POST") return json(405, { code: "method_not_allowed" });
+Deno.serve(async (req2) => {
+  if (req2.method !== "POST") return json(405, { code: "method_not_allowed" });
   const url = Deno.env.get("SUPABASE_URL");
-  const anon = Deno.env.get("SUPABASE_ANON_KEY") ?? req.headers.get("apikey") ?? "";
+  const anon = Deno.env.get("SUPABASE_ANON_KEY") ?? req2.headers.get("apikey") ?? "";
   const key = Deno.env.get("GEMINI_API_KEY");
-  const token = /^Bearer (.+)$/.exec(req.headers.get("Authorization") ?? "")?.[1];
+  const token = /^Bearer (.+)$/.exec(req2.headers.get("Authorization") ?? "")?.[1];
   if (!token) return json(401, { code: "unauthorized" });
   const { data, error } = await createClient2(url, anon, { auth: { persistSession: false } }).auth.getUser(token);
   if (error || !data.user) return json(401, { code: "unauthorized" });
-  const parsed = GenerateRequestSchema.safeParse(await req.json().catch(() => null));
+  const parsed = GenerateRequestSchema.safeParse(await req2.json().catch(() => null));
   if (!parsed.success) return json(400, { code: "invalid_request" });
   if (!key) return json(503, { code: "llm_not_configured" });
   try {
