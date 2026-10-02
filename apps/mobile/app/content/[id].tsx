@@ -2,8 +2,8 @@ import { useCallback, useEffect, useState } from "react";
 import { Text, TextInput, View } from "react-native";
 import * as Clipboard from "expo-clipboard";
 import { router, useFocusEffect, useLocalSearchParams } from "expo-router";
-import { FORMAT_LABEL, PLATFORMS, PLATFORM_LABEL, SHORT_ROLES, buildEditPlan, buildSegments, isBusiness, WATERMARK_LABEL, watermarkCorner, wholeTakeSegment, type EditPlan, type Platform, type ScriptSegment } from "@postai/domain";
-import { completeContent, getContent, latestTakesBySegment, listTakes, listTasks, setEditChoices, workspaceById, selectHook, type ContentItem, type Take, type Workspace } from "../../src/db/repo";
+import { FORMAT_LABEL, PLATFORMS, PLATFORM_LABEL, SHORT_ROLES, WATERMARK_LABEL, type EditPlan, type Platform, type ScriptSegment } from "@postai/domain";
+import { completeContent, getContent, listTakes, listTasks, setEditChoices, workspaceById, selectHook, type ContentItem, type Take, type Workspace } from "../../src/db/repo";
 import { ProjectPanel } from "../../src/components/ProjectPanel";
 import { FinishOptions } from "../../src/components/FinishOptions";
 import { FREE_SPEECH_MODEL } from "../../src/freeSpeech";
@@ -12,6 +12,7 @@ import { reportError } from "../../src/telemetry";
 import { setContentOnScreen } from "../../src/renderWatch";
 import { MetricsCard } from "../../src/components/MetricsCard";
 import { pullAssistantDraft } from "../../src/assistant";
+import { contentPlan } from "../../src/finalPlan";
 import { describeResult, downloadFinal, latestRenderJob, localFinal, localResult, requestFinalRender, type RenderJob, type RenderResult } from "../../src/finalRender";
 import { Button, Card, Chip, ErrorBox, Eyebrow, H1, Loading, Screen, Section, colors, s } from "../../src/ui";
 
@@ -45,23 +46,14 @@ export default function ContentScreen() {
       setOwner({ ws: await workspaceById(item.workspaceId), takes: clipTakes });
     }
     if (item) setTaskId((await listTasks(item.date)).find((t) => t.contentItemId === id && t.status === "pending")?.id ?? null);
-    if (item?.draft) {
-      const ws = await workspaceById(item.workspaceId);
-      setBusiness(isBusiness(ws.profile));
-      const segments = buildSegments(item.draft, { selectedHook: item.selectedHook ?? 0, userEdited: Boolean(item.meta?.userEdited), closingPhrase: ws.profile.closingPhrase, business: isBusiness(ws.profile) });
-      const chosen = await latestTakesBySegment(item.id);
-      const recorded = segments.filter((sg) => chosen.has(sg.index)).map((sg) => sg.index);
-      const whole = recorded.length === 0 ? (await listTakes({ contentItemId: item.id })).find((t) => t.segmentIndex === null && !t.tags.includes("descartado")) : undefined;
-      const plan = recorded.length === segments.length
-        ? buildEditPlan({ segments, signature: ws.profile.signature, watermark: watermarkCorner(ws.profile.watermark), takes: segments.map((sg) => ({ segmentIndex: sg.index, takeId: chosen.get(sg.index)!.id, durationMs: chosen.get(sg.index)!.media.durationMs ?? 0 })) })
-        : whole
-          ? buildEditPlan({ segments: [wholeTakeSegment(item.draft)], signature: ws.profile.signature, watermark: watermarkCorner(ws.profile.watermark), takes: [{ segmentIndex: 0, takeId: whole.id, durationMs: whole.media.durationMs ?? 0 }] })
-          : null;
-      setParts({ segments, recorded, plan });
+    const cp = item ? await contentPlan(item) : null;
+    if (item?.draft && cp) {
+      setBusiness(cp.business);
+      setParts({ segments: cp.segments, recorded: cp.recorded, plan: cp.plan });
       setFinalUri(await localFinal(item.id));
       setResult(await localResult(item.id));
       const shortUri = await localFinal(item.id, "curto");
-      if (plan) {
+      if (cp.plan) {
         try {
           setJob(await latestRenderJob(item.id));
           setShort({ job: await latestRenderJob(item.id, "curto"), uri: shortUri });
@@ -172,6 +164,12 @@ export default function ContentScreen() {
       <H1>{d?.title ?? "Sem roteiro ainda"}</H1>
       {error ? <ErrorBox message={error} /> : null}
       {assistantMsg ? <Card testID="assistant-draft"><Text style={{ color: colors.good, fontWeight: "800" }}>{assistantMsg}</Text></Card> : null}
+      {/* próximo passo sempre no topo: gravou tudo → finalizar; já montado → postar */}
+      {finalUri ? (
+        <Button label="▶ VER VÍDEO FINAL E POSTAR" onPress={() => router.push(`/final/${c.id}`)} testID="top-open-final" />
+      ) : parts?.plan ? (
+        <Button label="▶ FINALIZAR VÍDEO (montar e postar)" onPress={() => router.push(`/finalizar/${c.id}`)} testID="open-finalizar" />
+      ) : null}
       {c.project && owner ? <ProjectPanel c={c} ws={owner.ws} takes={owner.takes} onChange={() => void load()} /> : null}
 
       {!d ? (

@@ -101,7 +101,7 @@ export default function Today() {
         })} />
         <Button compact variant="secondary" label="📥 IMPORTAR VÍDEO" loading={quick === "importar"} testID="import-video" onPress={() => void quickStart("importar", async () => {
           const c = await importVideo();
-          if (c) router.push(`/content/${c.id}`);
+          if (c) router.push(`/finalizar/${c.id}`);
         })} />
       </View>
       {workspace?.profile.kind === "empresa" ? (
