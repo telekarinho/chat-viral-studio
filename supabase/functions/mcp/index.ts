@@ -13,6 +13,23 @@ var RODRIGO_PILLARS = [
   { slug: "empreendedorismo", name: "Empreendedorismo", targetPercent: 5 }
 ];
 var EPSILON = 0.01;
+function validatePillarTargets(pillars) {
+  const errors = [];
+  const active = pillars.filter((p) => p.active !== false);
+  if (active.length === 0) errors.push("Pelo menos um pilar precisa estar ativo.");
+  const slugs = /* @__PURE__ */ new Set();
+  for (const p of pillars) {
+    if (!p.slug.trim() || !p.name.trim()) errors.push("Todo pilar precisa de nome.");
+    if (slugs.has(p.slug)) errors.push(`Pilar duplicado: ${p.slug}`);
+    slugs.add(p.slug);
+    if (!Number.isFinite(p.targetPercent) || p.targetPercent < 0 || p.targetPercent > 100) {
+      errors.push(`Percentual inv\xE1lido em ${p.name}.`);
+    }
+  }
+  const sum = active.reduce((acc, p) => acc + p.targetPercent, 0);
+  if (Math.abs(sum - 100) > EPSILON) errors.push(`Os percentuais somam ${round(sum)}%, precisam somar 100%.`);
+  return errors;
+}
 function pickNextPillar(pillars, recentPillarSlugs, exclude = []) {
   const active = pillars.filter((p) => p.active !== false && p.targetPercent > 0);
   const candidates = active.filter((p) => !exclude.includes(p.slug));
@@ -31,6 +48,9 @@ function pickNextPillar(pillars, recentPillarSlugs, exclude = []) {
     }
   }
   return best;
+}
+function round(n) {
+  return Math.round(n * 100) / 100;
 }
 
 // ../../packages/domain/src/planner.ts
@@ -88,6 +108,10 @@ function buildDayPlan(input) {
       history.push(pillar.slug);
       contentItemId = input.newId();
       contentItems.push({ id: contentItemId, workspaceId: input.workspaceId, date: dateKey, format: b.format, pillarSlug: pillar.slug, title: FORMAT_LABEL[b.format], status: "planned", scheduledFor });
+    } else if (b.format === "broll" && input.directedBroll && !b.optional) {
+      contentItemId = input.newId();
+      const slug = input.pillars.find((p) => p.slug === "demonstracao")?.slug ?? input.pillars[0]?.slug ?? "";
+      contentItems.push({ id: contentItemId, workspaceId: input.workspaceId, date: dateKey, format: "broll", pillarSlug: slug, title: b.title, status: "planned", scheduledFor });
     }
     return {
       id: input.newId(),
@@ -145,7 +169,7 @@ function similarity(a, b) {
   const small = ta.length <= tb.length ? ta : tb;
   const big = new Set(ta.length <= tb.length ? tb : ta);
   const containment = small.length >= 3 ? small.filter((w) => big.has(w)).length / small.length : 0;
-  return round(Math.max(uni, bi, containment * 0.9));
+  return round2(Math.max(uni, bi, containment * 0.9));
 }
 function bigrams(tokens) {
   const s2 = /* @__PURE__ */ new Set();
@@ -175,7 +199,7 @@ function checkRepetition(candidate, recent, config = DEFAULT_REPETITION_CONFIG) 
     if (c.type === "structure") {
       const window = uniqueByItem(recent.filter((r) => r.type === "structure")).slice(0, config.structureWindow);
       const count = window.filter((r) => r.value === c.value).length;
-      if (count + 1 > config.structureMaxInWindow) hits.push({ type: "structure", candidate: c.value, previous: c.value, similarity: round((count + 1) / (window.length + 1)) });
+      if (count + 1 > config.structureMaxInWindow) hits.push({ type: "structure", candidate: c.value, previous: c.value, similarity: round2((count + 1) / (window.length + 1)) });
       continue;
     }
     if (c.type === "cta") {
@@ -225,7 +249,7 @@ function describeRepetition(report, contentLabel = () => void 0) {
     return `${TYPE_LABEL[h.type]}: "${h.candidate}" parece com "${h.previous}"${from ? ` (de ${from})` : ""}.`;
   });
 }
-function round(n) {
+function round2(n) {
   return Math.round(n * 100) / 100;
 }
 
@@ -326,25 +350,26 @@ var DirectionSchema = z.object({
   })).max(4).default([]),
   teste_ab: z.object({ ganchos: z.array(req(200)).min(2).max(3), metrica: s(120).default("") }).nullable().default(null)
 });
+var ScenesSchema = z.array(TakeSchema).min(1).max(12);
 function directionIssues(d, opts) {
-  const out = [];
+  const out2 = [];
   const orders = d.takes.map((t) => t.ordem);
-  if (new Set(orders).size !== orders.length) out.push("direcao.takes: cada take precisa de uma ordem diferente.");
-  if (opts.spoken && !d.takes.some((t) => t.fala_exata.trim())) out.push("direcao.takes: nenhum take tem fala_exata \u2014 o app grava a fala por take.");
+  if (new Set(orders).size !== orders.length) out2.push("direcao.takes: cada take precisa de uma ordem diferente.");
+  if (opts.spoken && !d.takes.some((t) => t.fala_exata.trim())) out2.push("direcao.takes: nenhum take tem fala_exata \u2014 o app grava a fala por take.");
   const total = d.takes.reduce((a, t) => a + t.duracao_segundos, 0);
-  if (total > opts.durationSeconds * 1.6 + 5) out.push(`direcao.takes: somam ${Math.round(total)}s, bem mais que os ${opts.durationSeconds}s do v\xEDdeo.`);
+  if (total > opts.durationSeconds * 1.6 + 5) out2.push(`direcao.takes: somam ${Math.round(total)}s, bem mais que os ${opts.durationSeconds}s do v\xEDdeo.`);
   for (const [i, l] of d.legendas_na_tela.entries()) {
-    if (l.fim <= l.inicio) out.push(`direcao.legendas_na_tela[${i}]: fim precisa ser depois do in\xEDcio.`);
-    if (l.inicio > opts.durationSeconds + 2) out.push(`direcao.legendas_na_tela[${i}]: come\xE7a depois do fim do v\xEDdeo.`);
+    if (l.fim <= l.inicio) out2.push(`direcao.legendas_na_tela[${i}]: fim precisa ser depois do in\xEDcio.`);
+    if (l.inicio > opts.durationSeconds + 2) out2.push(`direcao.legendas_na_tela[${i}]: come\xE7a depois do fim do v\xEDdeo.`);
   }
   if (d.musica) {
     const track = trackById(d.musica.id);
-    if (!track) out.push(`direcao.musica.id "${d.musica.id}" n\xE3o existe na biblioteca \u2014 use listar_musicas.`);
-    else if (opts.business && track.license !== "comercial") out.push(`direcao.musica: "${track.title}" n\xE3o tem licen\xE7a comercial \u2014 conta de empresa s\xF3 usa a biblioteca comercial.`);
-    if (d.musica.saida !== null && d.musica.saida <= d.musica.entrada) out.push("direcao.musica: sa\xEDda precisa ser depois da entrada.");
+    if (!track) out2.push(`direcao.musica.id "${d.musica.id}" n\xE3o existe na biblioteca \u2014 use listar_musicas.`);
+    else if (opts.business && track.license !== "comercial") out2.push(`direcao.musica: "${track.title}" n\xE3o tem licen\xE7a comercial \u2014 conta de empresa s\xF3 usa a biblioteca comercial.`);
+    if (d.musica.saida !== null && d.musica.saida <= d.musica.entrada) out2.push("direcao.musica: sa\xEDda precisa ser depois da entrada.");
   }
-  if (d.capa && d.capa.frame > opts.durationSeconds + 2) out.push("direcao.capa.frame: depois do fim do v\xEDdeo.");
-  return out;
+  if (d.capa && d.capa.frame > opts.durationSeconds + 2) out2.push("direcao.capa.frame: depois do fim do v\xEDdeo.");
+  return out2;
 }
 function spokenTakes(d) {
   return (d?.takes ?? []).filter((t) => t.fala_exata.trim()).sort((a, b) => a.ordem - b.ordem);
@@ -484,7 +509,7 @@ ${input.recentSummaries.map((s2) => `- ${s2}`).join("\n")}` : "",
   return { system, user, promptVersion: PROMPT_VERSION };
 }
 function businessSystem(profile, b) {
-  const list = (xs) => xs.map((x) => `- ${x}`).join("\n");
+  const list2 = (xs) => xs.map((x) => `- ${x}`).join("\n");
   return [
     `Voc\xEA \xE9 o roteirista de v\xEDdeos de venda da ${b.brand} (${b.product}). Posicionamento: ${profile.positioning}`,
     `Quem compra \xE9 empres\xE1rio: algu\xE9m que ${b.audience}. N\xE3o \xE9 consumidor final.`,
@@ -495,19 +520,19 @@ function businessSystem(profile, b) {
     b.noPrice ? "PROIBIDO falar pre\xE7o, valor, parcela, desconto em n\xFAmero ou 'R$' \u2014 nem no roteiro, nem na tela, nem nas legendas. Pre\xE7o \xE9 no atendimento." : "",
     "Nunca invente especifica\xE7\xE3o t\xE9cnica, n\xFAmero ou depoimento que n\xE3o esteja abaixo.",
     `Dores reais:
-${list(b.pains)}`,
+${list2(b.pains)}`,
     `Desejos:
-${list(b.desires)}`,
+${list2(b.desires)}`,
     `Obje\xE7\xF5es e respostas (use UMA por v\xEDdeo):
 ${b.objections.map((o) => `- "${o.objection}" \u2192 ${o.answer}`).join("\n")}`,
     `Provas visuais que d\xE1 para filmar (use em recording_suggestions):
-${list(b.proofs)}`,
+${list2(b.proofs)}`,
     `Diferenciais comprovados (pode afirmar):
-${list(b.differentiators)}`,
+${list2(b.differentiators)}`,
     b.pendingClaims?.length ? `Alega\xE7\xF5es AINDA SEM PROVA \u2014 N\xC3O afirme nem cite n\xFAmeros delas:
-${list(b.pendingClaims)}` : "",
+${list2(b.pendingClaims)}` : "",
     `CTAs poss\xEDveis (adapte, sem press\xE3o):
-${list(b.ctas)}`,
+${list2(b.ctas)}`,
     `As legendas terminam com a assinatura ${profile.signature}.`,
     "Gancho de at\xE9 12 palavras que para o scroll (dor financeira, curiosidade, compara\xE7\xE3o, autoridade ou erro). screen_text de 2 a 5 palavras.",
     "Legendas por plataforma adaptadas; no Facebook/Marketplace pode detalhar o uso do produto (sem pre\xE7o).",
@@ -726,20 +751,20 @@ var WORDS_PER_SECOND = 2.5;
 var DURATION_SLACK = [0.6, 1.6];
 var words = (s2) => s2.trim().split(/\s+/).filter(Boolean).length;
 function directorIssues(draft) {
-  const out = [];
+  const out2 = [];
   draft.hook_options.forEach((h, i) => {
     const n = words(h);
-    if (n > MAX_HOOK_WORDS) out.push(`gancho ${i + 1} tem ${n} palavras (m\xE1ximo ${MAX_HOOK_WORDS})`);
+    if (n > MAX_HOOK_WORDS) out2.push(`gancho ${i + 1} tem ${n} palavras (m\xE1ximo ${MAX_HOOK_WORDS})`);
   });
   const st = words(draft.screen_text);
-  if (st < SCREEN_TEXT_WORDS[0] || st > SCREEN_TEXT_WORDS[1]) out.push(`screen_text tem ${st} palavra(s) (use ${SCREEN_TEXT_WORDS[0]} a ${SCREEN_TEXT_WORDS[1]})`);
+  if (st < SCREEN_TEXT_WORDS[0] || st > SCREEN_TEXT_WORDS[1]) out2.push(`screen_text tem ${st} palavra(s) (use ${SCREEN_TEXT_WORDS[0]} a ${SCREEN_TEXT_WORDS[1]})`);
   const spoken = words(draft.script);
   const estimated = Math.round(spoken / WORDS_PER_SECOND);
   const [lo, hi] = DURATION_SLACK;
   if (estimated < draft.duration_seconds * lo || estimated > draft.duration_seconds * hi) {
-    out.push(`duration_seconds ${draft.duration_seconds}s n\xE3o bate com o texto (${spoken} palavras \u2248 ${estimated}s a ${WORDS_PER_SECOND} palavras/s)`);
+    out2.push(`duration_seconds ${draft.duration_seconds}s n\xE3o bate com o texto (${spoken} palavras \u2248 ${estimated}s a ${WORDS_PER_SECOND} palavras/s)`);
   }
-  return out;
+  return out2;
 }
 
 // ../../packages/domain/src/segments.ts
@@ -927,6 +952,23 @@ function projectBrief(p) {
 }
 
 // ../../packages/domain/src/metrics.ts
+function rankBy(posts, pick, top = 3) {
+  const groups = /* @__PURE__ */ new Map();
+  for (const p of posts) {
+    const k = pick(p);
+    if (k) groups.set(k, [...groups.get(k) ?? [], p]);
+  }
+  return [...groups.entries()].map(([key, xs]) => {
+    const comp = xs.map((x) => x.metrics.completionRate).filter((v) => typeof v === "number");
+    return {
+      key,
+      posts: xs.length,
+      avgViews: Math.round(xs.reduce((a, x) => a + x.metrics.views, 0) / xs.length),
+      avgSharesPer1k: xs.reduce((a, x) => a + sharesPer1k(x.metrics), 0) / xs.length,
+      avgCompletion: comp.length ? comp.reduce((a, v) => a + v, 0) / comp.length : null
+    };
+  }).sort((a, b) => b.avgViews - a.avgViews || b.avgSharesPer1k - a.avgSharesPer1k).slice(0, top);
+}
 function engagementRate(m) {
   return m.views > 0 ? (m.likes + m.comments + m.shares + m.saves) / m.views : 0;
 }
@@ -934,7 +976,247 @@ function sharesPer1k(m) {
   return m.views > 0 ? m.shares / m.views * 1e3 : 0;
 }
 
+// src/mcp-profiles.ts
+import { z as z3 } from "npm:zod@4";
+var str = (max) => z3.string().trim().min(1).max(max);
+var list = (max, n = 12) => z3.array(str(max)).max(n);
+var PROFILE_FIELDS = {
+  nome: str(60),
+  tipo: z3.enum(["pessoal", "empresa"]),
+  posicionamento: str(300),
+  voz: list(200, 8).min(1),
+  assinatura: str(60),
+  /** frase fixa do fim (perfil pessoal); vazio = sem fechamento fixo */
+  fechamento: z3.string().trim().max(80),
+  publico: z3.string().trim().max(300),
+  produto: z3.string().trim().max(200),
+  ofertas: list(200),
+  dores: list(200),
+  desejos: list(200),
+  objecoes: z3.array(z3.object({ objecao: str(200), resposta: str(300) })).max(10),
+  provas: list(200),
+  diferenciais_comprovados: list(200),
+  /** o que NÃO prometer/afirmar (vira alegação bloqueada) */
+  nao_prometer: list(200),
+  ctas: list(200),
+  sem_preco: z3.boolean(),
+  pilares: z3.array(z3.object({ nome: str(60), meta: z3.number().min(0).max(100) })).min(1).max(10),
+  metas: z3.string().trim().max(300),
+  redes: list(40, 6),
+  tipo_conta: z3.string().trim().max(60)
+};
+var F = PROFILE_FIELDS;
+var ProfileInputSchema = z3.object({
+  ...F,
+  fechamento: F.fechamento.default(""),
+  publico: F.publico.default(""),
+  produto: F.produto.default(""),
+  ofertas: F.ofertas.default([]),
+  dores: F.dores.default([]),
+  desejos: F.desejos.default([]),
+  objecoes: F.objecoes.default([]),
+  provas: F.provas.default([]),
+  diferenciais_comprovados: F.diferenciais_comprovados.default([]),
+  nao_prometer: F.nao_prometer.default([]),
+  ctas: F.ctas.default([]),
+  sem_preco: F.sem_preco.default(true),
+  metas: F.metas.default(""),
+  redes: F.redes.default([]),
+  tipo_conta: F.tipo_conta.default("")
+});
+var ProfilePatchSchema = z3.object(F).partial().omit({ tipo: true });
+var slugify = (s2) => s2.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "").slice(0, 40) || "tema";
+function pillarsFrom(input) {
+  const seen = /* @__PURE__ */ new Set();
+  const pillars = input.map((p) => {
+    let slug = slugify(p.nome);
+    for (let i = 2; seen.has(slug); i++) slug = `${slugify(p.nome)}-${i}`;
+    seen.add(slug);
+    return { slug, name: p.nome, targetPercent: p.meta };
+  });
+  return { pillars, errors: validatePillarTargets(pillars) };
+}
+function defaultRoutine(kind, newId) {
+  if (kind === "empresa") return businessRoutine(newId);
+  const out2 = [];
+  for (let weekday = 1; weekday <= 5; weekday++) {
+    out2.push({ id: newId(), weekday, startTime: "10:30", title: "Pensamento do Dia", contentHint: "v\xEDdeo curto 5\u201315s", optional: false, format: "thought" });
+    out2.push({ id: newId(), weekday, startTime: "19:30", title: "V\xEDdeo principal", contentHint: "45s\u20132m", optional: false, format: "main_video" });
+  }
+  return out2;
+}
+function businessFrom(i) {
+  return {
+    brand: i.nome,
+    product: i.produto || i.nome,
+    audience: i.publico,
+    pains: i.dores,
+    desires: i.desejos,
+    objections: i.objecoes.map((o) => ({ objection: o.objecao, answer: o.resposta })),
+    proofs: i.provas,
+    differentiators: i.diferenciais_comprovados,
+    pendingClaims: i.nao_prometer,
+    ctas: i.ctas,
+    noPrice: i.sem_preco
+  };
+}
+function buildNewProfile(i, newId) {
+  const { pillars, errors } = pillarsFrom(i.pilares);
+  if (i.tipo === "empresa" && (!i.dores.length || !i.ctas.length)) errors.push("empresa: informe pelo menos uma dor do cliente e uma chamada (cta).");
+  if (errors.length) return { ok: false, errors };
+  const profile = {
+    displayName: i.nome,
+    handle: i.nome,
+    positioning: i.posicionamento,
+    signature: i.assinatura,
+    closingPhrase: i.fechamento,
+    voiceRules: i.voz,
+    kind: i.tipo,
+    ...i.tipo === "empresa" ? { business: businessFrom(i) } : {},
+    extras: { audience: i.publico, offers: i.ofertas, goals: i.metas, networks: i.redes, accountType: i.tipo_conta }
+  };
+  return { ok: true, value: { name: i.nome, profile, pillars, routine: defaultRoutine(i.tipo, newId) } };
+}
+function patchProfile(current, p) {
+  const b = current.business;
+  const extras = { ...current.extras ?? {} };
+  if (p.publico !== void 0) extras.audience = p.publico;
+  if (p.ofertas !== void 0) extras.offers = p.ofertas;
+  if (p.metas !== void 0) extras.goals = p.metas;
+  if (p.redes !== void 0) extras.networks = p.redes;
+  if (p.tipo_conta !== void 0) extras.accountType = p.tipo_conta;
+  return {
+    ...current,
+    ...p.nome !== void 0 ? { displayName: p.nome } : {},
+    ...p.posicionamento !== void 0 ? { positioning: p.posicionamento } : {},
+    ...p.voz !== void 0 ? { voiceRules: p.voz } : {},
+    ...p.assinatura !== void 0 ? { signature: p.assinatura } : {},
+    ...p.fechamento !== void 0 ? { closingPhrase: p.fechamento } : {},
+    ...b ? {
+      business: {
+        ...b,
+        ...p.produto !== void 0 ? { product: p.produto } : {},
+        ...p.publico !== void 0 ? { audience: p.publico } : {},
+        ...p.dores !== void 0 ? { pains: p.dores } : {},
+        ...p.desejos !== void 0 ? { desires: p.desejos } : {},
+        ...p.objecoes !== void 0 ? { objections: p.objecoes.map((o) => ({ objection: o.objecao, answer: o.resposta })) } : {},
+        ...p.provas !== void 0 ? { proofs: p.provas } : {},
+        ...p.diferenciais_comprovados !== void 0 ? { differentiators: p.diferenciais_comprovados } : {},
+        ...p.nao_prometer !== void 0 ? { pendingClaims: p.nao_prometer } : {},
+        ...p.ctas !== void 0 ? { ctas: p.ctas } : {},
+        ...p.sem_preco !== void 0 ? { noPrice: p.sem_preco } : {}
+      }
+    } : {},
+    extras
+  };
+}
+var RealCaseSchema = z3.object({
+  id: z3.uuid().optional(),
+  cliente_segmento: str(160),
+  problema: str(1e3),
+  resultado: str(1e3),
+  autorizacao: z3.string().trim().max(300).default(""),
+  midia_disponivel: z3.string().trim().max(500).default("")
+});
+var authorized = (c) => c.autorizacao.trim().length > 0;
+function describeCases(cases) {
+  const ok = cases.filter(authorized);
+  if (!ok.length) return "Casos reais de cliente AUTORIZADOS: nenhum \u2014 N\xC3O escreva hist\xF3ria/depoimento de cliente (cadastre com cadastrar_caso_real).";
+  return `Casos reais de cliente AUTORIZADOS (use s\xF3 estes, sem aumentar nada):
+${ok.map((c) => `- [${c.id}] ${c.cliente_segmento}: problema "${c.problema}" \u2192 resultado "${c.resultado}" \xB7 autoriza\xE7\xE3o: ${c.autorizacao}${c.midia_disponivel ? ` \xB7 m\xEDdia: ${c.midia_disponivel}` : ""}`).join("\n")}`;
+}
+function describeProofs(strategyProofs, registered) {
+  const byText = new Map(registered.map((p) => [p.descricao.toLowerCase(), p.status]));
+  const all = [.../* @__PURE__ */ new Set([...strategyProofs, ...registered.map((p) => p.descricao)])];
+  if (!all.length) return "";
+  return `Provas film\xE1veis:
+${all.map((d) => `- ${d}: ${byText.get(d.toLowerCase()) === "filmada" ? "j\xE1 filmada" : "falta filmar"}`).join("\n")}`;
+}
+var PROFILE_INTERVIEW = [
+  "ENTREVISTA PARA CRIAR UM PERFIL (pergunte uma coisa por vez, em portugu\xEAs simples; n\xE3o invente respostas):",
+  "1. Nome do perfil e se \xE9 pessoal ou empresa.",
+  "2. Para quem fala (p\xFAblico): quem \xE9, idade, o que faz, o que quer.",
+  "3. O que vende/oferece (ofertas) e o produto principal.",
+  "4. Dores e desejos do p\xFAblico; obje\xE7\xF5es que mais ouve e como responde.",
+  "5. Provas reais que existem (fotos, v\xEDdeos, n\xFAmeros com documento) e o que ainda falta filmar.",
+  "6. O que N\xC3O prometer nem afirmar (n\xFAmeros sem prova, resultados garantidos, pre\xE7o\u2026).",
+  "7. Voz: como fala (3\u20135 regras) e palavras que nunca usa; assinatura no v\xEDdeo; frase fixa de fechamento (se tiver).",
+  "8. Pilares de conte\xFAdo com a % de cada um (somando 100).",
+  "9. Metas (seguidores, leads, vendas) e redes onde posta; tipo de conta (pessoal, criador, comercial).",
+  "Depois: criar_perfil com tudo. Casos de cliente v\xE3o em cadastrar_caso_real (s\xF3 com autoriza\xE7\xE3o)."
+].join("\n");
+var out = (t, isError = false) => ({ content: [{ type: "text", text: t }], ...isError ? { isError: true } : {} });
+var zodErrors = (e) => e.issues.map((i) => `${i.path.join(".") || "(raiz)"}: ${i.message}`);
+var PROFILE_ARG = { profile_id: { type: "string", description: "id do perfil (listar_perfis). Sem ele: o perfil em que o link foi criado." } };
+var RO = { readOnlyHint: true };
+var WRITE = { readOnlyHint: false, destructiveHint: false };
+var anyObj = (description, extra = {}, required = []) => ({ type: "object", description, properties: { ...extra }, required, additionalProperties: true });
+var PROFILE_TOOLS = [
+  { name: "entrevista_de_perfil", title: "Entrevista para novo perfil", description: "Roteiro de perguntas para criar um perfil novo (pessoal ou empresa) sem inventar nada. Depois use criar_perfil.", inputSchema: { type: "object", properties: {}, additionalProperties: false }, annotations: RO },
+  { name: "criar_perfil", title: "Criar perfil", description: "Cria um perfil novo (workspace isolado: voz, hist\xF3rico e n\xFAmeros separados) com voz, p\xFAblico, ofertas, dores, obje\xE7\xF5es, provas, o que n\xE3o prometer, pilares (somando 100), metas, redes e tipo de conta. Aparece no app na troca de perfis.", inputSchema: anyObj("dados do perfil (campos: nome, tipo pessoal|empresa, posicionamento, voz[], assinatura, fechamento, publico, produto, ofertas[], dores[], desejos[], objecoes[{objecao,resposta}], provas[], diferenciais_comprovados[], nao_prometer[], ctas[], sem_preco, pilares[{nome,meta}], metas, redes[], tipo_conta)", { perfil: { type: "object" } }, ["perfil"]), annotations: WRITE },
+  { name: "atualizar_perfil", title: "Atualizar perfil", description: "Muda s\xF3 os campos enviados (mesmos nomes de criar_perfil, exceto tipo). Pilares enviados substituem os atuais e precisam somar 100.", inputSchema: anyObj("", { ...PROFILE_ARG, campos: { type: "object" } }, ["campos"]), annotations: WRITE },
+  { name: "cadastrar_caso_real", title: "Cadastrar caso real de cliente", description: "Caso real (cliente/segmento, problema, resultado, autoriza\xE7\xE3o, m\xEDdia dispon\xEDvel). S\xF3 casos com autoriza\xE7\xE3o podem virar 'Hist\xF3rias de cliente'. Com id: atualiza.", inputSchema: anyObj("", { ...PROFILE_ARG, id: { type: "string" }, cliente_segmento: { type: "string" }, problema: { type: "string" }, resultado: { type: "string" }, autorizacao: { type: "string", description: "quem autorizou e como; vazio = sem autoriza\xE7\xE3o" }, midia_disponivel: { type: "string" } }, ["cliente_segmento", "problema", "resultado"]), annotations: WRITE },
+  { name: "listar_casos_reais", title: "Casos reais e provas", description: "Casos reais cadastrados (com e sem autoriza\xE7\xE3o) e as provas film\xE1veis com status (j\xE1 filmada / falta filmar).", inputSchema: anyObj("", { ...PROFILE_ARG }), annotations: RO },
+  { name: "atualizar_prova", title: "Status de prova film\xE1vel", description: "Marca uma prova film\xE1vel como 'filmada' ou 'falta_filmar' (cria se n\xE3o existir).", inputSchema: anyObj("", { ...PROFILE_ARG, descricao: { type: "string" }, status: { type: "string", enum: ["falta_filmar", "filmada"] } }, ["descricao", "status"]), annotations: WRITE }
+];
+var PROFILE_TOOL_NAMES = new Set(PROFILE_TOOLS.map((t) => t.name));
+async function callAccountTool(name, args, createProfile, newId) {
+  if (name === "entrevista_de_perfil") return out(PROFILE_INTERVIEW);
+  if (name !== "criar_perfil") return null;
+  const parsed = ProfileInputSchema.safeParse(args.perfil ?? args);
+  if (!parsed.success) return out(`Faltou ou est\xE1 errado:
+- ${zodErrors(parsed.error).join("\n- ")}`, true);
+  const built = buildNewProfile(parsed.data, newId);
+  if (!built.ok) return out(`Ajuste e tente de novo:
+- ${built.errors.join("\n- ")}`, true);
+  const id = await createProfile(built.value);
+  return out(`Perfil "${built.value.name}" criado (id ${id}). Ele aparece no Post.ai ao abrir o app (troca de perfis). Use profile_id ${id} nas outras ferramentas.`);
+}
+async function callProfileDataTool(store, name, args) {
+  if (name === "atualizar_perfil") {
+    const parsed = ProfilePatchSchema.safeParse(args.campos ?? {});
+    if (!parsed.success) return out(`Campos inv\xE1lidos:
+- ${zodErrors(parsed.error).join("\n- ")}`, true);
+    const patch = parsed.data;
+    let pillars = null;
+    if (patch.pilares) {
+      const r = pillarsFrom(patch.pilares);
+      if (r.errors.length) return out(`Pilares: ${r.errors.join(" ")}`, true);
+      pillars = r.pillars;
+    }
+    const current = await store.profile();
+    await store.updateProfile(patchProfile(current, patch), pillars);
+    return out(`Perfil atualizado (${Object.keys(patch).join(", ") || "nada"}). O app recebe ao abrir.`);
+  }
+  if (name === "cadastrar_caso_real") {
+    const parsed = RealCaseSchema.safeParse(args);
+    if (!parsed.success) return out(`Caso inv\xE1lido:
+- ${zodErrors(parsed.error).join("\n- ")}`, true);
+    const id = await store.saveRealCase(parsed.data);
+    return out(parsed.data.autorizacao ? `Caso real salvo (id ${id}) e liberado para 'Hist\xF3rias de cliente'.` : `Caso salvo (id ${id}) SEM autoriza\xE7\xE3o: n\xE3o ser\xE1 usado em v\xEDdeo at\xE9 ter autoriza\xE7\xE3o (atualize com o mesmo id).`);
+  }
+  if (name === "listar_casos_reais") {
+    const [cases, proofs, profile] = await Promise.all([store.realCases(), store.proofs(), store.profile()]);
+    const pending = cases.filter((c) => !authorized(c));
+    return out([
+      describeCases(cases),
+      pending.length ? `Sem autoriza\xE7\xE3o (n\xE3o usar):
+${pending.map((c) => `- [${c.id}] ${c.cliente_segmento}: ${c.problema}`).join("\n")}` : "",
+      describeProofs(profile.business?.proofs ?? [], proofs) || "Nenhuma prova film\xE1vel cadastrada."
+    ].filter(Boolean).join("\n\n"));
+  }
+  if (name === "atualizar_prova") {
+    const descricao = String(args.descricao ?? "").trim().slice(0, 300);
+    const status = args.status === "filmada" ? "filmada" : args.status === "falta_filmar" ? "falta_filmar" : null;
+    if (descricao.length < 3 || !status) return out("Informe descricao e status (filmada ou falta_filmar).", true);
+    await store.saveProof({ descricao, status });
+    return out(`Prova "${descricao}": ${status === "filmada" ? "j\xE1 filmada" : "falta filmar"}.`);
+  }
+  return null;
+}
+
 // src/mcp-tools.ts
+var CLIENT_STORY_PILLAR = "historias";
 var FORMAT_LABEL2 = { thought: "Pensamento do Dia", main_video: "V\xEDdeo principal", story: "Story", broll: "Cena de apoio" };
 var DATE = /^\d{4}-\d{2}-\d{2}$/;
 var MAX_PLAN_DAYS = 14;
@@ -950,23 +1232,26 @@ var DIRECTION_GUIDE = [
   "- edicao: {cortes, transicao, zoom} \xB7 capa: {frame (segundo do v\xEDdeo), texto curto} \xB7 publicacao_por_rede[]: {rede: instagram|tiktok|facebook|youtube_shorts, horario HH:MM, hashtags, primeiro_comentario}",
   "- teste_ab: {ganchos: 2\u20133 ganchos, metrica}. Os ganchos tamb\xE9m v\xE3o em hook_options."
 ].join("\n");
-var PROFILE_ARG = { profile_id: { type: "string", description: "id do perfil (listar_perfis). Sem ele: o perfil em que o link foi criado." } };
-var obj = (properties, required = []) => ({ type: "object", properties: { ...PROFILE_ARG, ...properties }, required, additionalProperties: false });
-var RO = { readOnlyHint: true };
-var WRITE = { readOnlyHint: false, destructiveHint: false };
+var PROFILE_ARG2 = { profile_id: { type: "string", description: "id do perfil (listar_perfis). Sem ele: o perfil em que o link foi criado." } };
+var obj = (properties, required = []) => ({ type: "object", properties: { ...PROFILE_ARG2, ...properties }, required, additionalProperties: false });
+var RO2 = { readOnlyHint: true };
+var WRITE2 = { readOnlyHint: false, destructiveHint: false };
 var MCP_TOOLS = [
-  { name: "listar_perfis", title: "Perfis", description: "Lista os perfis do criador (pessoal, empresas\u2026) com id, nome, tipo e assinatura. Use o id em profile_id nas outras ferramentas.", inputSchema: { type: "object", properties: {}, additionalProperties: false }, annotations: RO },
-  { name: "perfil_e_estrategia", title: "Perfil e estrat\xE9gia", description: "Voz, posicionamento, fechamento, assinatura, temas com meta, rotina da semana e, se for empresa, produto, dores, obje\xE7\xF5es, provas e chamadas.", inputSchema: obj({}), annotations: RO },
-  { name: "desempenho_dos_posts", title: "Desempenho dos posts", description: "Posts recentes: tema, formato, dia/hora e redes, visualiza\xE7\xF5es, curtidas, coment\xE1rios, compartilhamentos, salvamentos, engajamento e envios a cada mil.", inputSchema: obj({ limite: { type: "number", description: "quantos posts (padr\xE3o 30, m\xE1x. 100)" } }), annotations: RO },
-  { name: "criar_plano", title: "Planejar dias", description: "Cria o plano (miss\xF5es e conte\xFAdos) a partir de uma data, para at\xE9 14 dias, seguindo a rotina e as metas dos temas. Dias j\xE1 planejados ficam como est\xE3o.", inputSchema: obj({ data_inicio: { type: "string", description: "AAAA-MM-DD (padr\xE3o: hoje)" }, dias: { type: "number", description: "1 a 14 (padr\xE3o 7)" } }), annotations: WRITE },
-  { name: "conteudos_do_dia", title: "Conte\xFAdos do dia", description: "Conte\xFAdos de uma data (padr\xE3o: hoje, Bras\xEDlia) com id, formato, tema e se j\xE1 tem roteiro. Datas futuras sem plano: use criar_plano antes.", inputSchema: obj({ data: { type: "string", description: "AAAA-MM-DD (opcional)" } }), annotations: RO },
-  { name: "ler_roteiro", title: "Ler roteiro salvo", description: "Devolve o roteiro j\xE1 salvo de um conte\xFAdo (JSON completo), as escolhas de edi\xE7\xE3o/m\xFAsica, os n\xFAmeros e se h\xE1 um roteiro do assistente esperando o app abrir.", inputSchema: obj({ content_id: { type: "string" } }, ["content_id"]), annotations: RO },
-  { name: "instrucoes_do_roteiro", title: "Regras para o roteiro", description: "Regras do perfil (voz, formatos que viralizam, fechamento, o que n\xE3o repetir), temas abaixo da meta nos \xFAltimos 30 dias, assuntos bloqueados por 14 dias e o JSON exato.", inputSchema: obj({ content_id: { type: "string", description: "id de conteudos_do_dia" }, acontecimento: { type: "string", description: "o que aconteceu hoje (opcional)" } }, ["content_id"]), annotations: RO },
-  { name: "salvar_roteiro", title: "Salvar roteiro no app", description: "Valida (contrato, gancho \u2264 12 palavras, texto de tela 2\u20135 palavras, dura\xE7\xE3o coerente, sem repetir, sem pre\xE7o/alega\xE7\xE3o sem prova no comercial) e envia ao app. Se falhar, devolve o que corrigir.", inputSchema: obj({ content_id: { type: "string" }, roteiro: { type: "object", description: "o JSON completo do roteiro" } }, ["content_id", "roteiro"]), annotations: WRITE },
-  { name: "listar_musicas", title: "M\xFAsicas licenciadas", description: "Faixas da biblioteca licenciada (id, clima, dura\xE7\xE3o, licen\xE7a). Use o id em direcao.musica.id. Conta de empresa s\xF3 v\xEA faixas com licen\xE7a comercial.", inputSchema: obj({ clima: { type: "string", description: `opcional: ${Object.keys(MOOD_LABEL).join(", ")}` }, bpm: { type: "number", description: "opcional (as faixas ainda n\xE3o t\xEAm BPM medido)" } }), annotations: RO },
-  { name: "ler_status_gravacao", title: "Status da grava\xE7\xE3o", description: "O que j\xE1 foi gravado (por take/parte), o que falta, se j\xE1 subiu e como est\xE1 a montagem do v\xEDdeo.", inputSchema: obj({ content_id: { type: "string" } }, ["content_id"]), annotations: RO },
-  { name: "registrar_melhoria", title: "Registrar melhoria", description: "Manda uma sugest\xE3o de melhoria do app/conector para o backlog do desenvolvedor, com contexto e crit\xE9rio de aceite. Use para toda recomenda\xE7\xE3o de mudan\xE7a no sistema.", inputSchema: obj({ titulo: { type: "string" }, descricao: { type: "string", description: "o problema, a proposta e o crit\xE9rio de aceite" }, prioridade: { type: "string", enum: ["baixa", "media", "alta"] } }, ["titulo", "descricao"]), annotations: WRITE },
-  { name: "listar_melhorias", title: "Melhorias pedidas", description: "Melhorias j\xE1 registradas e o andamento (nova, no backlog, feita, recusada).", inputSchema: obj({}), annotations: RO }
+  { name: "listar_perfis", title: "Perfis", description: "Lista os perfis do criador (pessoal, empresas\u2026) com id, nome, tipo e assinatura. Use o id em profile_id nas outras ferramentas.", inputSchema: { type: "object", properties: {}, additionalProperties: false }, annotations: RO2 },
+  { name: "perfil_e_estrategia", title: "Perfil e estrat\xE9gia", description: "Voz, posicionamento, fechamento, assinatura, temas com meta, rotina da semana e, se for empresa, produto, dores, obje\xE7\xF5es, provas e chamadas.", inputSchema: obj({}), annotations: RO2 },
+  { name: "desempenho_dos_posts", title: "Desempenho dos posts", description: "Posts recentes: tema, formato, dia/hora e redes, gancho e m\xFAsica usados, visualiza\xE7\xF5es, curtidas, coment\xE1rios, compartilhamentos, salvamentos, engajamento, envios a cada mil, reten\xE7\xE3o, tempo m\xE9dio e seguidores; no fim, o top 3 de ganchos, formatos, hor\xE1rios e m\xFAsicas.", inputSchema: obj({ limite: { type: "number", description: "quantos posts (padr\xE3o 30, m\xE1x. 100)" } }), annotations: RO2 },
+  { name: "criar_plano", title: "Planejar dias", description: "Cria o plano (miss\xF5es e conte\xFAdos) a partir de uma data, para at\xE9 14 dias, seguindo a rotina e as metas dos temas. Dias j\xE1 planejados ficam como est\xE3o.", inputSchema: obj({ data_inicio: { type: "string", description: "AAAA-MM-DD (padr\xE3o: hoje)" }, dias: { type: "number", description: "1 a 14 (padr\xE3o 7)" } }), annotations: WRITE2 },
+  { name: "conteudos_do_dia", title: "Conte\xFAdos do dia", description: "Conte\xFAdos de uma data (padr\xE3o: hoje, Bras\xEDlia) com id, formato, tema e se j\xE1 tem roteiro. Datas futuras sem plano: use criar_plano antes.", inputSchema: obj({ data: { type: "string", description: "AAAA-MM-DD (opcional)" } }), annotations: RO2 },
+  { name: "ler_roteiro", title: "Ler roteiro salvo", description: "Devolve o roteiro j\xE1 salvo de um conte\xFAdo (JSON completo), as escolhas de edi\xE7\xE3o/m\xFAsica, os n\xFAmeros e se h\xE1 um roteiro do assistente esperando o app abrir.", inputSchema: obj({ content_id: { type: "string" } }, ["content_id"]), annotations: RO2 },
+  { name: "instrucoes_do_roteiro", title: "Regras para o roteiro", description: "Regras do perfil (voz, formatos que viralizam, fechamento, o que n\xE3o repetir), temas abaixo da meta nos \xFAltimos 30 dias, assuntos bloqueados por 14 dias e o JSON exato.", inputSchema: obj({ content_id: { type: "string", description: "id de conteudos_do_dia" }, acontecimento: { type: "string", description: "o que aconteceu hoje (opcional)" } }, ["content_id"]), annotations: RO2 },
+  { name: "salvar_roteiro", title: "Salvar roteiro no app", description: "Valida (contrato, gancho \u2264 12 palavras, texto de tela 2\u20135 palavras, dura\xE7\xE3o coerente, sem repetir, sem pre\xE7o/alega\xE7\xE3o sem prova no comercial) e envia ao app. Se falhar, devolve o que corrigir.", inputSchema: obj({ content_id: { type: "string" }, roteiro: { type: "object", description: "o JSON completo do roteiro" } }, ["content_id", "roteiro"]), annotations: WRITE2 },
+  { name: "salvar_cenas", title: "Salvar cenas de apoio", description: "Para conte\xFAdo de cena de apoio (B-roll / prova visual): a lista de takes com instru\xE7\xE3o de filmagem. O app mostra cada take para gravar.", inputSchema: obj({ content_id: { type: "string" }, takes: { type: "array", description: "takes {ordem, nome, duracao_segundos, enquadramento, movimento_camera, local, luz, olhar, emocao, broll, erro_comum, fala_exata (opcional)}", items: { type: "object" } } }, ["content_id", "takes"]), annotations: WRITE2 },
+  { name: "registrar_metricas", title: "Registrar n\xFAmeros do post", description: "Salva os n\xFAmeros REAIS de um post (ex.: lidos no Metricool ou no painel da rede) para o app e o ranking. Nunca invente n\xFAmeros.", inputSchema: obj({ content_id: { type: "string" }, visualizacoes: { type: "number" }, curtidas: { type: "number" }, comentarios: { type: "number" }, compartilhamentos: { type: "number" }, salvamentos: { type: "number" }, retencao: { type: "number", description: "% de conclus\xE3o/reten\xE7\xE3o m\xE9dia (0\u2013100)" }, tempo_medio_segundos: { type: "number" }, seguidores_ganhos: { type: "number" }, fonte: { type: "string", description: "ex.: Metricool, Instagram" } }, ["content_id", "visualizacoes"]), annotations: WRITE2 },
+  { name: "listar_musicas", title: "M\xFAsicas licenciadas", description: "Faixas da biblioteca licenciada (id, clima, dura\xE7\xE3o, licen\xE7a). Use o id em direcao.musica.id. Conta de empresa s\xF3 v\xEA faixas com licen\xE7a comercial.", inputSchema: obj({ clima: { type: "string", description: `opcional: ${Object.keys(MOOD_LABEL).join(", ")}` }, bpm: { type: "number", description: "opcional (as faixas ainda n\xE3o t\xEAm BPM medido)" } }), annotations: RO2 },
+  { name: "ler_status_gravacao", title: "Status da grava\xE7\xE3o", description: "O que j\xE1 foi gravado (por take/parte), o que falta, se j\xE1 subiu e como est\xE1 a montagem do v\xEDdeo.", inputSchema: obj({ content_id: { type: "string" } }, ["content_id"]), annotations: RO2 },
+  { name: "registrar_melhoria", title: "Registrar melhoria", description: "Manda uma sugest\xE3o de melhoria do app/conector para o backlog do desenvolvedor, com contexto e crit\xE9rio de aceite. Use para toda recomenda\xE7\xE3o de mudan\xE7a no sistema.", inputSchema: obj({ titulo: { type: "string" }, descricao: { type: "string", description: "o problema, a proposta e o crit\xE9rio de aceite" }, prioridade: { type: "string", enum: ["baixa", "media", "alta"] } }, ["titulo", "descricao"]), annotations: WRITE2 },
+  { name: "listar_melhorias", title: "Melhorias pedidas", description: "Melhorias j\xE1 registradas e o andamento (nova, no backlog, feita, recusada).", inputSchema: obj({}), annotations: RO2 },
+  ...PROFILE_TOOLS
 ];
 var text2 = (t, isError = false) => ({ content: [{ type: "text", text: t }], ...isError ? { isError: true } : {} });
 function todayBrasilia(now = /* @__PURE__ */ new Date()) {
@@ -983,7 +1268,7 @@ async function describeStrategy(store) {
     `Posicionamento: ${p.positioning}`,
     `Voz: ${p.voiceRules.join("; ")}`,
     p.closingPhrase ? `Fechamento obrigat\xF3rio: "${p.closingPhrase}"` : "",
-    `Temas e meta: ${s2.pillars.map((x) => `${x.name} ${x.targetPercent}%`).join(" \xB7 ")}`,
+    `Temas e meta: ${s2.pillars.map((x2) => `${x2.name} ${x2.targetPercent}%`).join(" \xB7 ")}`,
     `Rotina (hor\xE1rio de Bras\xEDlia): ${s2.routine.map((r) => `${WEEKDAY[r.weekday]} ${r.startTime} ${r.title} (${FORMAT_LABEL2[r.format] ?? r.format})`).join(" \xB7 ") || "sem rotina"}`
   ];
   const b = p.kind === "empresa" ? p.business : void 0;
@@ -999,6 +1284,19 @@ async function describeStrategy(store) {
       b.noPrice ? "Nunca falar pre\xE7o." : ""
     );
   }
+  if (b) {
+    const [cases, proofs] = await Promise.all([store.realCases(), store.proofs()]);
+    lines.push(describeCases(cases), describeProofs(b.proofs, proofs));
+  }
+  const x = p.extras;
+  if (x) {
+    lines.push(
+      x.audience ? `P\xFAblico: ${x.audience}` : "",
+      x.offers?.length ? `Ofertas: ${x.offers.join("; ")}` : "",
+      x.goals ? `Metas: ${x.goals}` : "",
+      x.networks?.length ? `Redes: ${x.networks.join(", ")}${x.accountType ? ` (conta ${x.accountType})` : ""}` : ""
+    );
+  }
   return lines.filter(Boolean).join("\n");
 }
 async function describePosts(store, limit) {
@@ -1006,14 +1304,42 @@ async function describePosts(store, limit) {
   if (!posts.length) return "Ainda n\xE3o h\xE1 posts registrados. O app anota a hora ao tocar em POSTAR e os n\xFAmeros em \u201CComo foi este post?\u201D.";
   const rows = await Promise.all(posts.map(async (x) => {
     const m = x.metrics;
-    const nums = m ? `${m.views} visualiza\xE7\xF5es \xB7 ${m.likes} curtidas \xB7 ${m.comments} coment\xE1rios \xB7 ${m.shares} compartilhamentos \xB7 ${m.saves} salvamentos \xB7 engajamento ${(engagementRate(m) * 100).toFixed(1)}% \xB7 ${sharesPer1k(m).toFixed(1)} envios/mil` : "sem n\xFAmeros anotados";
+    const extra = m ? [
+      m.completionRate !== void 0 ? `reten\xE7\xE3o ${m.completionRate}%` : "",
+      m.avgWatchSeconds !== void 0 ? `tempo m\xE9dio ${m.avgWatchSeconds}s` : "",
+      m.followersGained !== void 0 ? `+${m.followersGained} seguidores` : "",
+      m.source ? `fonte: ${m.source}` : ""
+    ].filter(Boolean) : [];
+    const nums = m ? `${m.views} visualiza\xE7\xF5es \xB7 ${m.likes} curtidas \xB7 ${m.comments} coment\xE1rios \xB7 ${m.shares} compartilhamentos \xB7 ${m.saves} salvamentos \xB7 engajamento ${(engagementRate(m) * 100).toFixed(1)}% \xB7 ${sharesPer1k(m).toFixed(1)} envios/mil${extra.length ? ` \xB7 ${extra.join(" \xB7 ")}` : ""}` : "sem n\xFAmeros anotados";
     const when = x.postedAt ? `postado ${brt(x.postedAt)}${x.postedTo.length ? ` em ${x.postedTo.join(", ")}` : ""}` : `planejado para ${x.date} (hora de postagem n\xE3o registrada)`;
-    return `- "${x.title}" \xB7 ${await store.pillarName(x.pillarSlug)} \xB7 ${FORMAT_LABEL2[x.format] ?? x.format} \xB7 ${when} \xB7 ${nums}`;
+    const used = [x.hook ? `gancho "${x.hook}"` : "", x.music ? `m\xFAsica ${x.music}` : ""].filter(Boolean).join(" \xB7 ");
+    return `- id ${x.id} \xB7 "${x.title}" \xB7 ${await store.pillarName(x.pillarSlug)} \xB7 ${FORMAT_LABEL2[x.format] ?? x.format} \xB7 ${when}${used ? ` \xB7 ${used}` : ""} \xB7 ${nums}`;
   }));
   const withNumbers = posts.filter((x) => x.metrics).length;
   const warn = withNumbers < MIN_POSTS_FOR_CONCLUSIONS ? "\nAten\xE7\xE3o: poucos posts com n\xFAmeros \u2014 conclus\xF5es sobre hor\xE1rio e tema ainda s\xE3o fracas." : "";
   return `${posts.length} posts (${withNumbers} com n\xFAmeros):
-${rows.join("\n")}${warn}`;
+${rows.join("\n")}${warn}${describeWinners(posts)}`;
+}
+function describeWinners(posts) {
+  const ranked = posts.filter((p) => p.metrics).map((p) => ({
+    hook: p.hook ?? null,
+    format: FORMAT_LABEL2[p.format] ?? p.format,
+    music: p.music ?? null,
+    metrics: p.metrics,
+    hour: p.postedAt ? Number(new Date(new Date(p.postedAt).getTime() - 3 * 36e5).toISOString().slice(11, 13)) : null
+  }));
+  if (!ranked.length) return "";
+  const block = (title, rows) => rows.length ? `${title}:
+${rows.map((r, i) => `  ${i + 1}. ${r.key} \u2014 ${r.avgViews.toLocaleString("pt-BR")} visualiza\xE7\xF5es em m\xE9dia \xB7 ${r.avgSharesPer1k.toFixed(1)} envios/mil${r.avgCompletion !== null ? ` \xB7 reten\xE7\xE3o ${r.avgCompletion.toFixed(0)}%` : ""} (${r.posts} post${r.posts > 1 ? "s" : ""})`).join("\n")}` : "";
+  return `
+
+O QUE EST\xC1 FUNCIONANDO (top 3, ${ranked.length} posts com n\xFAmeros):
+${[
+    block("Ganchos", rankBy(ranked, (p) => p.hook)),
+    block("Formatos", rankBy(ranked, (p) => p.format)),
+    block("Hor\xE1rios (Bras\xEDlia)", rankBy(ranked, (p) => p.hour === null ? null : `${String(p.hour).padStart(2, "0")}h`)),
+    block("M\xFAsicas", rankBy(ranked, (p) => p.music))
+  ].filter(Boolean).join("\n")}`;
 }
 async function pillarDeficit(store) {
   const [{ pillars }, counts] = await Promise.all([store.strategy(), store.pillarCounts(PILLAR_WINDOW_DAYS)]);
@@ -1034,9 +1360,9 @@ async function blockedTopics(store) {
     const k = topic.trim().toLowerCase();
     if (k) counts.set(k, (counts.get(k) ?? 0) + 1);
   }
-  const list = [...counts.entries()].sort((a, b) => b[1] - a[1]).map(([t, n]) => `- ${t}${n > 1 ? ` (${n}x)` : ""}`);
+  const list2 = [...counts.entries()].sort((a, b) => b[1] - a[1]).map(([t, n]) => `- ${t}${n > 1 ? ` (${n}x)` : ""}`);
   return `Assuntos BLOQUEADOS (usados nos \xFAltimos ${TOPIC_WINDOW_DAYS} dias \u2014 escolha outro):
-${list.join("\n")}`;
+${list2.join("\n")}`;
 }
 function clampDays(v) {
   return typeof v === "number" && v >= 1 ? Math.min(MAX_PLAN_DAYS, Math.floor(v)) : 7;
@@ -1046,6 +1372,30 @@ async function callProfileTool(store, name, args, now) {
   if (name === "desempenho_dos_posts") {
     const n = typeof args.limite === "number" && args.limite > 0 ? Math.min(100, Math.floor(args.limite)) : 30;
     return text2(await describePosts(store, n));
+  }
+  if (name === "registrar_metricas") {
+    const id2 = typeof args.content_id === "string" ? args.content_id : "";
+    if (!id2 || !await store.content(id2)) return text2("Conte\xFAdo n\xE3o encontrado neste perfil. Use o id que aparece em desempenho_dos_posts.", true);
+    const int = (k) => typeof args[k] === "number" && args[k] >= 0 ? Math.round(args[k]) : null;
+    const dec = (k) => typeof args[k] === "number" && args[k] >= 0 ? args[k] : void 0;
+    const views = int("visualizacoes");
+    if (views === null) return text2("Informe pelo menos visualizacoes (n\xFAmero). N\xE3o invente: use s\xF3 o que a ferramenta de m\xE9tricas mostrou.", true);
+    const retencao = dec("retencao");
+    if (retencao !== void 0 && retencao > 100) return text2("retencao \xE9 em % (0 a 100).", true);
+    const m = {
+      views,
+      likes: int("curtidas") ?? 0,
+      comments: int("comentarios") ?? 0,
+      shares: int("compartilhamentos") ?? 0,
+      saves: int("salvamentos") ?? 0,
+      updatedAt: now.toISOString(),
+      ...retencao !== void 0 ? { completionRate: retencao } : {},
+      ...dec("tempo_medio_segundos") !== void 0 ? { avgWatchSeconds: dec("tempo_medio_segundos") } : {},
+      ...int("seguidores_ganhos") !== null ? { followersGained: int("seguidores_ganhos") } : {},
+      source: typeof args.fonte === "string" && args.fonte.trim() ? args.fonte.trim().slice(0, 60) : "assistente"
+    };
+    await store.saveMetrics(id2, m);
+    return text2(`N\xFAmeros salvos para ${id2} (${m.views} visualiza\xE7\xF5es, fonte ${m.source}). Aparecem no app em Resultados.`);
   }
   if (name === "criar_plano") {
     const start = typeof args.data_inicio === "string" && DATE.test(args.data_inicio) ? args.data_inicio : todayBrasilia(now);
@@ -1070,10 +1420,10 @@ ${lines.join("\n")}`);
   if (name === "listar_musicas") {
     const business = (await store.profile()).kind === "empresa";
     const mood = typeof args.clima === "string" && args.clima in MOOD_LABEL ? args.clima : null;
-    const list = MUSIC_LIBRARY.filter((t) => (!business || t.license === "comercial") && (!mood || t.mood === mood));
-    if (!list.length) return text2("Nenhuma faixa com esse filtro.");
+    const list2 = MUSIC_LIBRARY.filter((t) => (!business || t.license === "comercial") && (!mood || t.mood === mood));
+    if (!list2.length) return text2("Nenhuma faixa com esse filtro.");
     const bpmNote = typeof args.bpm === "number" ? "\nObs.: as faixas ainda n\xE3o t\xEAm BPM medido \u2014 escolha pelo clima." : "";
-    return text2(`${list.map((t) => `- id ${t.id} \xB7 "${t.title}" \u2014 ${t.artist} \xB7 clima ${MOOD_LABEL[t.mood]} \xB7 ${t.durationSec}s \xB7 licen\xE7a ${t.license}`).join("\n")}${bpmNote}`);
+    return text2(`${list2.map((t) => `- id ${t.id} \xB7 "${t.title}" \u2014 ${t.artist} \xB7 clima ${MOOD_LABEL[t.mood]} \xB7 ${t.durationSec}s \xB7 licen\xE7a ${t.license}`).join("\n")}${bpmNote}`);
   }
   if (name === "registrar_melhoria") {
     const titulo = String(args.titulo ?? "").trim().slice(0, 140);
@@ -1084,9 +1434,9 @@ ${lines.join("\n")}`);
     return text2(`Melhoria registrada (id ${id2}). Ela entra no backlog do desenvolvedor; acompanhe com listar_melhorias.`);
   }
   if (name === "listar_melhorias") {
-    const list = await store.improvements();
-    if (!list.length) return text2("Nenhuma melhoria registrada ainda.");
-    return text2(list.map((m) => `- [${m.status}] ${m.titulo} (prioridade ${m.prioridade}${m.issueNumber ? ` \xB7 item #${m.issueNumber}` : ""})`).join("\n"));
+    const list2 = await store.improvements();
+    if (!list2.length) return text2("Nenhuma melhoria registrada ainda.");
+    return text2(list2.map((m) => `- [${m.status}] ${m.titulo} (prioridade ${m.prioridade}${m.issueNumber ? ` \xB7 item #${m.issueNumber}` : ""})`).join("\n"));
   }
   const id = typeof args.content_id === "string" ? args.content_id : "";
   const content = id ? await store.content(id) : null;
@@ -1115,7 +1465,20 @@ Postado em ${brt(script.postedAt)}` : "";
 ${lines.join("\n")}
 Montagem: ${render}${posted}`);
   }
-  if (content.format !== "thought" && content.format !== "main_video") return text2("Este conte\xFAdo n\xE3o usa roteiro falado (\xE9 cena de apoio/story).", true);
+  if (name === "salvar_cenas") {
+    if (content.format !== "broll") return text2("salvar_cenas \xE9 s\xF3 para cena de apoio (B-roll). Para v\xEDdeo com fala use salvar_roteiro (com direcao.takes).", true);
+    const parsed = ScenesSchema.safeParse(args.takes);
+    if (!parsed.success) return text2(`Takes inv\xE1lidos:
+- ${parsed.error.issues.map((i) => `${i.path.join(".")}: ${i.message}`).join("\n- ")}`, true);
+    const profile = await store.profile();
+    const biz = profile.kind === "empresa" ? profile.business : void 0;
+    const unproven = biz ? pendingClaimsIn(parsed.data.map((t) => `${t.fala_exata} ${t.broll}`).join(" "), biz.pendingClaims ?? []) : [];
+    if (unproven.length) return text2(`A cena afirma algo ainda sem prova: ${unproven.join("; ")}.`, true);
+    await store.saveScenes(content.id, parsed.data);
+    return text2(`${parsed.data.length} take(s) de "${content.title}" enviados para o Post.ai. Aparecem no app ao abrir esta cena.`);
+  }
+  if (content.format === "broll") return text2("Cena de apoio (B-roll, sem roteiro falado): use salvar_cenas com a lista de takes (nome, duracao_segundos, enquadramento, movimento_camera, local, luz, broll, erro_comum).", true);
+  if (content.format !== "thought" && content.format !== "main_video") return text2("Este conte\xFAdo n\xE3o usa roteiro falado (\xE9 story).", true);
   if (name === "instrucoes_do_roteiro") {
     const [profile, pillarName, recentSummaries, deficit, blocked] = await Promise.all([
       store.profile(),
@@ -1126,7 +1489,8 @@ Montagem: ${render}${posted}`);
     ]);
     const eventText = typeof args.acontecimento === "string" && args.acontecimento.trim() ? args.acontecimento.trim().slice(0, 1500) : null;
     const prompt = buildManualPrompt({ profile, pillarName, format: content.format, eventText, brief: content.project ? projectBrief(content.project) : null, recentSummaries, avoid: "" });
-    return text2([prompt, deficit, blocked, "Regras do diretor: gancho \u2264 12 palavras; screen_text 2\u20135 palavras; duration_seconds \u2248 palavras do script \xF7 2,5.", DIRECTION_GUIDE].filter(Boolean).join("\n\n"));
+    const cases = profile.kind === "empresa" ? describeCases(await store.realCases()) : "";
+    return text2([prompt, deficit, blocked, cases, "Regras do diretor: gancho \u2264 12 palavras; screen_text 2\u20135 palavras; duration_seconds \u2248 palavras do script \xF7 2,5.", DIRECTION_GUIDE].filter(Boolean).join("\n\n"));
   }
   if (name === "salvar_roteiro") {
     const profile = await store.profile();
@@ -1144,6 +1508,9 @@ Montagem: ${render}${posted}`);
     if (biz?.noPrice && mentionsPrice(draft)) return text2("O roteiro fala pre\xE7o/valor. Neste perfil de empresa pre\xE7o n\xE3o aparece no v\xEDdeo: reescreva sem pre\xE7o.", true);
     const unproven = biz ? pendingClaimsIn(`${draft.script} ${draft.cta}`, biz.pendingClaims ?? []) : [];
     if (unproven.length) return text2(`O roteiro afirma algo ainda sem prova: ${unproven.join("; ")}. Reescreva sem isso.`, true);
+    if (biz && content.pillarSlug === CLIENT_STORY_PILLAR && !(await store.realCases()).some(authorized)) {
+      return text2("Este perfil n\xE3o tem caso real de cliente autorizado. Cadastre com cadastrar_caso_real (com autoriza\xE7\xE3o) antes de escrever 'Hist\xF3rias de cliente'.", true);
+    }
     const [fps, topics] = await Promise.all([store.recentFingerprints(), store.recentTopics(TOPIC_WINDOW_DAYS)]);
     const recent = [...fps, ...topics.map((t) => ({ type: "topic", value: normalizeText(t.topic), contentItemId: t.contentItemId }))].filter((f) => f.contentItemId !== content.id);
     const report = checkRepetition(fingerprintsFor(draft), recent);
@@ -1164,18 +1531,20 @@ Montagem: ${render}${posted}`);
 }
 async function callTool(ctx, name, args, now) {
   if (name === "listar_perfis") {
-    const list = await ctx.profiles();
-    return text2(list.map((p) => `- id ${p.id} \xB7 ${p.name} \xB7 ${p.kind}${p.id === ctx.defaultProfileId ? " (padr\xE3o deste link)" : ""} \xB7 assinatura ${p.signature}`).join("\n") || "Nenhum perfil.");
+    const list2 = await ctx.profiles();
+    return text2(list2.map((p) => `- id ${p.id} \xB7 ${p.name} \xB7 ${p.kind}${p.id === ctx.defaultProfileId ? " (padr\xE3o deste link)" : ""} \xB7 assinatura ${p.signature}`).join("\n") || "Nenhum perfil.");
   }
+  const account = await callAccountTool(name, args, (p) => ctx.createProfile(p), () => crypto.randomUUID());
+  if (account) return account;
   const profileId = typeof args.profile_id === "string" && args.profile_id ? args.profile_id : ctx.defaultProfileId;
   const store = await ctx.store(profileId);
   if (!store) return text2("Perfil n\xE3o encontrado para este link. Use um id de listar_perfis.", true);
-  return callProfileTool(store, name, args, now);
+  return await callProfileDataTool(store, name, args) ?? callProfileTool(store, name, args, now);
 }
 
 // src/mcp.ts
 var MCP_PROTOCOL_VERSIONS = ["2025-06-18", "2025-03-26", "2024-11-05"];
-var SERVER_INFO = { name: "postai", title: "Post.ai", version: "2.0.0" };
+var SERVER_INFO = { name: "postai", title: "Post.ai", version: "2.1.0" };
 var INSTRUCTIONS = [
   "Voc\xEA \xE9 o DIRETOR DE GRAVA\xC7\xD5ES do criador no Post.ai (v\xEDdeos curtos; v\xE1rios perfis \u2014 pessoal e empresas).",
   "Crit\xE9rio de sucesso: resultado medido (reten\xE7\xE3o, envios, salvamentos, seguidores; nos comerciais, leads e vendas). Nunca prometa viraliza\xE7\xE3o.",
@@ -1183,6 +1552,9 @@ var INSTRUCTIONS = [
   "Antes de decidir: perfil_e_estrategia e desempenho_dos_posts; se tiver busca na web, pesquise o que est\xE1 em alta no nicho agora.",
   "Planejar: criar_plano (at\xE9 14 dias) \u2192 para cada conte\xFAdo, ler_roteiro (se j\xE1 tiver) \u2192 instrucoes_do_roteiro (siga \xC0 RISCA voz, temas abaixo da meta, assuntos bloqueados e o JSON) \u2192 salvar_roteiro. Se voltar erro, corrija o apontado e salve de novo.",
   "Hor\xE1rio e sequ\xEAncia: baseie-se nos hor\xE1rios dos posts com mais visualiza\xE7\xF5es e envios; diga quando h\xE1 poucos dados.",
+  'Dire\xE7\xE3o completa: salvar_roteiro com "direcao" (takes, texto na tela, m\xFAsica de listar_musicas, capa, publica\xE7\xE3o, teste A/B). Cena de apoio (B-roll) usa salvar_cenas. Acompanhe com ler_status_gravacao.',
+  "Perfil novo: entrevista_de_perfil \u2192 criar_perfil. Mudan\xE7as: atualizar_perfil. Empresa: casos reais s\xF3 com autoriza\xE7\xE3o (cadastrar_caso_real); sem caso autorizado n\xE3o h\xE1 'Hist\xF3rias de cliente'.",
+  "N\xFAmeros: se tiver acesso ao Metricool ou ao painel da rede, registre os n\xFAmeros reais com registrar_metricas; nunca estime.",
   "Toda recomenda\xE7\xE3o de mudan\xE7a no app ou no conector vai por registrar_melhoria (com crit\xE9rio de aceite).",
   "Nunca invente n\xFAmeros, pre\xE7o, prazo ou prova; n\xE3o exponha dados de crian\xE7as; fechamento do perfil pessoal \xE9 exatamente o configurado. Responda em portugu\xEAs do Brasil, simples."
 ].join("\n");
@@ -1238,7 +1610,8 @@ function supabaseMemory(db, userId) {
         voiceRules: data.voice_rules?.length ? data.voice_rules : RODRIGO_PROFILE.voiceRules,
         // kind + sales strategy of a business profile live in creator_profiles.tone
         kind: data.tone?.kind === "empresa" ? "empresa" : "pessoal",
-        business: data.tone?.kind === "empresa" ? data.tone.business : void 0
+        business: data.tone?.kind === "empresa" ? data.tone.business : void 0,
+        ...data.tone?.extras ? { extras: data.tone.extras } : {}
       };
     },
     async pillarName(ws, slug) {
@@ -1284,6 +1657,13 @@ var brtDayRange = (dateKey) => {
   return [start.toISOString(), new Date(start.getTime() + 864e5).toISOString()];
 };
 var WRITE_ROLES = ["owner", "editor"];
+function musicLabel(edit, draft) {
+  const choice = edit?.music ?? "auto";
+  if (choice === "none") return "sem m\xFAsica";
+  const track = trackById(choice) ?? (choice === "auto" && draft?.direcao?.musica ? trackById(draft.direcao.musica.id) : void 0);
+  if (track) return track.title;
+  return choice === "auto" ? "autom\xE1tica" : `clima ${choice}`;
+}
 function supabaseMcpStore(db, workspaceId, userId) {
   const memory = supabaseMemory(db, userId);
   const withScript = async (rows) => {
@@ -1336,15 +1716,16 @@ function supabaseMcpStore(db, workspaceId, userId) {
         edit: sp.edit ?? null,
         metrics: sp.metrics ?? null,
         postedAt: typeof sp.posted_at === "string" ? sp.posted_at : null,
-        pendingFromAssistant: (pending.count ?? 0) > 0
+        pendingFromAssistant: (pending.count ?? 0) > 0,
+        scenes: Array.isArray(sp.cenas) ? sp.cenas : null
       };
     },
     async planDays(startDate, days) {
-      const out = [];
+      const out2 = [];
       const [pillarRows, blockRows, recentRows] = await Promise.all([
         db.from("content_pillars").select("slug, name, target_percent, active").eq("workspace_id", workspaceId),
         db.from("routine_blocks").select("id, weekday, start_time, title, content_hint, optional, default_format").eq("workspace_id", workspaceId),
-        db.from("content_items").select("pillar_slug").eq("workspace_id", workspaceId).order("plan_date", { ascending: false }).limit(30)
+        db.from("content_items").select("pillar_slug").eq("workspace_id", workspaceId).neq("format", "broll").order("plan_date", { ascending: false }).limit(30)
       ]);
       const err = pillarRows.error ?? blockRows.error ?? recentRows.error;
       if (err) throw new Error(err.message);
@@ -1359,6 +1740,7 @@ function supabaseMcpStore(db, workspaceId, userId) {
         format: b.default_format
       }));
       const history = (recentRows.data ?? []).map((r) => r.pillar_slug).filter(Boolean).reverse();
+      const business = (await store.profile()).kind === "empresa";
       for (let i = 0; i < days; i++) {
         const date = addDays(startDate, i);
         const [from, to] = brtDayRange(date);
@@ -1366,11 +1748,11 @@ function supabaseMcpStore(db, workspaceId, userId) {
         if (tasks.error) throw new Error(tasks.error.message);
         const existing = await store.contentsOn(date);
         if (existing.length || tasks.data?.length) {
-          out.push({ date, created: false, items: existing });
+          out2.push({ date, created: false, items: existing });
           continue;
         }
-        const plan = buildDayPlan({ date: /* @__PURE__ */ new Date(0), dateKey: date, utcOffsetMinutes: BRASILIA_OFFSET_MIN, workspaceId, routine, pillars, recentPillarSlugs: history, newId: () => crypto.randomUUID(), now: (/* @__PURE__ */ new Date()).toISOString() });
-        history.push(...plan.contentItems.map((c) => c.pillarSlug));
+        const plan = buildDayPlan({ date: /* @__PURE__ */ new Date(0), dateKey: date, utcOffsetMinutes: BRASILIA_OFFSET_MIN, workspaceId, routine, pillars, recentPillarSlugs: history, newId: () => crypto.randomUUID(), now: (/* @__PURE__ */ new Date()).toISOString(), directedBroll: business });
+        history.push(...plan.contentItems.filter((c) => c.format !== "broll").map((c) => c.pillarSlug));
         if (plan.contentItems.length) {
           const ci = await db.from("content_items").insert(plan.contentItems.map((c) => ({
             id: c.id,
@@ -1401,9 +1783,9 @@ function supabaseMcpStore(db, workspaceId, userId) {
           })));
           if (rt.error) throw new Error(rt.error.message);
         }
-        out.push({ date, created: true, items: await store.contentsOn(date) });
+        out2.push({ date, created: true, items: await store.contentsOn(date) });
       }
-      return out;
+      return out2;
     },
     async pillarCounts(days) {
       const scripts = await db.from("scripts").select("content_item_id").eq("workspace_id", workspaceId).gte("created_at", daysAgo(days));
@@ -1444,6 +1826,10 @@ function supabaseMcpStore(db, workspaceId, userId) {
       const { error } = await db.from("assistant_drafts").insert({ workspace_id: workspaceId, content_item_id: contentId, draft, source: "mcp" });
       if (error) throw new Error(error.message);
     },
+    async saveScenes(contentId, scenes) {
+      const { error } = await db.from("assistant_drafts").insert({ workspace_id: workspaceId, content_item_id: contentId, draft: { tipo: "cenas", takes: scenes }, source: "mcp" });
+      if (error) throw new Error(error.message);
+    },
     async strategy() {
       const [pillars, blocks] = await Promise.all([
         db.from("content_pillars").select("slug, name, target_percent, active").eq("workspace_id", workspaceId),
@@ -1456,10 +1842,24 @@ function supabaseMcpStore(db, workspaceId, userId) {
       };
     },
     async posts(limit) {
-      const { data, error } = await db.from("content_items").select(COLS).eq("workspace_id", workspaceId).or("structured_payload->>posted_at.not.is.null,structured_payload->>metrics.not.is.null").order("plan_date", { ascending: false }).limit(limit);
+      const imported = await db.from("post_metrics").select("content_item_id, metrics").eq("workspace_id", workspaceId).order("updated_at", { ascending: false }).limit(limit);
+      if (imported.error) throw new Error(imported.error.message);
+      const importedBy = new Map((imported.data ?? []).map((r) => [r.content_item_id, r.metrics]));
+      const ids = [...importedBy.keys()];
+      const filter = ["structured_payload->>posted_at.not.is.null", "structured_payload->>metrics.not.is.null", ...ids.length ? [`id.in.(${ids.join(",")})`] : []].join(",");
+      const { data, error } = await db.from("content_items").select(COLS).eq("workspace_id", workspaceId).or(filter).order("plan_date", { ascending: false }).limit(limit);
       if (error) throw new Error(error.message);
-      return (data ?? []).map((r) => {
+      const rows = data ?? [];
+      const scripts = rows.length ? await db.from("scripts").select("content_item_id, draft, updated_at").in("content_item_id", rows.map((r) => r.id)).order("updated_at", { ascending: false }) : { data: [] };
+      const draftBy = /* @__PURE__ */ new Map();
+      for (const sc of scripts.data ?? []) if (!draftBy.has(sc.content_item_id)) draftBy.set(sc.content_item_id, sc.draft);
+      return rows.map((r) => {
         const p = r.structured_payload ?? {};
+        const typed = p.metrics ?? null;
+        const fromAssistant = importedBy.get(r.id) ?? null;
+        const metrics = !typed ? fromAssistant : !fromAssistant ? typed : fromAssistant.updatedAt > typed.updatedAt ? fromAssistant : typed;
+        const draft = draftBy.get(r.id);
+        const edit = p.edit ?? null;
         return {
           id: r.id,
           title: r.title,
@@ -1468,12 +1868,115 @@ function supabaseMcpStore(db, workspaceId, userId) {
           date: r.plan_date ?? "",
           postedAt: typeof p.posted_at === "string" ? p.posted_at : null,
           postedTo: Array.isArray(p.posted_to) ? p.posted_to : [],
-          metrics: p.metrics ?? null
+          metrics,
+          hook: draft ? draft.hook_options[Number(p.selected_hook ?? 0)] ?? draft.hook_options[0] ?? null : null,
+          music: musicLabel(edit, draft)
         };
       });
+    },
+    async saveMetrics(contentId, metrics) {
+      const { error } = await db.from("post_metrics").upsert({ content_item_id: contentId, workspace_id: workspaceId, metrics, source: metrics.source ?? "assistente", updated_at: (/* @__PURE__ */ new Date()).toISOString() }, { onConflict: "content_item_id" });
+      if (error) throw new Error(error.message);
+    },
+    async updateProfile(p, pillars) {
+      const cur = await db.from("creator_profiles").select("tone").eq("workspace_id", workspaceId).single();
+      if (cur.error) throw new Error(cur.error.message);
+      const tone = { ...cur.data.tone ?? {}, kind: p.kind ?? "pessoal", business: p.business ?? null, extras: p.extras ?? null };
+      const up = await db.from("creator_profiles").update({
+        display_name: p.displayName,
+        handle: p.handle,
+        positioning: p.positioning,
+        signature: p.signature,
+        closing_phrase: p.closingPhrase,
+        voice_rules: p.voiceRules,
+        tone,
+        updated_at: (/* @__PURE__ */ new Date()).toISOString()
+      }).eq("workspace_id", workspaceId);
+      if (up.error) throw new Error(up.error.message);
+      if (pillars) {
+        const del = await db.from("content_pillars").delete().eq("workspace_id", workspaceId);
+        if (del.error) throw new Error(del.error.message);
+        const ins = await db.from("content_pillars").insert(pillars.map((x) => ({ workspace_id: workspaceId, slug: x.slug, name: x.name, target_percent: x.targetPercent })));
+        if (ins.error) throw new Error(ins.error.message);
+      }
+    },
+    async realCases() {
+      const { data, error } = await db.from("casos_reais").select("id, cliente_segmento, problema, resultado, autorizacao, midia_disponivel").eq("workspace_id", workspaceId).order("created_at", { ascending: false }).limit(50);
+      if (error) throw new Error(error.message);
+      return data ?? [];
+    },
+    async saveRealCase(c) {
+      const row = { cliente_segmento: c.cliente_segmento, problema: c.problema, resultado: c.resultado, autorizacao: c.autorizacao, midia_disponivel: c.midia_disponivel, updated_at: (/* @__PURE__ */ new Date()).toISOString() };
+      if (c.id) {
+        const { data: data2, error: error2 } = await db.from("casos_reais").update(row).eq("workspace_id", workspaceId).eq("id", c.id).select("id").maybeSingle();
+        if (error2) throw new Error(error2.message);
+        if (!data2) throw new Error("caso n\xE3o encontrado neste perfil");
+        return data2.id;
+      }
+      const { data, error } = await db.from("casos_reais").insert({ workspace_id: workspaceId, ...row }).select("id").single();
+      if (error) throw new Error(error.message);
+      return data.id;
+    },
+    async proofs() {
+      const { data, error } = await db.from("provas_filmaveis").select("descricao, status").eq("workspace_id", workspaceId).order("created_at");
+      if (error) throw new Error(error.message);
+      return data ?? [];
+    },
+    async saveProof(p) {
+      const { error } = await db.from("provas_filmaveis").upsert({ workspace_id: workspaceId, descricao: p.descricao, status: p.status, updated_at: (/* @__PURE__ */ new Date()).toISOString() }, { onConflict: "workspace_id,descricao" });
+      if (error) throw new Error(error.message);
     }
   };
   return store;
+}
+var MAX_PROFILES = 10;
+async function insertProfile(db, userId, np) {
+  const owned = await db.from("workspaces").select("id", { count: "exact", head: true }).eq("created_by", userId).is("deleted_at", null);
+  if (owned.error) throw new Error(owned.error.message);
+  if ((owned.count ?? 0) >= MAX_PROFILES) throw new Error(`limite de ${MAX_PROFILES} perfis`);
+  const id = crypto.randomUUID();
+  const ws = await db.from("workspaces").insert({ id, name: np.name, slug: `ws-${id.replace(/-/g, "")}`, created_by: userId });
+  if (ws.error) throw new Error(ws.error.message);
+  const p = np.profile;
+  const steps = [
+    () => db.from("workspace_members").insert({ workspace_id: id, user_id: userId, role: "owner" }),
+    () => db.from("creator_profiles").insert({
+      workspace_id: id,
+      display_name: p.displayName,
+      handle: p.handle,
+      positioning: p.positioning,
+      signature: p.signature,
+      closing_phrase: p.closingPhrase,
+      voice_rules: p.voiceRules,
+      tone: { kind: p.kind ?? "pessoal", business: p.business ?? null, extras: p.extras ?? null }
+    }),
+    () => db.from("content_pillars").insert(np.pillars.map((x) => ({ workspace_id: id, slug: x.slug, name: x.name, target_percent: x.targetPercent })))
+  ];
+  try {
+    for (const step of steps) {
+      const r = await step();
+      if (r.error) throw new Error(r.error.message);
+    }
+    const rt = await db.from("routines").insert({ workspace_id: id, name: "Rotina padr\xE3o" }).select("id").single();
+    if (rt.error) throw new Error(rt.error.message);
+    const blocks = await db.from("routine_blocks").insert(np.routine.map((b) => ({
+      id: b.id,
+      workspace_id: id,
+      routine_id: rt.data.id,
+      weekday: b.weekday,
+      start_time: b.startTime,
+      title: b.title,
+      content_hint: b.contentHint,
+      optional: b.optional,
+      default_format: b.format
+    })));
+    if (blocks.error) throw new Error(blocks.error.message);
+    await db.from("audit_logs").insert({ workspace_id: id, actor: userId, action: "workspace.create_profile.mcp" });
+    return id;
+  } catch (e) {
+    await db.from("workspaces").delete().eq("id", id);
+    throw e;
+  }
 }
 function supabaseMcpContext(db, userId, defaultProfileId) {
   const canWrite = async (workspaceId) => {
@@ -1499,7 +2002,8 @@ function supabaseMcpContext(db, userId, defaultProfileId) {
     },
     async store(profileId) {
       return /^[0-9a-f-]{36}$/i.test(profileId) && await canWrite(profileId) ? supabaseMcpStore(db, profileId, userId) : null;
-    }
+    },
+    createProfile: (np) => insertProfile(db, userId, np)
   };
 }
 async function sha256Hex(s2) {
@@ -1536,8 +2040,8 @@ Deno.serve(async (req2) => {
   }
   const ctx = supabaseMcpContext(db, who.userId, who.workspaceId);
   if (Array.isArray(msg)) {
-    const out = (await Promise.all(msg.map((m) => handleMcp(m, ctx)))).filter(Boolean);
-    return out.length ? json(200, out) : new Response(null, { status: 202 });
+    const out2 = (await Promise.all(msg.map((m) => handleMcp(m, ctx)))).filter(Boolean);
+    return out2.length ? json(200, out2) : new Response(null, { status: 202 });
   }
   const res = await handleMcp(msg, ctx);
   return res ? json(200, res) : new Response(null, { status: 202 });

@@ -60,6 +60,10 @@ export const DirectionSchema = z.object({
 });
 
 export type Direction = z.infer<typeof DirectionSchema>;
+
+/** Cena de apoio dirigida (B-roll da empresa): só takes, sem fala obrigatória. */
+export const ScenesSchema = z.array(TakeSchema).min(1).max(12);
+export type Scenes = z.infer<typeof ScenesSchema>;
 export type DirectionTake = z.infer<typeof TakeSchema>;
 
 /** Problemas da direção que impedem gravar/montar só com o que o app mostra. */

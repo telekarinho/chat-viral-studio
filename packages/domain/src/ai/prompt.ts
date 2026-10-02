@@ -13,6 +13,16 @@ export interface CreatorProfile {
   business?: BusinessStrategy;
   /** canto da assinatura no vídeo (padrão: em cima, à direita) */
   watermark?: WatermarkCorner;
+  /** o que a entrevista do perfil coletou e não cabe acima (público, ofertas, metas, redes, tipo de conta) */
+  extras?: ProfileExtras;
+}
+
+export interface ProfileExtras {
+  audience?: string;
+  offers?: string[];
+  goals?: string;
+  networks?: string[];
+  accountType?: string;
 }
 
 export const RODRIGO_PROFILE: CreatorProfile = {

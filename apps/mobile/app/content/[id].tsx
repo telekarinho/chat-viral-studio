@@ -11,7 +11,7 @@ import { generateForContent, saveUserEdit } from "../../src/generate";
 import { reportError } from "../../src/telemetry";
 import { setContentOnScreen } from "../../src/renderWatch";
 import { MetricsCard } from "../../src/components/MetricsCard";
-import { DirectionCard } from "../../src/components/DirectionCard";
+import { DirectionCard, ScenesCard } from "../../src/components/DirectionCard";
 import { pullAssistantDraft } from "../../src/assistant";
 import { contentPlan } from "../../src/finalPlan";
 import { describeResult, downloadFinal, latestRenderJob, localFinal, localResult, requestFinalRender, type RenderJob, type RenderResult } from "../../src/finalRender";
@@ -173,7 +173,22 @@ export default function ContentScreen() {
       ) : null}
       {c.project && owner ? <ProjectPanel c={c} ws={owner.ws} takes={owner.takes} onChange={() => void load()} /> : null}
 
-      {!d ? (
+      {c.format === "broll" ? (
+        <>
+          {c.cenas?.length ? <ScenesCard takes={c.cenas} /> : (
+            <Card><Text style={s.body}>Cena de apoio sem fala. Peça ao Claude as cenas desta prova visual (ele usa salvar_cenas) ou grave do seu jeito.</Text></Card>
+          )}
+          <Button label="GRAVAR CENA" onPress={() => router.push({ pathname: "/record", params: recordParams })} testID="record-scene" />
+          <Section>{`Takes desta cena (${takes.length})`}</Section>
+          {takes.map((t) => (
+            <Card key={t.id}>
+              <Text style={{ fontWeight: "700", color: colors.ink }} onPress={() => router.push(`/take/${t.id}`)} accessibilityRole="link">
+                Take de {new Date(t.createdAt).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })}
+              </Text>
+            </Card>
+          ))}
+        </>
+      ) : !d ? (
         <Card style={{ gap: 10 }}>
           <Text style={s.body}>Gere o roteiro. Se estiver sem internet, uso o gerador offline.</Text>
           <Button label="GERAR ROTEIRO" onPress={() => run("gerar", () => generateForContent(c.id))} loading={busy === "gerar"} testID="content-generate" />

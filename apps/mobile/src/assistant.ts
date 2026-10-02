@@ -1,7 +1,8 @@
+import { ScenesSchema } from "@postai/domain";
 import { config } from "./config";
 import { importManualDraft } from "./generate";
 import { supabase } from "./supabase";
-import type { ContentItem } from "./db/repo";
+import { setContentScenes, type ContentItem } from "./db/repo";
 
 /** Link do conector MCP para colar no Claude (Configurações → Conectores → Adicionar conector personalizado). */
 export const mcpUrl = (token: string): string => `${config.supabaseUrl.replace(/\/$/, "")}/functions/v1/mcp/${token}`;
@@ -37,6 +38,14 @@ export async function pullAssistantDraft(contentId: string): Promise<{ content: 
   const { data, error } = await supabase.from("assistant_drafts").select("id, draft").eq("content_item_id", contentId).is("consumed_at", null)
     .order("created_at", { ascending: false }).limit(1).maybeSingle();
   if (error || !data) return null;
+  const consume = () => supabase!.from("assistant_drafts").update({ consumed_at: new Date().toISOString() }).eq("content_item_id", contentId).is("consumed_at", null);
+  // cena de apoio dirigida (B-roll): só a lista de takes
+  const box = data.draft as { tipo?: string; takes?: unknown } | null;
+  if (box?.tipo === "cenas") {
+    const scenes = ScenesSchema.safeParse(box.takes);
+    await consume();
+    return scenes.success ? { content: await setContentScenes(contentId, scenes.data) } : { errors: ["As cenas do assistente vieram num formato inválido."] };
+  }
   const r = await importManualDraft(contentId, JSON.stringify(data.draft));
   // usado ou recusado, não volta a ser aplicado (todos os pendentes deste conteúdo saem da fila)
   await supabase.from("assistant_drafts").update({ consumed_at: new Date().toISOString() }).eq("content_item_id", contentId).is("consumed_at", null);

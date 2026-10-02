@@ -238,6 +238,7 @@ var DirectionSchema = z.object({
   })).max(4).default([]),
   teste_ab: z.object({ ganchos: z.array(req(200)).min(2).max(3), metrica: s(120).default("") }).nullable().default(null)
 });
+var ScenesSchema = z.array(TakeSchema).min(1).max(12);
 
 // ../../packages/domain/src/ai/contract.ts
 var PROMPT_VERSION = "content-v1.3.0";
@@ -664,7 +665,8 @@ function supabaseMemory(db, userId) {
         voiceRules: data.voice_rules?.length ? data.voice_rules : RODRIGO_PROFILE.voiceRules,
         // kind + sales strategy of a business profile live in creator_profiles.tone
         kind: data.tone?.kind === "empresa" ? "empresa" : "pessoal",
-        business: data.tone?.kind === "empresa" ? data.tone.business : void 0
+        business: data.tone?.kind === "empresa" ? data.tone.business : void 0,
+        ...data.tone?.extras ? { extras: data.tone.extras } : {}
       };
     },
     async pillarName(ws, slug) {

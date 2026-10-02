@@ -1,7 +1,8 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { BRASILIA_OFFSET_MIN, buildDayPlan, type ContentDraft, type ContentFormat, type EditChoices, type Pillar, type PostMetrics, type ProjectInfo, type RoutineBlock } from "@postai/domain";
+import { BRASILIA_OFFSET_MIN, buildDayPlan, trackById, type Scenes, type ContentDraft, type ContentFormat, type EditChoices, type Pillar, type PostMetrics, type ProjectInfo, type RoutineBlock } from "@postai/domain";
 import { supabaseMemory } from "./adapters";
 import type { McpContent, McpContext, McpPost, McpProfile, McpRecording, McpScript, McpStore } from "./mcp-tools";
+import type { FilmableProof, NewProfile, RealCase } from "./mcp-profiles";
 
 type ContentRow = { id: string; format: string; pillar_slug: string | null; title: string; plan_date: string | null; structured_payload: Record<string, unknown> | null };
 const COLS = "id, format, pillar_slug, title, plan_date, structured_payload";
@@ -15,6 +16,15 @@ const brtDayRange = (dateKey: string) => {
   return [start.toISOString(), new Date(start.getTime() + 86_400_000).toISOString()] as const;
 };
 const WRITE_ROLES = ["owner", "editor"];
+
+/** Música usada: a escolhida pelo criador, a da direção ou o automático. */
+function musicLabel(edit: EditChoices | null, draft: ContentDraft | undefined): string | null {
+  const choice = edit?.music ?? "auto";
+  if (choice === "none") return "sem música";
+  const track = trackById(choice) ?? (choice === "auto" && draft?.direcao?.musica ? trackById(draft.direcao.musica.id) : undefined);
+  if (track) return track.title;
+  return choice === "auto" ? "automática" : `clima ${choice}`;
+}
 
 /**
  * Store do conector MCP. Usa a chave de serviço, então TODA consulta filtra pelo workspace do link
@@ -67,6 +77,7 @@ export function supabaseMcpStore(db: SupabaseClient, workspaceId: string, userId
         metrics: (sp.metrics ?? null) as PostMetrics | null,
         postedAt: typeof sp.posted_at === "string" ? sp.posted_at : null,
         pendingFromAssistant: (pending.count ?? 0) > 0,
+        scenes: Array.isArray(sp.cenas) ? (sp.cenas as Scenes) : null,
       };
     },
     async planDays(startDate, days) {
@@ -74,7 +85,7 @@ export function supabaseMcpStore(db: SupabaseClient, workspaceId: string, userId
       const [pillarRows, blockRows, recentRows] = await Promise.all([
         db.from("content_pillars").select("slug, name, target_percent, active").eq("workspace_id", workspaceId),
         db.from("routine_blocks").select("id, weekday, start_time, title, content_hint, optional, default_format").eq("workspace_id", workspaceId),
-        db.from("content_items").select("pillar_slug").eq("workspace_id", workspaceId).order("plan_date", { ascending: false }).limit(30),
+        db.from("content_items").select("pillar_slug").eq("workspace_id", workspaceId).neq("format", "broll").order("plan_date", { ascending: false }).limit(30),
       ]);
       const err = pillarRows.error ?? blockRows.error ?? recentRows.error;
       if (err) throw new Error(err.message);
@@ -83,6 +94,7 @@ export function supabaseMcpStore(db: SupabaseClient, workspaceId: string, userId
         id: b.id, weekday: b.weekday, startTime: String(b.start_time).slice(0, 5), title: b.title, contentHint: b.content_hint, optional: b.optional, format: b.default_format as ContentFormat,
       }));
       const history = (recentRows.data ?? []).map((r) => r.pillar_slug as string).filter(Boolean).reverse();
+      const business = (await store.profile()).kind === "empresa";
       for (let i = 0; i < days; i++) {
         const date = addDays(startDate, i);
         const [from, to] = brtDayRange(date);
@@ -94,8 +106,8 @@ export function supabaseMcpStore(db: SupabaseClient, workspaceId: string, userId
           out.push({ date, created: false, items: existing });
           continue;
         }
-        const plan = buildDayPlan({ date: new Date(0), dateKey: date, utcOffsetMinutes: BRASILIA_OFFSET_MIN, workspaceId, routine, pillars, recentPillarSlugs: history, newId: () => crypto.randomUUID(), now: new Date().toISOString() });
-        history.push(...plan.contentItems.map((c) => c.pillarSlug));
+        const plan = buildDayPlan({ date: new Date(0), dateKey: date, utcOffsetMinutes: BRASILIA_OFFSET_MIN, workspaceId, routine, pillars, recentPillarSlugs: history, newId: () => crypto.randomUUID(), now: new Date().toISOString(), directedBroll: business });
+        history.push(...plan.contentItems.filter((c) => c.format !== "broll").map((c) => c.pillarSlug));
         if (plan.contentItems.length) {
           const ci = await db.from("content_items").insert(plan.contentItems.map((c) => ({
             id: c.id, workspace_id: workspaceId, pillar_slug: c.pillarSlug, plan_date: c.date, scheduled_for: c.scheduledFor, format: c.format, title: c.title, status: c.status, structured_payload: {},
@@ -154,6 +166,11 @@ export function supabaseMcpStore(db: SupabaseClient, workspaceId: string, userId
       const { error } = await db.from("assistant_drafts").insert({ workspace_id: workspaceId, content_item_id: contentId, draft, source: "mcp" });
       if (error) throw new Error(error.message);
     },
+    async saveScenes(contentId, scenes) {
+      // mesma caixa de entrada do app; o app reconhece pelo "tipo"
+      const { error } = await db.from("assistant_drafts").insert({ workspace_id: workspaceId, content_item_id: contentId, draft: { tipo: "cenas", takes: scenes }, source: "mcp" });
+      if (error) throw new Error(error.message);
+    },
     async strategy() {
       const [pillars, blocks] = await Promise.all([
         db.from("content_pillars").select("slug, name, target_percent, active").eq("workspace_id", workspaceId),
@@ -166,23 +183,123 @@ export function supabaseMcpStore(db: SupabaseClient, workspaceId: string, userId
       };
     },
     async posts(limit) {
-      // posts = conteúdos postados (hora registrada) ou com números anotados
-      const { data, error } = await db.from("content_items").select(COLS).eq("workspace_id", workspaceId)
-        .or("structured_payload->>posted_at.not.is.null,structured_payload->>metrics.not.is.null")
-        .order("plan_date", { ascending: false }).limit(limit);
+      // posts = conteúdos postados (hora registrada), com números anotados no app ou importados pelo assistente
+      const imported = await db.from("post_metrics").select("content_item_id, metrics").eq("workspace_id", workspaceId).order("updated_at", { ascending: false }).limit(limit);
+      if (imported.error) throw new Error(imported.error.message);
+      const importedBy = new Map((imported.data ?? []).map((r) => [r.content_item_id as string, r.metrics as PostMetrics]));
+      const ids = [...importedBy.keys()];
+      const filter = ["structured_payload->>posted_at.not.is.null", "structured_payload->>metrics.not.is.null", ...(ids.length ? [`id.in.(${ids.join(",")})`] : [])].join(",");
+      const { data, error } = await db.from("content_items").select(COLS).eq("workspace_id", workspaceId).or(filter).order("plan_date", { ascending: false }).limit(limit);
       if (error) throw new Error(error.message);
-      return ((data ?? []) as ContentRow[]).map((r): McpPost => {
+      const rows = (data ?? []) as ContentRow[];
+      const scripts = rows.length ? await db.from("scripts").select("content_item_id, draft, updated_at").in("content_item_id", rows.map((r) => r.id)).order("updated_at", { ascending: false }) : { data: [] };
+      const draftBy = new Map<string, ContentDraft>();
+      for (const sc of (scripts.data ?? []) as { content_item_id: string; draft: ContentDraft }[]) if (!draftBy.has(sc.content_item_id)) draftBy.set(sc.content_item_id, sc.draft);
+      return rows.map((r): McpPost => {
         const p = r.structured_payload ?? {};
+        const typed = (p.metrics ?? null) as PostMetrics | null;
+        const fromAssistant = importedBy.get(r.id) ?? null;
+        // vale o número mais recente (digitado no app ou importado)
+        const metrics = !typed ? fromAssistant : !fromAssistant ? typed : fromAssistant.updatedAt > typed.updatedAt ? fromAssistant : typed;
+        const draft = draftBy.get(r.id);
+        const edit = (p.edit ?? null) as EditChoices | null;
         return {
           id: r.id, title: r.title, pillarSlug: r.pillar_slug ?? "", format: r.format, date: r.plan_date ?? "",
           postedAt: typeof p.posted_at === "string" ? p.posted_at : null,
           postedTo: Array.isArray(p.posted_to) ? (p.posted_to as string[]) : [],
-          metrics: (p.metrics ?? null) as PostMetrics | null,
+          metrics,
+          hook: draft ? (draft.hook_options[Number(p.selected_hook ?? 0)] ?? draft.hook_options[0] ?? null) : null,
+          music: musicLabel(edit, draft),
         };
       });
     },
+    async saveMetrics(contentId, metrics) {
+      const { error } = await db.from("post_metrics").upsert({ content_item_id: contentId, workspace_id: workspaceId, metrics, source: metrics.source ?? "assistente", updated_at: new Date().toISOString() }, { onConflict: "content_item_id" });
+      if (error) throw new Error(error.message);
+    },
+    async updateProfile(p, pillars) {
+      const cur = await db.from("creator_profiles").select("tone").eq("workspace_id", workspaceId).single();
+      if (cur.error) throw new Error(cur.error.message);
+      const tone = { ...((cur.data.tone ?? {}) as Record<string, unknown>), kind: p.kind ?? "pessoal", business: p.business ?? null, extras: p.extras ?? null };
+      const up = await db.from("creator_profiles").update({
+        display_name: p.displayName, handle: p.handle, positioning: p.positioning, signature: p.signature, closing_phrase: p.closingPhrase, voice_rules: p.voiceRules, tone, updated_at: new Date().toISOString(),
+      }).eq("workspace_id", workspaceId);
+      if (up.error) throw new Error(up.error.message);
+      if (pillars) {
+        // pilares novos substituem os antigos (conteúdos antigos guardam o slug como texto)
+        const del = await db.from("content_pillars").delete().eq("workspace_id", workspaceId);
+        if (del.error) throw new Error(del.error.message);
+        const ins = await db.from("content_pillars").insert(pillars.map((x) => ({ workspace_id: workspaceId, slug: x.slug, name: x.name, target_percent: x.targetPercent })));
+        if (ins.error) throw new Error(ins.error.message);
+      }
+    },
+    async realCases() {
+      const { data, error } = await db.from("casos_reais").select("id, cliente_segmento, problema, resultado, autorizacao, midia_disponivel").eq("workspace_id", workspaceId).order("created_at", { ascending: false }).limit(50);
+      if (error) throw new Error(error.message);
+      return (data ?? []) as RealCase[];
+    },
+    async saveRealCase(c) {
+      const row = { cliente_segmento: c.cliente_segmento, problema: c.problema, resultado: c.resultado, autorizacao: c.autorizacao, midia_disponivel: c.midia_disponivel, updated_at: new Date().toISOString() };
+      if (c.id) {
+        const { data, error } = await db.from("casos_reais").update(row).eq("workspace_id", workspaceId).eq("id", c.id).select("id").maybeSingle();
+        if (error) throw new Error(error.message);
+        if (!data) throw new Error("caso não encontrado neste perfil");
+        return data.id as string;
+      }
+      const { data, error } = await db.from("casos_reais").insert({ workspace_id: workspaceId, ...row }).select("id").single();
+      if (error) throw new Error(error.message);
+      return data.id as string;
+    },
+    async proofs() {
+      const { data, error } = await db.from("provas_filmaveis").select("descricao, status").eq("workspace_id", workspaceId).order("created_at");
+      if (error) throw new Error(error.message);
+      return (data ?? []) as FilmableProof[];
+    },
+    async saveProof(p) {
+      const { error } = await db.from("provas_filmaveis").upsert({ workspace_id: workspaceId, descricao: p.descricao, status: p.status, updated_at: new Date().toISOString() }, { onConflict: "workspace_id,descricao" });
+      if (error) throw new Error(error.message);
+    },
   };
   return store;
+}
+
+const MAX_PROFILES = 10;
+
+/** Mesmo que a função create_profile do banco, feito pelo conector (dono = pessoa do link). */
+async function insertProfile(db: SupabaseClient, userId: string, np: NewProfile): Promise<string> {
+  const owned = await db.from("workspaces").select("id", { count: "exact", head: true }).eq("created_by", userId).is("deleted_at", null);
+  if (owned.error) throw new Error(owned.error.message);
+  if ((owned.count ?? 0) >= MAX_PROFILES) throw new Error(`limite de ${MAX_PROFILES} perfis`);
+  const id = crypto.randomUUID();
+  const ws = await db.from("workspaces").insert({ id, name: np.name, slug: `ws-${id.replace(/-/g, "")}`, created_by: userId });
+  if (ws.error) throw new Error(ws.error.message);
+  const p = np.profile;
+  const steps = [
+    () => db.from("workspace_members").insert({ workspace_id: id, user_id: userId, role: "owner" }),
+    () => db.from("creator_profiles").insert({
+      workspace_id: id, display_name: p.displayName, handle: p.handle, positioning: p.positioning, signature: p.signature, closing_phrase: p.closingPhrase, voice_rules: p.voiceRules,
+      tone: { kind: p.kind ?? "pessoal", business: p.business ?? null, extras: p.extras ?? null },
+    }),
+    () => db.from("content_pillars").insert(np.pillars.map((x) => ({ workspace_id: id, slug: x.slug, name: x.name, target_percent: x.targetPercent }))),
+  ];
+  try {
+    for (const step of steps) {
+      const r = await step();
+      if (r.error) throw new Error(r.error.message);
+    }
+    const rt = await db.from("routines").insert({ workspace_id: id, name: "Rotina padrão" }).select("id").single();
+    if (rt.error) throw new Error(rt.error.message);
+    const blocks = await db.from("routine_blocks").insert(np.routine.map((b) => ({
+      id: b.id, workspace_id: id, routine_id: rt.data.id, weekday: b.weekday, start_time: b.startTime, title: b.title, content_hint: b.contentHint, optional: b.optional, default_format: b.format,
+    })));
+    if (blocks.error) throw new Error(blocks.error.message);
+    await db.from("audit_logs").insert({ workspace_id: id, actor: userId, action: "workspace.create_profile.mcp" });
+    return id;
+  } catch (e) {
+    // sem perfil pela metade: apaga o que entrou (cascade)
+    await db.from("workspaces").delete().eq("id", id);
+    throw e;
+  }
 }
 
 /** Perfis em que a pessoa do link pode escrever (dono/editor); cada chamada usa só os dados do perfil escolhido. */
@@ -208,6 +325,7 @@ export function supabaseMcpContext(db: SupabaseClient, userId: string, defaultPr
     async store(profileId) {
       return /^[0-9a-f-]{36}$/i.test(profileId) && (await canWrite(profileId)) ? supabaseMcpStore(db, profileId, userId) : null;
     },
+    createProfile: (np) => insertProfile(db, userId, np),
   };
 }
 

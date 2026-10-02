@@ -6,6 +6,59 @@ export interface PostMetrics {
   shares: number;
   saves: number;
   updatedAt: string;
+  /** taxa de conclusão / retenção média, em % (0–100) */
+  completionRate?: number;
+  /** tempo médio assistido, em segundos */
+  avgWatchSeconds?: number;
+  followersGained?: number;
+  /** de onde vieram os números (digitado no app, Metricool pelo assistente…) */
+  source?: string;
+}
+
+/** Números extras (opcionais): retenção, tempo assistido e seguidores ganhos. */
+export const EXTRA_METRIC_FIELDS = ["completionRate", "avgWatchSeconds", "followersGained"] as const;
+export type ExtraMetricField = (typeof EXTRA_METRIC_FIELDS)[number];
+export const EXTRA_METRIC_LABEL: Record<ExtraMetricField, string> = {
+  completionRate: "Retenção / conclusão (%)", avgWatchSeconds: "Tempo médio assistido (s)", followersGained: "Seguidores ganhos",
+};
+
+/** "45%", "12,5", "12.5s" → número ≥ 0 com decimais; vazio → undefined; ilegível → null. */
+export function parseDecimal(raw: string): number | null | undefined {
+  const t = raw.trim().toLowerCase().replace(/\s+/g, "").replace(/[%s]$/, "");
+  if (!t) return undefined;
+  if (!/^\d+([.,]\d+)?$/.test(t)) return null;
+  const n = Number(t.replace(",", "."));
+  return Number.isFinite(n) ? Math.min(MAX_METRIC, n) : null;
+}
+
+/** Um post com o que foi usado nele (para descobrir o que funciona). */
+export interface RankedPost {
+  hook: string | null;
+  format: string;
+  /** hora de Brasília em que foi postado (0–23) */
+  hour: number | null;
+  music: string | null;
+  metrics: PostMetrics;
+}
+
+export interface RankRow { key: string; posts: number; avgViews: number; avgSharesPer1k: number; avgCompletion: number | null }
+
+/** Top N por média de visualizações (desempate: envios a cada mil) para uma característica dos posts. */
+export function rankBy(posts: readonly RankedPost[], pick: (p: RankedPost) => string | null, top = 3): RankRow[] {
+  const groups = new Map<string, RankedPost[]>();
+  for (const p of posts) {
+    const k = pick(p);
+    if (k) groups.set(k, [...(groups.get(k) ?? []), p]);
+  }
+  return [...groups.entries()].map(([key, xs]) => {
+    const comp = xs.map((x) => x.metrics.completionRate).filter((v): v is number => typeof v === "number");
+    return {
+      key, posts: xs.length,
+      avgViews: Math.round(xs.reduce((a, x) => a + x.metrics.views, 0) / xs.length),
+      avgSharesPer1k: xs.reduce((a, x) => a + sharesPer1k(x.metrics), 0) / xs.length,
+      avgCompletion: comp.length ? comp.reduce((a, v) => a + v, 0) / comp.length : null,
+    };
+  }).sort((a, b) => b.avgViews - a.avgViews || b.avgSharesPer1k - a.avgSharesPer1k).slice(0, top);
 }
 
 export const METRIC_FIELDS = ["views", "likes", "comments", "shares", "saves"] as const;

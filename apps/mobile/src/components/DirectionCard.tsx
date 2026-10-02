@@ -1,5 +1,5 @@
 import { Text, View } from "react-native";
-import { MOOD_LABEL, PLATFORM_LABEL, takeInstructions, trackById, type Direction } from "@postai/domain";
+import { MOOD_LABEL, PLATFORM_LABEL, takeInstructions, trackById, type Direction, type DirectionTake } from "@postai/domain";
 import { Card, Section, colors, s } from "../ui";
 
 const sec = (n: number) => `${Number.isInteger(n) ? n : n.toFixed(1)}s`;
@@ -55,6 +55,24 @@ export function DirectionCard({ d }: { d: Direction }) {
           ))}
         </Card>
       ) : null}
+    </>
+  );
+}
+
+/** Cena de apoio dirigida (B-roll da empresa): cada take com a instrução de filmagem. */
+export function ScenesCard({ takes }: { takes: readonly DirectionTake[] }) {
+  return (
+    <>
+      <Section>{`Cenas para filmar (${takes.length})`}</Section>
+      {[...takes].sort((a, b) => a.ordem - b.ordem).map((t) => (
+        <Card key={t.ordem} style={{ gap: 4 }} testID={`scene-take-${t.ordem}`}>
+          <Text style={{ fontWeight: "900", color: colors.ink }}>{`${t.ordem}. ${t.nome} · ${sec(t.duracao_segundos)}`}</Text>
+          {t.fala_exata.trim() ? <Text style={s.body}>{`“${t.fala_exata}”`}</Text> : null}
+          {takeInstructions(t).map((i) => (
+            <Text key={i.label} style={s.muted}><Text style={{ fontWeight: "800" }}>{`${i.label}: `}</Text>{i.value}</Text>
+          ))}
+        </Card>
+      ))}
     </>
   );
 }

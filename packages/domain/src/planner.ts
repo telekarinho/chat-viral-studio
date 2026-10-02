@@ -103,6 +103,8 @@ export function buildDayPlan(input: {
   utcOffsetMinutes?: number;
   /** servidor: o dia é dado como AAAA-MM-DD (não depende do fuso de quem roda) */
   dateKey?: string;
+  /** empresa: a cena de apoio (prova visual) também vira conteúdo, com lista de takes dirigida */
+  directedBroll?: boolean;
 }): DayPlan {
   const dateKey = input.dateKey ?? toLocalDateKey(input.date);
   const weekday = input.weekdayOverride ?? (input.dateKey ? new Date(`${input.dateKey}T12:00:00Z`).getUTCDay() : input.date.getDay());
@@ -117,6 +119,11 @@ export function buildDayPlan(input: {
       history.push(pillar.slug);
       contentItemId = input.newId();
       contentItems.push({ id: contentItemId, workspaceId: input.workspaceId, date: dateKey, format: b.format, pillarSlug: pillar.slug, title: FORMAT_LABEL[b.format], status: "planned", scheduledFor });
+    } else if (b.format === "broll" && input.directedBroll && !b.optional) {
+      // prova visual da empresa: conteúdo sem fala, no pilar de demonstração quando existir (não conta no rodízio de temas)
+      contentItemId = input.newId();
+      const slug = input.pillars.find((p) => p.slug === "demonstracao")?.slug ?? input.pillars[0]?.slug ?? "";
+      contentItems.push({ id: contentItemId, workspaceId: input.workspaceId, date: dateKey, format: "broll", pillarSlug: slug, title: b.title, status: "planned", scheduledFor });
     }
     return {
       id: input.newId(),

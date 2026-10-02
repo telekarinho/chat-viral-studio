@@ -54,6 +54,23 @@ describe.skipIf(!(url && anon && service))("conector MCP (Supabase local)", () =
     expect(await tool("criar_plano", { data_inicio: "2027-03-01", dias: 1 })).not.toContain("plano criado agora"); // não duplica
     expect(await tool("registrar_melhoria", { titulo: "Teste de melhoria", descricao: "problema, proposta e aceite", prioridade: "baixa" })).toContain("Melhoria registrada");
     expect((await user.from("melhorias").select("titulo, status").eq("workspace_id", ws)).data).toEqual([{ titulo: "Teste de melhoria", status: "nova" }]);
+    // perfil novo criado pelo Claude: workspace do mesmo dono, isolado, com pilares e rotina; casos reais no perfil certo
+    const novo = await tool("criar_perfil", { perfil: {
+      nome: "Clube do Natural", tipo: "empresa", posicionamento: "Natural sem complicar.", voz: ["simples"], assinatura: "Clube do Natural",
+      dores: ["não sabe o que é natural"], ctas: ["Me chama no direct."], pilares: [{ nome: "Educação", meta: 70 }, { nome: "Histórias", meta: 30 }],
+    } });
+    const newId = /id ([0-9a-f-]{36})/.exec(novo)![1]!;
+    expect((await user.from("workspace_members").select("role").eq("workspace_id", newId)).data).toEqual([{ role: "owner" }]);
+    expect((await user.from("content_pillars").select("slug").eq("workspace_id", newId).order("slug")).data).toEqual([{ slug: "educacao" }, { slug: "historias" }]);
+    expect((await user.from("routine_blocks").select("id").eq("workspace_id", newId)).data!.length).toBeGreaterThan(0);
+    expect(await tool("listar_perfis", {})).toContain(`id ${newId} · Clube do Natural · empresa`);
+    expect(await tool("cadastrar_caso_real", { profile_id: newId, cliente_segmento: "mercearia", problema: "cliente não confia", resultado: "voltou a comprar", autorizacao: "dona autorizou" })).toContain("liberado");
+    expect((await user.from("casos_reais").select("cliente_segmento").eq("workspace_id", newId)).data).toEqual([{ cliente_segmento: "mercearia" }]);
+    expect((await user.from("casos_reais").select("id").eq("workspace_id", ws)).data).toEqual([]);
+    expect(await tool("atualizar_perfil", { profile_id: newId, campos: { metas: "100 leads" } })).toContain("Perfil atualizado");
+    const tone = (await user.from("creator_profiles").select("tone").eq("workspace_id", newId).single()).data!.tone as { kind: string; extras: { goals: string } };
+    expect(tone).toMatchObject({ kind: "empresa", extras: { goals: "100 leads" } });
+
     const box = await user.from("assistant_drafts").select("draft, consumed_at").eq("content_item_id", contentId);
     expect(box.data).toHaveLength(1);
     expect(box.data![0]!.draft.title).toBe(draft.title);

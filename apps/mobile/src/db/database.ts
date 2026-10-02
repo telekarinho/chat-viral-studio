@@ -54,6 +54,8 @@ export function getDb(): Promise<SQLite.SQLiteDatabase> {
       if (!ccols.some((c) => c.name === "metrics")) await db.execAsync("ALTER TABLE content_items ADD COLUMN metrics TEXT");
       // v6: quando e onde foi postado (o agente usa para achar o melhor horário)
       if (!ccols.some((c) => c.name === "posted")) await db.execAsync("ALTER TABLE content_items ADD COLUMN posted TEXT");
+      // v7: takes dirigidos da cena de apoio (B-roll da empresa), escritos pelo assistente
+      if (!ccols.some((c) => c.name === "cenas")) await db.execAsync("ALTER TABLE content_items ADD COLUMN cenas TEXT");
       return db;
     })();
   }
