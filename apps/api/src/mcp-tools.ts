@@ -1,6 +1,6 @@
 import {
-  buildManualPrompt, checkRepetition, describeAvoidance, directorIssues, engagementRate, finalizeDraft, fingerprintsFor, mentionsPrice, parseDraft,
-  pendingClaimsIn, projectBrief, sharesPer1k,
+  buildManualPrompt, checkRepetition, describeRepetition, directorIssues, engagementRate, finalizeDraft, fingerprintsFor, mentionsPrice, parseDraft,
+  normalizeText, pendingClaimsIn, projectBrief, sharesPer1k,
   type ContentDraft, type CreatorProfile, type EditChoices, type Fingerprint, type PostMetrics, type ProjectInfo,
 } from "@postai/domain";
 
@@ -33,8 +33,8 @@ export interface McpStore {
   planDays(startDate: string, days: number): Promise<{ date: string; created: boolean; items: McpContent[] }[]>;
   /** pilares com roteiro nos últimos N dias (contagem por slug) */
   pillarCounts(days: number): Promise<Record<string, number>>;
-  /** assuntos (topic) dos roteiros dos últimos N dias */
-  recentTopics(days: number): Promise<string[]>;
+  /** assuntos (topic) dos roteiros dos últimos N dias e de qual conteúdo */
+  recentTopics(days: number): Promise<{ topic: string; contentItemId: string | null }[]>;
   saveImprovement(i: { titulo: string; descricao: string; prioridade: string }): Promise<string>;
   improvements(): Promise<McpImprovement[]>;
 }
@@ -147,8 +147,8 @@ export async function blockedTopics(store: McpStore): Promise<string> {
   const topics = await store.recentTopics(TOPIC_WINDOW_DAYS);
   if (!topics.length) return "";
   const counts = new Map<string, number>();
-  for (const t of topics) {
-    const k = t.trim().toLowerCase();
+  for (const { topic } of topics) {
+    const k = topic.trim().toLowerCase();
     if (k) counts.set(k, (counts.get(k) ?? 0) + 1);
   }
   const list = [...counts.entries()].sort((a, b) => b[1] - a[1]).map(([t, n]) => `- ${t}${n > 1 ? ` (${n}x)` : ""}`);
@@ -227,8 +227,20 @@ export async function callProfileTool(store: McpStore, name: string, args: Json,
     if (biz?.noPrice && mentionsPrice(draft)) return text("O roteiro fala preço/valor. Neste perfil de empresa preço não aparece no vídeo: reescreva sem preço.", true);
     const unproven = biz ? pendingClaimsIn(`${draft.script} ${draft.cta}`, biz.pendingClaims ?? []) : [];
     if (unproven.length) return text(`O roteiro afirma algo ainda sem prova: ${unproven.join("; ")}. Reescreva sem isso.`, true);
-    const report = checkRepetition(fingerprintsFor(draft), (await store.recentFingerprints()).filter((f) => f.contentItemId !== content.id));
-    if (report.repeated) return text(`Parece repetir conteúdo recente. Mude isto e salve de novo:\n- ${describeAvoidance(report).join("\n- ")}`, true);
+    // memória de repetição + assuntos bloqueados (14 dias), sem contar o próprio conteúdo (reescrever é permitido)
+    const [fps, topics] = await Promise.all([store.recentFingerprints(), store.recentTopics(TOPIC_WINDOW_DAYS)]);
+    const recent: Fingerprint[] = [...fps, ...topics.map((t) => ({ type: "topic" as const, value: normalizeText(t.topic), contentItemId: t.contentItemId }))]
+      .filter((f) => f.contentItemId !== content.id);
+    const report = checkRepetition(fingerprintsFor(draft), recent);
+    if (report.repeated) {
+      const ids = [...new Set(report.hits.map((h) => h.previousContentId).filter((x): x is string => Boolean(x)))];
+      const olds = new Map((await Promise.all(ids.map((i) => store.content(i)))).filter((c): c is McpContent => Boolean(c)).map((c) => [c.id, c]));
+      const label = (i: string) => {
+        const c = olds.get(i);
+        return c ? `"${c.title}" · ${FORMAT_LABEL[c.format] ?? c.format} de ${c.date} · id ${c.id}` : undefined;
+      };
+      return text(`Parece repetir conteúdo recente. Mude isto e salve de novo:\n- ${describeRepetition(report, label).join("\n- ")}`, true);
+    }
     await store.saveDraft(content.id, draft);
     return text(`Roteiro "${draft.title}" enviado para o Post.ai. Ele aparece no app ao abrir este conteúdo.`);
   }

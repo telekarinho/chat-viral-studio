@@ -15,6 +15,8 @@ export interface RepetitionHit {
   candidate: string;
   previous: string;
   similarity: number;
+  /** conteúdo recente com que colidiu (para a mensagem dizer qual) */
+  previousContentId?: string | null;
 }
 
 export interface RepetitionReport {
@@ -120,7 +122,7 @@ export function checkRepetition(candidate: readonly Fingerprint[], recent: reado
     }
     if (c.type === "cta") {
       const same = recent.filter((r) => r.type === "cta" && similarity(r.value, c.value) >= 0.8);
-      if (same.length >= config.ctaMaxRepeats) hits.push({ type: "cta", candidate: c.value, previous: same[0]!.value, similarity: 1 });
+      if (same.length >= config.ctaMaxRepeats) hits.push({ type: "cta", candidate: c.value, previous: same[0]!.value, similarity: 1, previousContentId: same[0]!.contentItemId ?? null });
       continue;
     }
     const threshold = config.thresholds[c.type];
@@ -129,12 +131,20 @@ export function checkRepetition(candidate: readonly Fingerprint[], recent: reado
     let best: RepetitionHit | null = null;
     for (const r of recent) {
       if (!comparable.includes(r.type)) continue;
-      const sim = similarity(c.value, r.value);
-      if (sim >= threshold && (!best || sim > best.similarity)) best = { type: c.type, candidate: c.value, previous: r.value, similarity: sim };
+      const sim = c.type === "topic" ? Math.max(similarity(c.value, r.value), topicContainment(c.value, r.value)) : similarity(c.value, r.value);
+      if (sim >= threshold && (!best || sim > best.similarity)) best = { type: c.type, candidate: c.value, previous: r.value, similarity: sim, previousContentId: r.contentItemId ?? null };
     }
     if (best) hits.push(best);
   }
   return { repeated: hits.length > 0, hits };
+}
+
+/** Assunto é tema, não frase: "Aos 40" está dentro de "chegar aos 40 sem ter tudo resolvido". */
+function topicContainment(a: string, b: string): number {
+  const ta = contentTokens(a);
+  const tb = contentTokens(b);
+  const [small, big] = ta.length <= tb.length ? [ta, new Set(tb)] : [tb, new Set(ta)];
+  return small.length > 0 && small.every((w) => big.has(w)) ? 0.9 : 0;
 }
 
 function uniqueByItem(fps: Fingerprint[]): Fingerprint[] {
@@ -149,7 +159,7 @@ function uniqueByItem(fps: Fingerprint[]): Fingerprint[] {
 
 const TYPE_LABEL: Record<FingerprintType, string> = {
   topic: "assunto",
-  phrase: "frase",
+  phrase: "frase-chave",
   metaphor: "metáfora",
   hook: "gancho",
   cta: "CTA",
@@ -160,6 +170,18 @@ const TYPE_LABEL: Record<FingerprintType, string> = {
 export function describeAvoidance(report: RepetitionReport): string[] {
   const types = [...new Set(report.hits.map((h) => h.type))];
   return types.map((t) => `Evitei repetir ${TYPE_LABEL[t]} usado recentemente.`);
+}
+
+/**
+ * Mensagem específica para quem escreve o roteiro: campo, o trecho novo, o trecho antigo e de qual conteúdo.
+ * `contentLabel` traduz o id do conteúdo antigo (ex.: "Pensamento do Dia de 01/10").
+ */
+export function describeRepetition(report: RepetitionReport, contentLabel: (id: string) => string | undefined = () => undefined): string[] {
+  return report.hits.map((h) => {
+    if (h.type === "structure") return `estrutura "${h.candidate}" usada demais nos últimos conteúdos — escolha outra.`;
+    const from = h.previousContentId ? contentLabel(h.previousContentId) : undefined;
+    return `${TYPE_LABEL[h.type]}: "${h.candidate}" parece com "${h.previous}"${from ? ` (de ${from})` : ""}.`;
+  });
 }
 
 /** Instructions appended to the prompt when a candidate was rejected. */

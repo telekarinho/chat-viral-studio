@@ -180,7 +180,7 @@ function checkRepetition(candidate, recent, config = DEFAULT_REPETITION_CONFIG) 
     }
     if (c.type === "cta") {
       const same = recent.filter((r) => r.type === "cta" && similarity(r.value, c.value) >= 0.8);
-      if (same.length >= config.ctaMaxRepeats) hits.push({ type: "cta", candidate: c.value, previous: same[0].value, similarity: 1 });
+      if (same.length >= config.ctaMaxRepeats) hits.push({ type: "cta", candidate: c.value, previous: same[0].value, similarity: 1, previousContentId: same[0].contentItemId ?? null });
       continue;
     }
     const threshold = config.thresholds[c.type];
@@ -188,12 +188,18 @@ function checkRepetition(candidate, recent, config = DEFAULT_REPETITION_CONFIG) 
     let best = null;
     for (const r of recent) {
       if (!comparable.includes(r.type)) continue;
-      const sim = similarity(c.value, r.value);
-      if (sim >= threshold && (!best || sim > best.similarity)) best = { type: c.type, candidate: c.value, previous: r.value, similarity: sim };
+      const sim = c.type === "topic" ? Math.max(similarity(c.value, r.value), topicContainment(c.value, r.value)) : similarity(c.value, r.value);
+      if (sim >= threshold && (!best || sim > best.similarity)) best = { type: c.type, candidate: c.value, previous: r.value, similarity: sim, previousContentId: r.contentItemId ?? null };
     }
     if (best) hits.push(best);
   }
   return { repeated: hits.length > 0, hits };
+}
+function topicContainment(a, b) {
+  const ta = contentTokens(a);
+  const tb = contentTokens(b);
+  const [small, big] = ta.length <= tb.length ? [ta, new Set(tb)] : [tb, new Set(ta)];
+  return small.length > 0 && small.every((w) => big.has(w)) ? 0.9 : 0;
 }
 function uniqueByItem(fps) {
   const seen = /* @__PURE__ */ new Set();
@@ -206,15 +212,18 @@ function uniqueByItem(fps) {
 }
 var TYPE_LABEL = {
   topic: "assunto",
-  phrase: "frase",
+  phrase: "frase-chave",
   metaphor: "met\xE1fora",
   hook: "gancho",
   cta: "CTA",
   structure: "estrutura"
 };
-function describeAvoidance(report) {
-  const types = [...new Set(report.hits.map((h) => h.type))];
-  return types.map((t) => `Evitei repetir ${TYPE_LABEL[t]} usado recentemente.`);
+function describeRepetition(report, contentLabel = () => void 0) {
+  return report.hits.map((h) => {
+    if (h.type === "structure") return `estrutura "${h.candidate}" usada demais nos \xFAltimos conte\xFAdos \u2014 escolha outra.`;
+    const from = h.previousContentId ? contentLabel(h.previousContentId) : void 0;
+    return `${TYPE_LABEL[h.type]}: "${h.candidate}" parece com "${h.previous}"${from ? ` (de ${from})` : ""}.`;
+  });
 }
 function round(n) {
   return Math.round(n * 100) / 100;
@@ -676,9 +685,13 @@ var PRODUCTION_MODES = {
 function pendingClaimsIn(text3, pendingClaims) {
   const t = norm(text3);
   const hits = pendingClaims.filter((c) => {
-    const words2 = norm(c).split(" ").filter((w) => w.length > 3 || /\d/.test(w));
-    const key = words2.filter((w) => /\d/.test(w));
-    if (key.length) return key.some((k) => t.includes(k.replace(/\./g, "")) || t.includes(k));
+    const all = norm(c).split(" ");
+    const words2 = all.filter((w) => w.length > 3 || /\d/.test(w));
+    const numbered = all.flatMap((w, i) => /\d/.test(w) && all[i + 1] ? [{ n: w.replace(/\./g, ""), unit: all[i + 1].slice(0, 5) }] : []);
+    if (numbered.length) {
+      const flat = t.replace(/(\d)\.(\d)/g, "$1$2");
+      return numbered.some(({ n, unit }) => new RegExp(`(^| )${n} (de )?${unit}`).test(flat));
+    }
     const found = words2.filter((w) => t.includes(w)).length;
     return found >= 2 && found / words2.length >= 0.5;
   });
@@ -826,8 +839,8 @@ async function blockedTopics(store) {
   const topics = await store.recentTopics(TOPIC_WINDOW_DAYS);
   if (!topics.length) return "";
   const counts = /* @__PURE__ */ new Map();
-  for (const t of topics) {
-    const k = t.trim().toLowerCase();
+  for (const { topic } of topics) {
+    const k = topic.trim().toLowerCase();
     if (k) counts.set(k, (counts.get(k) ?? 0) + 1);
   }
   const list = [...counts.entries()].sort((a, b) => b[1] - a[1]).map(([t, n]) => `- ${t}${n > 1 ? ` (${n}x)` : ""}`);
@@ -909,9 +922,19 @@ ${lines.join("\n")}`);
     if (biz?.noPrice && mentionsPrice(draft)) return text2("O roteiro fala pre\xE7o/valor. Neste perfil de empresa pre\xE7o n\xE3o aparece no v\xEDdeo: reescreva sem pre\xE7o.", true);
     const unproven = biz ? pendingClaimsIn(`${draft.script} ${draft.cta}`, biz.pendingClaims ?? []) : [];
     if (unproven.length) return text2(`O roteiro afirma algo ainda sem prova: ${unproven.join("; ")}. Reescreva sem isso.`, true);
-    const report = checkRepetition(fingerprintsFor(draft), (await store.recentFingerprints()).filter((f) => f.contentItemId !== content.id));
-    if (report.repeated) return text2(`Parece repetir conte\xFAdo recente. Mude isto e salve de novo:
-- ${describeAvoidance(report).join("\n- ")}`, true);
+    const [fps, topics] = await Promise.all([store.recentFingerprints(), store.recentTopics(TOPIC_WINDOW_DAYS)]);
+    const recent = [...fps, ...topics.map((t) => ({ type: "topic", value: normalizeText(t.topic), contentItemId: t.contentItemId }))].filter((f) => f.contentItemId !== content.id);
+    const report = checkRepetition(fingerprintsFor(draft), recent);
+    if (report.repeated) {
+      const ids = [...new Set(report.hits.map((h) => h.previousContentId).filter((x) => Boolean(x)))];
+      const olds = new Map((await Promise.all(ids.map((i) => store.content(i)))).filter((c) => Boolean(c)).map((c) => [c.id, c]));
+      const label = (i) => {
+        const c = olds.get(i);
+        return c ? `"${c.title}" \xB7 ${FORMAT_LABEL2[c.format] ?? c.format} de ${c.date} \xB7 id ${c.id}` : void 0;
+      };
+      return text2(`Parece repetir conte\xFAdo recente. Mude isto e salve de novo:
+- ${describeRepetition(report, label).join("\n- ")}`, true);
+    }
     await store.saveDraft(content.id, draft);
     return text2(`Roteiro "${draft.title}" enviado para o Post.ai. Ele aparece no app ao abrir este conte\xFAdo.`);
   }
@@ -1154,9 +1177,9 @@ function supabaseMcpStore(db, workspaceId, userId) {
       return counts;
     },
     async recentTopics(days) {
-      const { data, error } = await db.from("scripts").select("draft").eq("workspace_id", workspaceId).gte("created_at", daysAgo(days)).order("created_at", { ascending: false }).limit(60);
+      const { data, error } = await db.from("scripts").select("draft, content_item_id").eq("workspace_id", workspaceId).gte("created_at", daysAgo(days)).order("created_at", { ascending: false }).limit(60);
       if (error) throw new Error(error.message);
-      return (data ?? []).map((r) => String(r.draft?.topic ?? "")).filter(Boolean);
+      return (data ?? []).map((r) => ({ topic: String(r.draft?.topic ?? ""), contentItemId: r.content_item_id ?? null })).filter((r) => r.topic);
     },
     async saveImprovement(i) {
       const { data, error } = await db.from("melhorias").insert({ workspace_id: workspaceId, user_id: userId, ...i }).select("id").single();

@@ -34,7 +34,10 @@ function fakeStore(opts: { profile?: typeof RODRIGO_PROFILE; recent?: ContentDra
     readScript: async () => ({ draft: raw, edit: null, metrics: null, postedAt: null, pendingFromAssistant: true }),
     planDays: async (start, days) => Array.from({ length: days }, (_, i) => ({ date: i === 0 ? start : `dia+${i}`, created: i > 0, items: i === 0 && own ? [own] : [] })),
     pillarCounts: async () => ({ familia: 3 }),
-    recentTopics: async () => ["treinar sem vontade", "Treinar sem vontade", "cansaço não é desistir"],
+    recentTopics: async () => [
+      { topic: "treinar sem vontade", contentItemId: "a" }, { topic: "Treinar sem vontade", contentItemId: "b" },
+      { topic: "chegar aos 40 sem ter tudo resolvido", contentItemId: "c" },
+    ],
     saveImprovement: async (i) => { improvements.push(i); return "m1"; },
     improvements: async () => improvements.map((m) => ({ id: "m1", titulo: m.titulo, prioridade: "alta", status: "nova", issueNumber: null, createdAt: "x" })),
   };
@@ -122,6 +125,13 @@ describe("conector MCP do Post.ai (diretor de gravações)", () => {
     const ok = await call(ctx, "salvar_roteiro", { content_id: ID, roteiro: draft });
     expect(textOf(ok)).toContain("enviado para o Post.ai");
     expect(pessoal.saved[0]!.draft.script.trim().endsWith("E se der certo!")).toBe(true);
+  });
+
+  it("assunto bloqueado por tema ('Aos 40') e erro diz qual conteúdo, campo e trecho", async () => {
+    const { ctx, pessoal } = fakeCtx();
+    const r = textOf(await call(ctx, "salvar_roteiro", { content_id: ID, roteiro: { ...draft, topic: "Aos 40" } }));
+    expect(r).toContain('assunto: "aos 40" parece com "chegar aos 40 sem ter tudo resolvido"');
+    expect(pessoal.saved).toHaveLength(0);
   });
 
   it("empresa: roteiro com preço é recusado", async () => {

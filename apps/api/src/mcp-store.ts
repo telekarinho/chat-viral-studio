@@ -107,9 +107,11 @@ export function supabaseMcpStore(db: SupabaseClient, workspaceId: string, userId
       return counts;
     },
     async recentTopics(days) {
-      const { data, error } = await db.from("scripts").select("draft").eq("workspace_id", workspaceId).gte("created_at", daysAgo(days)).order("created_at", { ascending: false }).limit(60);
+      const { data, error } = await db.from("scripts").select("draft, content_item_id").eq("workspace_id", workspaceId).gte("created_at", daysAgo(days)).order("created_at", { ascending: false }).limit(60);
       if (error) throw new Error(error.message);
-      return (data ?? []).map((r) => String((r.draft as { topic?: string } | null)?.topic ?? "")).filter(Boolean);
+      return (data ?? [])
+        .map((r) => ({ topic: String((r.draft as { topic?: string } | null)?.topic ?? ""), contentItemId: (r.content_item_id as string | null) ?? null }))
+        .filter((r) => r.topic);
     },
     async saveImprovement(i) {
       const { data, error } = await db.from("melhorias").insert({ workspace_id: workspaceId, user_id: userId, ...i }).select("id").single();

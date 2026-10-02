@@ -167,10 +167,14 @@ export function commercialBlockers(meta: ClipMeta | null | undefined, target: Us
 export function pendingClaimsIn(text: string, pendingClaims: readonly string[]): string[] {
   const t = norm(text);
   const hits = pendingClaims.filter((c) => {
-    const words = norm(c).split(" ").filter((w) => w.length > 3 || /\d/.test(w));
-    const key = words.filter((w) => /\d/.test(w));
-    // números (20 anos, 4.000 máquinas) bastam; sem número, exige 2+ palavras e metade da alegação
-    if (key.length) return key.some((k) => t.includes(k.replace(/\./g, "")) || t.includes(k));
+    const all = norm(c).split(" ");
+    const words = all.filter((w) => w.length > 3 || /\d/.test(w));
+    // com número: o número E a unidade logo depois dele ("20 anos", "4.000 máquinas") — "20 segundos" não é "20 anos de mercado"
+    const numbered = all.flatMap((w, i) => (/\d/.test(w) && all[i + 1] ? [{ n: w.replace(/\./g, ""), unit: all[i + 1]!.slice(0, 5) }] : []));
+    if (numbered.length) {
+      const flat = t.replace(/(\d)\.(\d)/g, "$1$2");
+      return numbered.some(({ n, unit }) => new RegExp(`(^| )${n} (de )?${unit}`).test(flat));
+    }
     const found = words.filter((w) => t.includes(w)).length;
     return found >= 2 && found / words.length >= 0.5;
   });

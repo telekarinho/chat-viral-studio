@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
-  RODRIGO_PILLARS, RODRIGO_PROFILE, applyTaskAction, availablePresets, buildDayPlan, buildManualPrompt, canDeleteLocal, checkRepetition,
+  RODRIGO_PILLARS, RODRIGO_PROFILE, applyTaskAction, availablePresets, buildDayPlan, buildManualPrompt, canDeleteLocal, checkRepetition, describeRepetition,
   computeProgress, contentDraftJsonSchema, finalizeDraft, fingerprintsFor, generateLocal, initialTeleprompter, nextTask, parseDraft,
   parseManualResponse, pickFormat, pickNextPillar, pillarBalance, recoverAfterRestart, rodrigoRoutine, similarity, teleprompterReducer,
   validatePillarTargets, applySyncEvent, isDue, type MediaRecord, type RecordingTask, type Fingerprint,
@@ -153,6 +153,23 @@ describe("anti-repetição", () => {
     expect(second.draft.topic).not.toBe(first.draft.topic);
     expect(second.report.repeated).toBe(false);
     expect(second.notices.join(" ")).toMatch(/Evitei repetir/);
+  });
+  it("tema sem assunto livre: usa assunto de outro tema em vez de repetir o bloqueado", () => {
+    const memory: Fingerprint[] = [];
+    for (let i = 0; i < 3; i++) {
+      const g = generateLocal({ profile: RODRIGO_PROFILE, pillarSlug: "academia", pillarName: "Academia", format: "main_video", eventText: null, recent: memory });
+      memory.push(...fingerprintsFor(g.draft).map((f) => ({ ...f, contentItemId: `a${i}` })));
+    }
+    const topics = memory.filter((f) => f.type === "topic").map((f) => f.value);
+    expect(new Set(topics).size).toBe(3);
+    const next = generateLocal({ profile: RODRIGO_PROFILE, pillarSlug: "academia", pillarName: "Academia", format: "thought", eventText: null, recent: memory });
+    expect(topics).not.toContain(next.draft.topic);
+    expect(next.notices.join(" ")).toMatch(/outro tema/);
+  });
+  it("assunto é comparado por tema: 'Aos 40' colide com 'chegar aos 40 sem ter tudo resolvido' e diz de onde", () => {
+    const r = checkRepetition([{ type: "topic", value: "aos 40" }], [{ type: "topic", value: "chegar aos 40 sem ter tudo resolvido", contentItemId: "x1" }]);
+    expect(r.hits[0]).toMatchObject({ type: "topic", previousContentId: "x1" });
+    expect(describeRepetition(r, (id) => (id === "x1" ? "Vídeo de 01/10" : undefined))[0]).toBe('assunto: "aos 40" parece com "chegar aos 40 sem ter tudo resolvido" (de Vídeo de 01/10).');
   });
   it("CTA e estrutura só contam quando excessivos", () => {
     const cta: Fingerprint = { type: "cta", value: "manda pra alguem que precisa ouvir isso hoje" };

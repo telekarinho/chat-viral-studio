@@ -25,24 +25,30 @@ export interface GenerationResult {
 export function generateLocal(input: LocalGenerateInput): GenerationResult {
   if (isBusiness(input.profile)) return generateBusinessLocal(input, input.profile.business);
   const seeds = LOCAL_BANK.filter((s) => s.pillar === input.pillarSlug);
-  const pool = seeds.length > 0 ? seeds : LOCAL_BANK;
+  // o tema primeiro; se os assuntos dele já foram usados, um assunto de outro tema (nunca repetir assunto bloqueado)
+  const pool = [...seeds, ...LOCAL_BANK.filter((s) => s.pillar !== input.pillarSlug)];
   const ctas = rotateCtas(input.recent);
-  const candidates: { draft: ContentDraft; report: RepetitionReport }[] = [];
+  const candidates: { draft: ContentDraft; report: RepetitionReport; seed: BankSeed }[] = [];
   const firstRejected: RepetitionReport[] = [];
 
   for (const seed of pool) {
     for (const cta of ctas) {
       const draft = finalizeDraft(fromSeed(seed, input, cta), input.profile);
       const report = checkRepetition(fingerprintsFor(draft), input.recent);
-      if (!report.repeated) return done(draft, report, candidates.length + 1, firstRejected);
-      candidates.push({ draft, report });
+      if (!report.repeated) {
+        const res = done(draft, report, candidates.length + 1, firstRejected);
+        if (seeds.length && seed.pillar !== input.pillarSlug) res.notices.push("Os assuntos offline deste tema já foram usados; usei um assunto de outro tema — peça um roteiro novo ao assistente se preferir.");
+        return res;
+      }
+      candidates.push({ draft, report, seed });
       if (firstRejected.length === 0) firstRejected.push(report);
     }
   }
-  // Everything was used recently: return the least repetitive and say so.
-  const best = candidates.sort((a, b) => a.report.hits.length - b.report.hits.length)[0]!;
+  // Everything was used recently: prefer a repeated hook/CTA over a repeated topic, and say so.
+  const topicHit = (r: RepetitionReport) => (r.hits.some((h) => h.type === "topic") ? 1 : 0);
+  const best = candidates.sort((a, b) => topicHit(a.report) - topicHit(b.report) || a.report.hits.length - b.report.hits.length)[0]!;
   const res = done(best.draft, best.report, candidates.length, firstRejected);
-  res.notices.push("Todo o banco offline deste pilar foi usado recentemente; revise o texto antes de gravar.");
+  res.notices.push("Todo o banco offline foi usado recentemente; revise o texto antes de gravar.");
   return res;
 }
 

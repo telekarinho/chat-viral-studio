@@ -41,6 +41,13 @@ describe("estúdio da fábrica — modos de produção", () => {
     expect(commercialBlockers(reviewed, "campanha", claims).join()).toMatch(/Alegação sem prova/);
     expect(pendingClaimsIn("Olha a textura desse milk-shake.", CONTROLPOT_PROFILE.business!.pendingClaims!)).toEqual([]);
   });
+
+  it("número só conta com a unidade da alegação: '20 segundos' não é '20 anos de mercado'", () => {
+    const claims = CONTROLPOT_PROFILE.business!.pendingClaims!;
+    expect(pendingClaimsIn("Bate por 20 segundos e fica cremoso.", claims)).toEqual([]);
+    expect(pendingClaimsIn("São 20 anos de experiência nisso.", claims)).toEqual(["mais de 20 anos de mercado"]);
+    expect(pendingClaimsIn("mais de 4000 máquinas", claims)).toEqual(["mais de 4.000 máquinas em operação"]);
+  });
 });
 
 describe("curso de milk-shake", () => {
