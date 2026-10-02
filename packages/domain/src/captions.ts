@@ -1,4 +1,4 @@
-import { clipStartsMs, type CaptionCue, type CaptionStyle, type EditPlan } from "./editPlan";
+import { clipStartsMs, type CaptionCue, type CaptionStyle, type EditPlan, type PlanOverlay } from "./editPlan";
 import type { WatermarkCorner } from "./watermark";
 
 /**
@@ -82,7 +82,7 @@ export function assText(s: string): string {
 
 /** Arquivo .ass do vídeo inteiro (tempos globais, depois de juntar as partes). */
 export function buildAss(plan: Pick<EditPlan, "clips" | "captionStyle" | "width" | "height" | "transitions"> & {
-  accentColor?: string; hookText?: string | null; totalMs?: number; signature?: string; watermark?: WatermarkCorner;
+  accentColor?: string; hookText?: string | null; totalMs?: number; signature?: string; watermark?: WatermarkCorner; overlays?: PlanOverlay[];
 }): string {
   const style = plan.captionStyle;
   const accent = assColor(plan.accentColor ?? DEFAULT_ACCENT);
@@ -113,6 +113,13 @@ export function buildAss(plan: Pick<EditPlan, "clips" | "captionStyle" | "width"
     events.push(`Dialogue: 2,${assTime(0)},${assTime(plan.totalMs!)},assinatura,,0,0,0,,{\\an${an}${top}}${assText(sig.toLocaleUpperCase("pt-BR"))}`);
   }
   if (hook) events.push(`Dialogue: 1,${assTime(0)},${assTime(Math.min(HOOK_MS, plan.totalMs ?? HOOK_MS))},gancho,,0,0,0,,{\\fad(120,200)}${assText(hook.toLocaleUpperCase("pt-BR"))}`);
+  // textos na tela do diretor: mesma letra do gancho, na posição pedida (topo / centro / base)
+  for (const o of plan.overlays ?? []) {
+    const end = Math.min(o.endMs, plan.totalMs ?? o.endMs);
+    if (end <= o.startMs || !o.text.trim()) continue;
+    const an = { topo: 8, centro: 5, base: 2 }[o.position];
+    events.push(`Dialogue: 1,${assTime(o.startMs)},${assTime(end)},gancho,,0,0,0,,{\\an${an}\\fad(120,200)}${assText(o.text.toLocaleUpperCase("pt-BR"))}`);
+  }
   if (style === "nenhuma") return [...header, ...events].join("\n") + "\n";
   const starts = clipStartsMs(plan);
   for (const [k, clip] of plan.clips.entries()) {

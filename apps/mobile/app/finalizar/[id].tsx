@@ -119,7 +119,7 @@ export default function FinalizarScreen() {
 
   const edit: EditChoices = c.edit ?? { ...DEFAULT_EDIT_CHOICES, retouch: cp.business ? "leve" : "forte" };
   const retouch = edit.retouch ?? (cp.business ? "leve" : "forte");
-  const track = chosenTrack(edit, c.id, c.pillarSlug, cp.business);
+  const track = chosenTrack(edit, c.id, c.pillarSlug, cp.business, c.draft?.direcao);
   const save = (v: EditChoices) => void setEditChoices(c.id, v).then(setC);
   const uploaded = takes.filter((t) => t.media.state === "uploaded_original").length;
   const allUp = takes.length > 0 && uploaded === takes.length;

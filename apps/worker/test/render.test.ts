@@ -142,6 +142,19 @@ describe("renderizador (comando)", () => {
     expect(editChoices({ edit: { captionStyle: "<script>", music: "mixkit-22", musicVolume: 9 } }, "x", false, "c1")).toMatchObject({ captionStyle: "manuscrito", music: { trackId: "mixkit-22", mood: "reflexao", volume: 0.22 } });
     expect(editChoices({ edit: { music: "empresa" } }, "educacao", true, "c1").music?.mood).toBe("empresa");
   });
+  it("música da direção: no automático usa a faixa, o volume e a janela do diretor; escolha do criador vence", () => {
+    const direction = { musica: { id: "mixkit-839", clima: "", bpm: null, volume: 0.3, entrada: 2, saida: 20 } } as unknown as Parameters<typeof editChoices>[4];
+    expect(editChoices(null, "academia", false, "c1", direction).music).toEqual({ trackId: "mixkit-839", mood: "familia", volume: 0.3, startMs: 2000, endMs: 20000 });
+    expect(editChoices({ edit: { music: "mixkit-22" } }, "academia", false, "c1", direction).music?.trackId).toBe("mixkit-22");
+    expect(editChoices({ edit: { music: "none" } }, "academia", false, "c1", direction).music).toBeNull();
+  });
+  it("música com janela: entra atrasada e completa até o fim do vídeo", () => {
+    const p = { ...plan, music: { trackId: "mixkit-839", mood: "familia" as const, volume: 0.3, startMs: 2000, endMs: 5000 } };
+    const args = ffmpegArgs({ plan: p, inputs: ["a.mp4", "b.mp4", "c.mp4"], fontFile: "f.ttf", output: "o.mp4", hasAudio: [true, true, true], musicFile: "m.mp3" }).join(" ");
+    expect(args).toContain("atrim=duration=3.000");
+    expect(args).toContain("adelay=2000|2000");
+    expect(args).toMatch(/apad=whole_dur=/);
+  });
 });
 
 describe.skipIf(!hasFfmpeg || !FONT)("renderizador (FFmpeg real)", () => {
@@ -160,7 +173,9 @@ describe.skipIf(!hasFfmpeg || !FONT)("renderizador (FFmpeg real)", () => {
     await run("ffmpeg", ["-y", "-loglevel", "error", "-f", "lavfi", "-i", "sine=frequency=220:duration=4", "-c:a", "libmp3lame", music]);
     const broll = join(dir, "broll.mp4");
     await run("ffmpeg", ["-y", "-loglevel", "error", "-f", "lavfi", "-i", "smptebars=size=1280x720:rate=30:duration=3", "-c:v", "libx264", "-pix_fmt", "yuv420p", broll]);
-    const base = buildEditPlan({ segments, takes, signature: "RodrigoSerra.me", captionStyle: "destaque", retouch: "forte", stabilize: true, voiceClean: true, hookText: "Treino de hoje", watermark: "sup-dir", music: { trackId: "mixkit-32", mood: "motivacional", volume: 0.22 } });
+    const base = buildEditPlan({ segments, takes, signature: "RodrigoSerra.me", captionStyle: "destaque", retouch: "forte", stabilize: true, voiceClean: true, hookText: "Treino de hoje", watermark: "sup-dir",
+      // direção: música entra em 1s e sai em 4s; texto na tela no centro
+      music: { trackId: "mixkit-32", mood: "motivacional", volume: 0.22, startMs: 1000, endMs: 4000 }, overlays: [{ text: "Vida real", startMs: 500, endMs: 2500, position: "centro" }] });
     // parte 1 com corte no meio; parte 3 com cena de apoio (horizontal, vira 9:16)
     const cut = base.clips.map((c, i) => (i === 0 ? { ...c, durationMs: 1600, keep: [{ startMs: 300, endMs: 1100 }, { startMs: 1700, endMs: 2500 }] } : i === 2 ? { ...c, broll: { takeId: "b", atMs: 600, durationMs: 1200 } } : c));
     const plan = withClips(base, cut);

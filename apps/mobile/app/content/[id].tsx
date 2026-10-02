@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import { Text, TextInput, View } from "react-native";
+import { Linking, Text, TextInput, View } from "react-native";
 import * as Clipboard from "expo-clipboard";
 import { router, useFocusEffect, useLocalSearchParams } from "expo-router";
 import { FORMAT_LABEL, PLATFORMS, PLATFORM_LABEL, SHORT_ROLES, WATERMARK_LABEL, type EditPlan, type Platform, type ScriptSegment } from "@postai/domain";
@@ -11,6 +11,7 @@ import { generateForContent, saveUserEdit } from "../../src/generate";
 import { reportError } from "../../src/telemetry";
 import { setContentOnScreen } from "../../src/renderWatch";
 import { MetricsCard } from "../../src/components/MetricsCard";
+import { DirectionCard } from "../../src/components/DirectionCard";
 import { pullAssistantDraft } from "../../src/assistant";
 import { contentPlan } from "../../src/finalPlan";
 import { describeResult, downloadFinal, latestRenderJob, localFinal, localResult, requestFinalRender, type RenderJob, type RenderResult } from "../../src/finalRender";
@@ -185,10 +186,18 @@ export default function ContentScreen() {
               {c.meta.notices.map((n) => <Text key={n} style={{ color: colors.warn, fontWeight: "700" }}>{n}</Text>)}
             </Card>
           ) : null}
-          <Text style={s.muted}>
-            {c.meta?.source === "openai" || c.meta?.source === "gemini" ? `IA · ${c.meta.model}` : c.meta?.model === "manual-assistant" ? "Do seu ChatGPT/Claude" : "Gerador offline"} · {c.meta?.prompt_version}
-            {c.meta?.userEdited ? " · editado por você" : ""}
-          </Text>
+          {c.meta?.model === "manual-assistant" ? (
+            <Card testID="from-assistant"><Text style={{ color: colors.info, fontWeight: "800" }}>📝 Este roteiro foi escrito pelo seu assistente (Claude/ChatGPT){c.meta?.userEdited ? " e editado por você" : ""}.</Text></Card>
+          ) : (
+            <Text style={s.muted}>
+              {c.meta?.source === "openai" || c.meta?.source === "gemini" ? `IA · ${c.meta.model}` : "Gerador offline"} · {c.meta?.prompt_version}
+              {c.meta?.userEdited ? " · editado por você" : ""}
+            </Text>
+          )}
+          <Button compact variant="secondary" label={copied === "melhorar" ? "PEDIDO COPIADO ✓ — cole no Claude" : "✨ MELHORAR ESTE ROTEIRO COM O CLAUDE"} testID="improve-with-claude" onPress={() => {
+            const ask = `No Post.ai (profile_id ${c.workspaceId}), use ler_roteiro no conteúdo ${c.id}, melhore o roteiro seguindo instrucoes_do_roteiro (com a direção completa: takes, texto na tela, música, capa e publicação) e salve com salvar_roteiro.`;
+            void copy("melhorar", ask).then(() => Linking.openURL(`https://claude.ai/new?q=${encodeURIComponent(ask)}`)).catch(() => undefined);
+          }} />
 
           {free ? (
             <Card style={{ gap: 8 }}>
@@ -259,6 +268,8 @@ ${owner?.ws.profile.signature ?? ""}`.trim())} />
               <Text style={s.body}>{v.script}</Text>
             </Card>
           ))}
+
+          {d.direcao ? <DirectionCard d={d.direcao} /> : null}
 
           <Section>Cenas sugeridas / B-roll</Section>
           <Card>

@@ -1,5 +1,5 @@
 import {
-  buildManualPrompt, checkRepetition, describeRepetition, directorIssues, engagementRate, finalizeDraft, fingerprintsFor, mentionsPrice, parseDraft,
+  MOOD_LABEL, MUSIC_LIBRARY, buildManualPrompt, buildSegments, checkRepetition, describeRepetition, directionIssues, directorIssues, engagementRate, finalizeDraft, fingerprintsFor, mentionsPrice, parseDraft,
   normalizeText, pendingClaimsIn, projectBrief, sharesPer1k,
   type ContentDraft, type CreatorProfile, type EditChoices, type Fingerprint, type PostMetrics, type ProjectInfo,
 } from "@postai/domain";
@@ -15,6 +15,12 @@ export interface McpStrategy {
 export interface McpScript { draft: ContentDraft | null; edit: EditChoices | null; metrics: PostMetrics | null; postedAt: string | null; pendingFromAssistant: boolean }
 export interface McpImprovement { id: string; titulo: string; prioridade: string; status: string; issueNumber: number | null; createdAt: string }
 export interface McpProfile { id: string; name: string; kind: "pessoal" | "empresa"; signature: string }
+export interface McpRecording {
+  /** takes válidos (não descartados): parte gravada (null = vídeo inteiro de uma vez) e se já subiu */
+  takes: { segmentIndex: number | null; synced: boolean }[];
+  /** montagens mais recentes primeiro */
+  renders: { status: string; error: string | null; createdAt: string; variant: string; warnings: string[] }[];
+}
 
 /** Tudo restrito a UM perfil (workspace) já conferido. */
 export interface McpStore {
@@ -29,6 +35,7 @@ export interface McpStore {
   /** posts recentes com quando/onde foram postados e os números anotados */
   posts(limit: number): Promise<McpPost[]>;
   readScript(contentId: string): Promise<McpScript>;
+  recordingStatus(contentId: string): Promise<McpRecording>;
   /** cria o plano dos dias que ainda não têm (o app usa o mesmo plano ao abrir o dia) */
   planDays(startDate: string, days: number): Promise<{ date: string; created: boolean; items: McpContent[] }[]>;
   /** pilares com roteiro nos últimos N dias (contagem por slug) */
@@ -55,6 +62,16 @@ const TOPIC_WINDOW_DAYS = 14;
 const MIN_POSTS_FOR_CONCLUSIONS = 5;
 const WEEKDAY = ["dom", "seg", "ter", "qua", "qui", "sex", "sáb"];
 
+/** Como preencher a direção completa (vai junto do roteiro em salvar_roteiro). */
+export const DIRECTION_GUIDE = [
+  "DIREÇÃO COMPLETA (campo \"direcao\" no mesmo JSON do roteiro — o app grava, legenda, mixa e exporta só com isto):",
+  "- takes[]: {ordem, nome, fala_exata (palavra por palavra; vazio = cena sem fala), ritmo (pausas), duracao_segundos, enquadramento, movimento_camera, local, luz, olhar, emocao, broll, erro_comum}. Cada take com fala vira uma parte gravada, na ordem.",
+  "- legendas_na_tela[]: {texto (2–5 palavras), inicio, fim (segundos do vídeo final), posicao: topo|centro|base, estilo}. Substituem o gancho automático na tela.",
+  "- musica: {id (de listar_musicas), clima, bpm (null se não souber), volume 0.05–0.6 relativo à voz (0.22 padrão), entrada, saida (segundos; saida null = até o fim)}. Empresa: só licença comercial.",
+  "- edicao: {cortes, transicao, zoom} · capa: {frame (segundo do vídeo), texto curto} · publicacao_por_rede[]: {rede: instagram|tiktok|facebook|youtube_shorts, horario HH:MM, hashtags, primeiro_comentario}",
+  "- teste_ab: {ganchos: 2–3 ganchos, metrica}. Os ganchos também vão em hook_options.",
+].join("\n");
+
 const PROFILE_ARG = { profile_id: { type: "string", description: "id do perfil (listar_perfis). Sem ele: o perfil em que o link foi criado." } };
 const obj = (properties: Record<string, unknown>, required: string[] = []) => ({ type: "object", properties: { ...PROFILE_ARG, ...properties }, required, additionalProperties: false });
 const RO = { readOnlyHint: true };
@@ -69,6 +86,8 @@ export const MCP_TOOLS = [
   { name: "ler_roteiro", title: "Ler roteiro salvo", description: "Devolve o roteiro já salvo de um conteúdo (JSON completo), as escolhas de edição/música, os números e se há um roteiro do assistente esperando o app abrir.", inputSchema: obj({ content_id: { type: "string" } }, ["content_id"]), annotations: RO },
   { name: "instrucoes_do_roteiro", title: "Regras para o roteiro", description: "Regras do perfil (voz, formatos que viralizam, fechamento, o que não repetir), temas abaixo da meta nos últimos 30 dias, assuntos bloqueados por 14 dias e o JSON exato.", inputSchema: obj({ content_id: { type: "string", description: "id de conteudos_do_dia" }, acontecimento: { type: "string", description: "o que aconteceu hoje (opcional)" } }, ["content_id"]), annotations: RO },
   { name: "salvar_roteiro", title: "Salvar roteiro no app", description: "Valida (contrato, gancho ≤ 12 palavras, texto de tela 2–5 palavras, duração coerente, sem repetir, sem preço/alegação sem prova no comercial) e envia ao app. Se falhar, devolve o que corrigir.", inputSchema: obj({ content_id: { type: "string" }, roteiro: { type: "object", description: "o JSON completo do roteiro" } }, ["content_id", "roteiro"]), annotations: WRITE },
+  { name: "listar_musicas", title: "Músicas licenciadas", description: "Faixas da biblioteca licenciada (id, clima, duração, licença). Use o id em direcao.musica.id. Conta de empresa só vê faixas com licença comercial.", inputSchema: obj({ clima: { type: "string", description: `opcional: ${Object.keys(MOOD_LABEL).join(", ")}` }, bpm: { type: "number", description: "opcional (as faixas ainda não têm BPM medido)" } }), annotations: RO },
+  { name: "ler_status_gravacao", title: "Status da gravação", description: "O que já foi gravado (por take/parte), o que falta, se já subiu e como está a montagem do vídeo.", inputSchema: obj({ content_id: { type: "string" } }, ["content_id"]), annotations: RO },
   { name: "registrar_melhoria", title: "Registrar melhoria", description: "Manda uma sugestão de melhoria do app/conector para o backlog do desenvolvedor, com contexto e critério de aceite. Use para toda recomendação de mudança no sistema.", inputSchema: obj({ titulo: { type: "string" }, descricao: { type: "string", description: "o problema, a proposta e o critério de aceite" }, prioridade: { type: "string", enum: ["baixa", "media", "alta"] } }, ["titulo", "descricao"]), annotations: WRITE },
   { name: "listar_melhorias", title: "Melhorias pedidas", description: "Melhorias já registradas e o andamento (nova, no backlog, feita, recusada).", inputSchema: obj({}), annotations: RO },
 ] as const;
@@ -183,6 +202,14 @@ export async function callProfileTool(store: McpStore, name: string, args: Json,
       `- id ${c.id} · ${FORMAT_LABEL[c.format] ?? c.format} · tema: ${await store.pillarName(c.pillarSlug)} · ${c.hasScript ? "já tem roteiro (use ler_roteiro; salvar substitui)" : "sem roteiro"}`));
     return text(`Conteúdos de ${date}:\n${lines.join("\n")}`);
   }
+  if (name === "listar_musicas") {
+    const business = (await store.profile()).kind === "empresa";
+    const mood = typeof args.clima === "string" && args.clima in MOOD_LABEL ? args.clima : null;
+    const list = MUSIC_LIBRARY.filter((t) => (!business || t.license === "comercial") && (!mood || t.mood === mood));
+    if (!list.length) return text("Nenhuma faixa com esse filtro.");
+    const bpmNote = typeof args.bpm === "number" ? "\nObs.: as faixas ainda não têm BPM medido — escolha pelo clima." : "";
+    return text(`${list.map((t) => `- id ${t.id} · "${t.title}" — ${t.artist} · clima ${MOOD_LABEL[t.mood]} · ${t.durationSec}s · licença ${t.license}`).join("\n")}${bpmNote}`);
+  }
   if (name === "registrar_melhoria") {
     const titulo = String(args.titulo ?? "").trim().slice(0, 140);
     const descricao = String(args.descricao ?? "").trim().slice(0, 4000);
@@ -205,6 +232,23 @@ export async function callProfileTool(store: McpStore, name: string, args: Json,
     const s = await store.readScript(content.id);
     return text(JSON.stringify({ content_id: content.id, data: content.date, formato: content.format, tema: await store.pillarName(content.pillarSlug), ...s }, null, 2));
   }
+  if (name === "ler_status_gravacao") {
+    const [rec, script, profile] = await Promise.all([store.recordingStatus(content.id), store.readScript(content.id), store.profile()]);
+    const lines: string[] = [];
+    if (script.draft) {
+      const segs = buildSegments(script.draft, { selectedHook: 0, userEdited: false, closingPhrase: profile.closingPhrase, business: profile.kind === "empresa" });
+      for (const sg of segs) {
+        const t = rec.takes.filter((x) => x.segmentIndex === sg.index);
+        lines.push(`- ${sg.index + 1}. ${sg.label}: ${!t.length ? "falta gravar" : t.some((x) => x.synced) ? "gravado e enviado" : "gravado, ainda subindo"}`);
+      }
+    } else lines.push("- ainda sem roteiro");
+    const whole = rec.takes.filter((x) => x.segmentIndex === null);
+    if (whole.length) lines.push(`- vídeo inteiro de uma vez: ${whole.some((x) => x.synced) ? "enviado" : "ainda subindo"}`);
+    const r = rec.renders[0];
+    const render = !r ? "ainda não pediu a montagem" : r.status === "done" ? `montado (${r.variant})${r.warnings.length ? ` — avisos: ${r.warnings.join("; ")}` : ""}` : r.status === "failed" ? `montagem falhou: ${r.error ?? "erro"}` : r.status === "rendering" ? "montando agora" : "na fila para montar";
+    const posted = script.postedAt ? `\nPostado em ${brt(script.postedAt)}` : "";
+    return text(`Gravação de "${content.title}" (${content.date}):\n${lines.join("\n")}\nMontagem: ${render}${posted}`);
+  }
   if (content.format !== "thought" && content.format !== "main_video") return text("Este conteúdo não usa roteiro falado (é cena de apoio/story).", true);
 
   if (name === "instrucoes_do_roteiro") {
@@ -213,7 +257,7 @@ export async function callProfileTool(store: McpStore, name: string, args: Json,
     ]);
     const eventText = typeof args.acontecimento === "string" && args.acontecimento.trim() ? args.acontecimento.trim().slice(0, 1500) : null;
     const prompt = buildManualPrompt({ profile, pillarName, format: content.format, eventText, brief: content.project ? projectBrief(content.project) : null, recentSummaries, avoid: "" });
-    return text([prompt, deficit, blocked, "Regras do diretor: gancho ≤ 12 palavras; screen_text 2–5 palavras; duration_seconds ≈ palavras do script ÷ 2,5."].filter(Boolean).join("\n\n"));
+    return text([prompt, deficit, blocked, "Regras do diretor: gancho ≤ 12 palavras; screen_text 2–5 palavras; duration_seconds ≈ palavras do script ÷ 2,5.", DIRECTION_GUIDE].filter(Boolean).join("\n\n"));
   }
 
   if (name === "salvar_roteiro") {
@@ -221,7 +265,10 @@ export async function callProfileTool(store: McpStore, name: string, args: Json,
     const parsed = parseDraft({ ...(args.roteiro as Json), format: content.format });
     if (!parsed.ok) return text(`O roteiro não passou na validação. Corrija e salve de novo:\n- ${parsed.errors.join("\n- ")}`, true);
     const draft = finalizeDraft(parsed.draft, profile);
-    const rules = directorIssues(draft);
+    const rules = [
+      ...directorIssues(draft),
+      ...(draft.direcao ? directionIssues(draft.direcao, { durationSeconds: draft.duration_seconds, spoken: true, business: profile.kind === "empresa" }) : []),
+    ];
     if (rules.length) return text(`Ajuste e salve de novo:\n- ${rules.join("\n- ")}`, true);
     const biz = profile.kind === "empresa" ? profile.business : undefined;
     if (biz?.noPrice && mentionsPrice(draft)) return text("O roteiro fala preço/valor. Neste perfil de empresa preço não aparece no vídeo: reescreva sem preço.", true);

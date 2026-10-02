@@ -303,7 +303,11 @@ export default function RecordScreen() {
   // dica de gravação da parte atual; antes da 1ª parte, o básico de luz/enquadramento
   const role = segments && segIndex !== null ? segments[segIndex]?.role : null;
   const firstPart = !segments || recordedParts.length === 0;
-  const tip = role && !firstPart ? RECORDING_TIPS[role] : `${RECORDING_CHECKLIST}. ${RECORDING_TIPS[role ?? "hook"]}`;
+  // roteiro com direção: a instrução do diretor para ESTE take vem no lugar da dica genérica
+  const direction = segments && segIndex !== null ? segments[segIndex]?.direction : undefined;
+  const tip = direction?.length
+    ? direction.map((d) => `${d.label}: ${d.value}`).join(" · ")
+    : role && !firstPart ? RECORDING_TIPS[role] : `${RECORDING_CHECKLIST}. ${RECORDING_TIPS[role ?? "hook"]}`;
   return (
     <View style={[st.root, ringLight && { backgroundColor: RING_COLOR[light] }]} testID="record-screen">
       <View style={ringLight ? [st.frame, { width: ovalW, borderRadius: ovalW / 2, marginTop: -80 }] : st.frame}>

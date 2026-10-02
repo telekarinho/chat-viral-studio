@@ -106,7 +106,7 @@ export default function FinalScreen() {
 /** Não gostou? Troca a música (mesmo clima) e monta de novo, ou volta para mudar as outras opções. */
 function RedoCard({ c, business }: { c: ContentItem; business: boolean }) {
   const edit = c.edit ?? { ...DEFAULT_EDIT_CHOICES, retouch: business ? "leve" : "forte" };
-  const track = chosenTrack(edit, c.id, c.pillarSlug, business);
+  const track = chosenTrack(edit, c.id, c.pillarSlug, business, c.draft?.direcao);
   const redo = async (music?: string) => {
     if (music) await setEditChoices(c.id, { ...edit, music });
     router.replace({ pathname: "/finalizar/[id]", params: { id: c.id, refazer: "1" } });

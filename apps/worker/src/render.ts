@@ -182,9 +182,15 @@ export function ffmpegArgs(r: RenderInput): string[] {
     // música por baixo da voz: abaixa sozinha quando há fala (sidechain), entra e sai suave
     const T = total / 1000;
     const vol = Math.min(0.6, Math.max(0.05, plan.music!.volume));
+    // janela da direção (entra aos X s, sai aos Y s); sem ela, o vídeo todo
+    const startS = Math.min(T, Math.max(0, (plan.music!.startMs ?? 0) / 1000));
+    const endS = Math.min(T, Math.max(startS, plan.music!.endMs == null ? T : plan.music!.endMs / 1000));
+    const D = endS - startS;
+    const delayMs = Math.round(startS * 1000);
     parts.push(
-      `[${r.inputs.length + brollOrder.length}:a]aresample=48000,aformat=channel_layouts=stereo,atrim=duration=${T.toFixed(3)},asetpts=PTS-STARTPTS,volume=${vol.toFixed(2)},` +
-        `afade=t=in:d=${MUSIC_FADE_IN_S},afade=t=out:st=${Math.max(0, T - MUSIC_FADE_OUT_S).toFixed(3)}:d=${MUSIC_FADE_OUT_S}[mus]`,
+      `[${r.inputs.length + brollOrder.length}:a]aresample=48000,aformat=channel_layouts=stereo,atrim=duration=${D.toFixed(3)},asetpts=PTS-STARTPTS,volume=${vol.toFixed(2)},` +
+        `afade=t=in:d=${Math.min(MUSIC_FADE_IN_S, D / 2).toFixed(3)},afade=t=out:st=${Math.max(0, D - MUSIC_FADE_OUT_S).toFixed(3)}:d=${Math.min(MUSIC_FADE_OUT_S, D / 2).toFixed(3)}` +
+        `${delayMs > 0 ? `,adelay=${delayMs}|${delayMs}` : ""},apad=whole_dur=${T.toFixed(3)}[mus]`,
     );
     parts.push("[ac]asplit=2[voice][key]");
     parts.push("[mus][key]sidechaincompress=threshold=0.02:ratio=12:attack=10:release=450[duck]");

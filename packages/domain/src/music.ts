@@ -19,10 +19,13 @@ export interface MusicTrack {
   url: string;
   sha256: string;
   durationSec: number;
+  /** "comercial" = pode em conta de empresa/anúncio; "pessoal" = só perfil pessoal */
+  license: "comercial" | "pessoal";
 }
 
 const mk = (id: number, mood: MusicMood, title: string, artist: string, sha256: string, durationSec: number): MusicTrack =>
-  ({ id: `mixkit-${id}`, mood, title, artist, url: `https://assets.mixkit.co/music/${id}/${id}.mp3`, sha256, durationSec });
+  // licença Mixkit Free: inclui uso comercial
+  ({ id: `mixkit-${id}`, mood, title, artist, url: `https://assets.mixkit.co/music/${id}/${id}.mp3`, sha256, durationSec, license: "comercial" });
 
 export const MUSIC_LICENSE = "Mixkit Stock Music Free License (https://mixkit.co/license/#musicFree)";
 

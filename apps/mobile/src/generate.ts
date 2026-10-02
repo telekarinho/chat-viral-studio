@@ -1,4 +1,4 @@
-import { PRODUCTION_MODES, SHOT_LIBRARY, checkRepetition, describeAvoidance, fingerprintsFor, generateLocal, isBusiness, mentionsPrice, parseDraft, pendingClaimsIn, projectBrief, parseManualResponse, type ContentDraft, type Fingerprint, type GenerationMeta } from "@postai/domain";
+import { PRODUCTION_MODES, SHOT_LIBRARY, checkRepetition, describeAvoidance, directionIssues, fingerprintsFor, generateLocal, isBusiness, mentionsPrice, parseDraft, pendingClaimsIn, projectBrief, parseManualResponse, type ContentDraft, type Fingerprint, type GenerationMeta } from "@postai/domain";
 import { config, generateEndpoint } from "./config";
 import { currentSession } from "./supabase";
 import { getContent, recentFingerprints, saveDraft, workspaceById, type ContentItem } from "./db/repo";
@@ -73,6 +73,8 @@ export async function importManualDraft(contentId: string, pasted: string): Prom
   }
   const unproven = isBusiness(ws.profile) ? pendingClaimsIn(`${draft.script} ${draft.cta}`, ws.profile.business.pendingClaims ?? []) : [];
   if (unproven.length) return { ok: false, errors: [`O roteiro afirma algo ainda sem prova: ${unproven.join("; ")}. Peça para reescrever sem isso.`] };
+  const direction = draft.direcao ? directionIssues(draft.direcao, { durationSeconds: draft.duration_seconds, spoken: true, business: isBusiness(ws.profile) }) : [];
+  if (direction.length) return { ok: false, errors: direction };
   const fps = fingerprintsFor(draft);
   const report = checkRepetition(fps, (await recentFingerprints(ws.id)).filter((f) => f.contentItemId !== contentId));
   const notices = report.repeated ? describeAvoidance(report).map((n) => n.replace("Evitei repetir", "Atenção: parece repetir")) : [];
