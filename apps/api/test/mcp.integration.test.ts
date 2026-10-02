@@ -40,8 +40,20 @@ describe.skipIf(!(url && anon && service))("conector MCP (Supabase local)", () =
     expect(await tool("instrucoes_do_roteiro", { content_id: contentId })).toContain("E se der certo!");
     expect(await tool("perfil_e_estrategia", {})).toContain("Família");
 
-    const draft = generateLocal({ profile: RODRIGO_PROFILE, pillarSlug: "familia", pillarName: "Família", format: "thought", eventText: null, recent: [] }).draft;
+    const raw = generateLocal({ profile: RODRIGO_PROFILE, pillarSlug: "familia", pillarName: "Família", format: "thought", eventText: null, recent: [] }).draft;
+    const draft = { ...raw, hook_options: ["Ninguém te conta isso sobre ter 40", "Eu quase desisti hoje", "Você já sentiu isso?"], screen_text: "Vida real 40+",
+      duration_seconds: Math.max(3, Math.round(raw.script.split(/\s+/).filter(Boolean).length / 2.5)) };
     expect(await tool("salvar_roteiro", { content_id: contentId, roteiro: draft })).toContain("enviado para o Post.ai");
+    // diretor: perfis do dono, roteiro salvo legível, plano de dia futuro no fuso de Brasília, melhoria no backlog
+    expect(await tool("listar_perfis", {})).toContain(`id ${ws}`);
+    expect(JSON.parse(await tool("ler_roteiro", { content_id: contentId }))).toMatchObject({ content_id: contentId, pendingFromAssistant: true });
+    const plano = await tool("criar_plano", { data_inicio: "2027-03-01", dias: 2 });
+    expect(plano).toContain("2027-03-01 (plano criado agora)");
+    const future = await admin.from("recording_tasks").select("scheduled_for").eq("workspace_id", ws).gte("scheduled_for", "2027-03-01T03:00:00Z").lt("scheduled_for", "2027-03-02T03:00:00Z");
+    expect(future.data!.length).toBeGreaterThan(0); // segunda-feira tem rotina
+    expect(await tool("criar_plano", { data_inicio: "2027-03-01", dias: 1 })).not.toContain("plano criado agora"); // não duplica
+    expect(await tool("registrar_melhoria", { titulo: "Teste de melhoria", descricao: "problema, proposta e aceite", prioridade: "baixa" })).toContain("Melhoria registrada");
+    expect((await user.from("melhorias").select("titulo, status").eq("workspace_id", ws)).data).toEqual([{ titulo: "Teste de melhoria", status: "nova" }]);
     const box = await user.from("assistant_drafts").select("draft, consumed_at").eq("content_item_id", contentId);
     expect(box.data).toHaveLength(1);
     expect(box.data![0]!.draft.title).toBe(draft.title);

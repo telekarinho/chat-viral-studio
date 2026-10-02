@@ -113,3 +113,33 @@ jobs:
       - name: Sync orders + send takes
         if: steps.cfg.outputs.on == '1'
         run: npx tsx apps/worker/src/mmix-cli.ts
+
+  melhorias:
+    # Melhorias que o Claude registra pelo conector → issues do repositório (e o status volta para o app).
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      issues: write
+    env:
+      SUPABASE_URL: ${{ secrets.POSTAI_SUPABASE_URL }}
+      SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.POSTAI_SUPABASE_SERVICE_ROLE_KEY }}
+      GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    steps:
+      - name: Configured?
+        id: cfg
+        run: |
+          if [ -z "$SUPABASE_SERVICE_ROLE_KEY" ]; then echo "on=0" >> "$GITHUB_OUTPUT"; else echo "on=1" >> "$GITHUB_OUTPUT"; fi
+      - uses: actions/checkout@v4
+        if: steps.cfg.outputs.on == '1'
+      - uses: actions/setup-node@v4
+        if: steps.cfg.outputs.on == '1'
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: package-lock.json
+      - if: steps.cfg.outputs.on == '1'
+        run: npm ci --workspace @postai/worker --workspace @postai/domain --ignore-scripts
+      - name: Sync melhorias ↔ issues
+        if: steps.cfg.outputs.on == '1'
+        run: npx tsx apps/worker/src/melhorias-cli.ts

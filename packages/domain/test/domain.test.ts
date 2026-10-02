@@ -245,3 +245,16 @@ describe("câmera", () => {
     expect(pickFormat(formats, "4k", 30)).toEqual(formats[1]);
   });
 });
+
+describe("plano feito no servidor (UTC) no fuso do criador", () => {
+  it("quinta 01/10/2026 às 10:30 em Brasília = 13:30 UTC, e usa a rotina de quinta", async () => {
+    const { buildDayPlan, rodrigoRoutine, RODRIGO_PILLARS, zonedDateTime, BRASILIA_OFFSET_MIN } = await import("../src");
+    expect(zonedDateTime("2026-10-01", "10:30", BRASILIA_OFFSET_MIN).toISOString()).toBe("2026-10-01T13:30:00.000Z");
+    let n = 0;
+    const plan = buildDayPlan({ date: new Date(0), dateKey: "2026-10-01", utcOffsetMinutes: BRASILIA_OFFSET_MIN, workspaceId: "w", routine: rodrigoRoutine(() => `b${n++}`), pillars: RODRIGO_PILLARS, recentPillarSlugs: [], newId: () => `i${n++}`, now: "x" });
+    expect(plan.date).toBe("2026-10-01");
+    const thought = plan.tasks.find((t) => t.kind === "thought")!;
+    expect(thought.scheduledFor).toBe("2026-10-01T13:30:00.000Z");
+    expect(plan.contentItems.length).toBeGreaterThan(0);
+  });
+});

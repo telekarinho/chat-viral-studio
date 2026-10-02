@@ -9,6 +9,7 @@ export * from "./ai/contract";
 export * from "./ai/prompt";
 export * from "./ai/localGenerator";
 export * from "./ai/manual";
+export * from "./ai/directorRules";
 export * from "./segments";
 export * from "./editPlan";
 export * from "./profiles";

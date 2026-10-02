@@ -69,6 +69,18 @@ export function localDateTime(dateKey: string, hhmm: string): Date {
   return new Date(y, m - 1, d, h, mi, 0, 0);
 }
 
+/**
+ * Mesmo horário de parede, mas num fuso fixo (minutos em relação ao UTC; Brasília = -180).
+ * O servidor roda em UTC: sem isto, o plano feito por ele sairia 3 h adiantado.
+ */
+export function zonedDateTime(dateKey: string, hhmm: string, utcOffsetMinutes: number): Date {
+  const [y, m, d] = dateKey.split("-").map(Number) as [number, number, number];
+  const [h, mi] = hhmm.split(":").map(Number) as [number, number];
+  return new Date(Date.UTC(y, m - 1, d, h, mi, 0, 0) - utcOffsetMinutes * 60_000);
+}
+
+export const BRASILIA_OFFSET_MIN = -180;
+
 export function isValidTime(hhmm: string): boolean {
   return /^([01]\d|2[0-3]):[0-5]\d$/.test(hhmm);
 }
@@ -87,14 +99,18 @@ export function buildDayPlan(input: {
   now: string;
   /** use another weekday's routine (E2E builds on weekends) */
   weekdayOverride?: number;
+  /** servidor: monta o dia no fuso do criador (o celular usa o fuso dele) */
+  utcOffsetMinutes?: number;
+  /** servidor: o dia é dado como AAAA-MM-DD (não depende do fuso de quem roda) */
+  dateKey?: string;
 }): DayPlan {
-  const dateKey = toLocalDateKey(input.date);
-  const weekday = input.weekdayOverride ?? input.date.getDay();
+  const dateKey = input.dateKey ?? toLocalDateKey(input.date);
+  const weekday = input.weekdayOverride ?? (input.dateKey ? new Date(`${input.dateKey}T12:00:00Z`).getUTCDay() : input.date.getDay());
   const blocks = input.routine.filter((b) => b.weekday === weekday).sort((a, b) => a.startTime.localeCompare(b.startTime));
   const history = [...input.recentPillarSlugs];
   const contentItems: PlannedContentItem[] = [];
   const tasks: RecordingTask[] = blocks.map((b) => {
-    const scheduledFor = localDateTime(dateKey, b.startTime).toISOString();
+    const scheduledFor = (input.utcOffsetMinutes === undefined ? localDateTime(dateKey, b.startTime) : zonedDateTime(dateKey, b.startTime, input.utcOffsetMinutes)).toISOString();
     let contentItemId: string | null = null;
     if (b.format === "thought" || b.format === "main_video") {
       const pillar = pickNextPillar(input.pillars, history, contentItems.map((c) => c.pillarSlug));

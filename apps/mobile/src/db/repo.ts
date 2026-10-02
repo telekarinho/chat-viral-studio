@@ -5,6 +5,7 @@ import {
 } from "@postai/domain";
 import { config, newId, nowIso } from "../config";
 import { getDb } from "./database";
+import { supabase } from "../supabase";
 
 export interface Settings {
   resolution: ResolutionPreset;
@@ -273,6 +274,8 @@ export async function ensureDayPlan(date: Date): Promise<void> {
     const done = await db.getFirstAsync<{ value: string }>("SELECT value FROM kv WHERE key = ?", `plan:${ws.id}:${key}`);
     const hasTasks = await db.getFirstAsync<{ id: string }>("SELECT id FROM tasks WHERE workspace_id = ? AND date = ? LIMIT 1", ws.id, key);
     if (done || hasTasks) return;
+    // o diretor (Claude, pelo conector) pode ter planejado este dia antes: usa o mesmo plano, sem criar outro
+    if (ws.cloud && (await adoptServerPlan(ws.id, key, date))) return;
     const recent = await db.getAllAsync<{ pillar_slug: string }>("SELECT pillar_slug FROM content_items WHERE workspace_id = ? ORDER BY date DESC LIMIT 30", ws.id);
     const plan = buildDayPlan({ date, workspaceId: ws.id, routine: ws.routine, pillars: ws.pillars, recentPillarSlugs: recent.map((r) => r.pillar_slug).reverse(), newId, now: nowIso(),
       // E2E builds only: CI may run on a weekend, when Rodrigo's routine is empty
@@ -292,6 +295,42 @@ export async function ensureDayPlan(date: Date): Promise<void> {
   })().finally(() => planLocks.delete(lockKey));
   planLocks.set(lockKey, p);
   return p;
+}
+
+const SERVER_PLAN_TIMEOUT_MS = 4000;
+
+/** Traz para o celular o plano que já existe na nuvem para o dia (criado pelo diretor). false = não há (ou sem internet). */
+async function adoptServerPlan(workspaceId: string, key: string, date: Date): Promise<boolean> {
+  if (!supabase) return false;
+  const start = new Date(date.getFullYear(), date.getMonth(), date.getDate());
+  const end = new Date(start.getTime() + 24 * 60 * 60 * 1000);
+  const fetchPlan = Promise.all([
+    supabase.from("content_items").select("id, format, pillar_slug, title, status, scheduled_for").eq("workspace_id", workspaceId).eq("plan_date", key),
+    supabase.from("recording_tasks").select("id, content_item_id, scheduled_for, title, kind, hint, suggested_duration_seconds, optional, status, updated_at")
+      .eq("workspace_id", workspaceId).gte("scheduled_for", start.toISOString()).lt("scheduled_for", end.toISOString()),
+  ]);
+  const timeout = new Promise<null>((r) => setTimeout(() => r(null), SERVER_PLAN_TIMEOUT_MS));
+  const res = await Promise.race([fetchPlan, timeout]).catch(() => null);
+  if (!res) return false;
+  const [items, tasks] = res;
+  if (items.error || tasks.error || !tasks.data?.length) return false;
+  const db = await getDb();
+  await db.withTransactionAsync(async () => {
+    for (const c of items.data ?? []) {
+      await db.runAsync(
+        "INSERT OR IGNORE INTO content_items(id, workspace_id, date, format, pillar_slug, title, status, scheduled_for, updated_at) VALUES (?,?,?,?,?,?,?,?,?)",
+        c.id, workspaceId, key, c.format, c.pillar_slug ?? "", c.title, c.status, c.scheduled_for, nowIso(),
+      );
+    }
+    for (const t of tasks.data ?? []) {
+      await insertTask({
+        id: t.id, workspaceId, contentItemId: t.content_item_id, scheduledFor: t.scheduled_for, title: t.title, kind: t.kind, hint: t.hint,
+        suggestedDurationSeconds: t.suggested_duration_seconds, optional: t.optional, status: t.status, notes: null, takeId: null, supersededBy: null, updatedAt: t.updated_at,
+      });
+    }
+    await db.runAsync("INSERT OR REPLACE INTO kv(key, value) VALUES (?, '1')", `plan:${workspaceId}:${key}`);
+  });
+  return true;
 }
 
 export async function listTasks(dateKey: string): Promise<RecordingTask[]> {
