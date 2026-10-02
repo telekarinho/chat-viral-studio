@@ -52,6 +52,7 @@ export default function FinalizarScreen() {
   const [error, setError] = useState<string | null>(null);
   const [showOptions, setShowOptions] = useState(false);
   const opening = useRef(false);
+  const retryAsked = useRef(false);
 
   const refresh = useCallback(async () => {
     const item = await getContent(id);
@@ -77,16 +78,25 @@ export default function FinalizarScreen() {
   }, [id]));
 
   // depois de confirmar: pede a montagem (espera os vídeos subirem) e acompanha até ficar pronta
+  // o acompanhamento lê o conteúdo/plano mais recentes por ref: o refresh de cada volta NÃO pode reiniciar o
+  // acompanhamento (antes reiniciava e cancelava a própria volta antes de pedir a montagem)
+  const latest = useRef({ c, plan: cp?.plan ?? null });
+  latest.current = { c, plan: cp?.plan ?? null };
+  const ready = confirmed && Boolean(c && cp?.plan);
   useEffect(() => {
-    if (!confirmed || !c || !cp?.plan) return;
+    if (!ready) return;
     let stop = false;
     const tick = async () => {
       void syncNow();
       await refresh();
+      const { c, plan } = latest.current;
+      if (stop || !c || !plan) return;
       const j = await latestRenderJob(c.id).catch(() => null);
       if (stop) return;
-      if (!j || j.status === "failed") {
-        const r = await requestFinalRender(c.workspaceId, c.id, cp.plan!);
+      // falhou: só pede de novo quando a pessoa toca em TENTAR DE NOVO (sem loop de pedidos)
+      if (!j || (j.status === "failed" && retryAsked.current)) {
+        retryAsked.current = false;
+        const r = await requestFinalRender(c.workspaceId, c.id, plan);
         if (r.ok) {
           setWaitMsg(null);
           void kickRenderWorker();
@@ -106,7 +116,7 @@ export default function FinalizarScreen() {
     void tick().catch((e) => reportError(e, "finalizar"));
     const t = setInterval(() => void tick().catch((e) => reportError(e, "finalizar")), POLL_MS);
     return () => { stop = true; clearInterval(t); };
-  }, [confirmed, c?.id, cp?.plan, refresh]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [ready, refresh]);
 
   if (!c || !cp) return <Screen><Loading label="Preparando a montagem…" /></Screen>;
   if (!cp.plan) {
@@ -163,7 +173,7 @@ export default function FinalizarScreen() {
           {step === "falhou" ? (
             <>
               <Text style={{ color: colors.bad, fontWeight: "700" }}>{`A montagem falhou: ${job?.error ?? "erro no servidor"}`}</Text>
-              <Button label="TENTAR DE NOVO" onPress={() => { setJob(null); setWaitMsg("Pedindo de novo…"); }} testID="retry-render" />
+              <Button label="TENTAR DE NOVO" onPress={() => { retryAsked.current = true; setJob(null); setWaitMsg("Pedindo de novo…"); }} testID="retry-render" />
             </>
           ) : (
             <Text style={s.muted}>Pode sair desta tela: aviso no celular quando ficar pronto.</Text>
