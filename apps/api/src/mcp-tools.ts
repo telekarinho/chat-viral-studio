@@ -94,6 +94,7 @@ export const DIRECTION_GUIDE = [
   "- musica: {id (de listar_musicas), clima, bpm (null se não souber), volume 0.05–0.6 relativo à voz (0.22 padrão), entrada, saida (segundos; saida null = até o fim)}. Empresa: só licença comercial.",
   "- edicao: {cortes, transicao, zoom} · capa: {frame (segundo do vídeo), texto curto} · publicacao_por_rede[]: {rede: instagram|tiktok|facebook|youtube_shorts, horario HH:MM, hashtags, primeiro_comentario}",
   "- teste_ab: {ganchos: 2–3 ganchos, metrica}. Os ganchos também vão em hook_options.",
+  "- local, luz e enquadramento precisam ser possíveis NO HORÁRIO do conteúdo (rotina) e no lugar real do criador: não peça calçada/luz natural para algo que ele grava à noite em casa. Se não souber onde ele vai gravar, pergunte antes ou dê uma alternativa (\"em casa: perto de uma lâmpada, de frente\"). Instruções de fala (ritmo, emoção, olhar) devem citar trechos da própria fala_exata.",
 ].join("\n");
 
 const PROFILE_ARG = { profile_id: { type: "string", description: "id do perfil (listar_perfis). Sem ele: o perfil em que o link foi criado." } };

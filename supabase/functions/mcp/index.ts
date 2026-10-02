@@ -1288,7 +1288,8 @@ var DIRECTION_GUIDE = [
   "- legendas_na_tela[]: {texto (2\u20135 palavras), inicio, fim (segundos do v\xEDdeo final), posicao: topo|centro|base, estilo}. Substituem o gancho autom\xE1tico na tela.",
   "- musica: {id (de listar_musicas), clima, bpm (null se n\xE3o souber), volume 0.05\u20130.6 relativo \xE0 voz (0.22 padr\xE3o), entrada, saida (segundos; saida null = at\xE9 o fim)}. Empresa: s\xF3 licen\xE7a comercial.",
   "- edicao: {cortes, transicao, zoom} \xB7 capa: {frame (segundo do v\xEDdeo), texto curto} \xB7 publicacao_por_rede[]: {rede: instagram|tiktok|facebook|youtube_shorts, horario HH:MM, hashtags, primeiro_comentario}",
-  "- teste_ab: {ganchos: 2\u20133 ganchos, metrica}. Os ganchos tamb\xE9m v\xE3o em hook_options."
+  "- teste_ab: {ganchos: 2\u20133 ganchos, metrica}. Os ganchos tamb\xE9m v\xE3o em hook_options.",
+  '- local, luz e enquadramento precisam ser poss\xEDveis NO HOR\xC1RIO do conte\xFAdo (rotina) e no lugar real do criador: n\xE3o pe\xE7a cal\xE7ada/luz natural para algo que ele grava \xE0 noite em casa. Se n\xE3o souber onde ele vai gravar, pergunte antes ou d\xEA uma alternativa ("em casa: perto de uma l\xE2mpada, de frente"). Instru\xE7\xF5es de fala (ritmo, emo\xE7\xE3o, olhar) devem citar trechos da pr\xF3pria fala_exata.'
 ].join("\n");
 var PROFILE_ARG2 = { profile_id: { type: "string", description: "id do perfil (listar_perfis). Sem ele: o perfil em que o link foi criado." } };
 var obj = (properties, required = []) => ({ type: "object", properties: { ...PROFILE_ARG2, ...properties }, required, additionalProperties: false });
