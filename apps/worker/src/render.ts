@@ -1,4 +1,4 @@
-import type { EditClip, EditPlan, WatermarkCorner } from "@postai/domain";
+import type { EditClip, EditPlan } from "@postai/domain";
 
 export interface RenderInput {
   plan: EditPlan;
@@ -24,14 +24,6 @@ export function keepExpr(keep: readonly { startMs: number; endMs: number }[]): s
   return keep.map((k) => `between(t\\,${sec(k.startMs)}\\,${sec(k.endMs)})`).join("+");
 }
 
-const SIGNATURE_MS = 2000;
-
-/** Posição da assinatura do canto: longe das bordas (e da barra de cima/botões das redes). */
-export function watermarkXY(corner: Exclude<WatermarkCorner, "off">): { x: string; y: string } {
-  const left = corner.endsWith("esq");
-  const top = corner.startsWith("sup");
-  return { x: left ? "w*0.05" : "w-text_w-w*0.05", y: top ? "h*0.065" : "h*0.78-text_h" };
-}
 const MUSIC_FADE_IN_S = 0.8;
 const MUSIC_FADE_OUT_S = 1.5;
 
@@ -83,16 +75,34 @@ export function beautyGraph(inLabel: string, outLabel: string, mode: EditPlan["r
 /** zoompan expression: moves from→to over moveMs (0 = whole clip), then holds. */
 export function zoomExpr(clip: EditClip, fps: number): string {
   const { fromScale: a, toScale: b, moveMs } = clip.effect;
-  if (a === b) return a.toFixed(4);
   const frames = Math.max(1, Math.round(((moveMs > 0 ? Math.min(moveMs, clip.durationMs) : clip.durationMs) / 1000) * fps));
-  return `${a.toFixed(4)}+(${(b - a).toFixed(4)})*min(on/${frames}\\,1)`;
+  const base = a === b ? a.toFixed(4) : `${a.toFixed(4)}+(${(b - a).toFixed(4)})*min(on/${frames}\\,1)`;
+  return base + jumpCutPunch(clip, fps);
+}
+
+const PUNCH = 0.1;
+
+/**
+ * Jump cut de editor: a cada corte dentro da parte (pausa/erro removido) o quadro alterna entre normal e mais
+ * perto — esconde o "pulo" e dá ritmo. Usa o número do quadro já colado (on), então casa com os cortes.
+ */
+export function jumpCutPunch(clip: Pick<EditClip, "keep">, fps: number): string {
+  const keep = clip.keep ?? [];
+  if (keep.length < 2) return "";
+  const terms: string[] = [];
+  let at = 0;
+  keep.forEach((k, i) => {
+    const len = Math.round(((k.endMs - k.startMs) / 1000) * fps);
+    if (i % 2 === 1 && len > 0) terms.push(`between(on\\,${at}\\,${at + len - 1})`);
+    at += len;
+  });
+  return terms.length ? `+${PUNCH}*(${terms.join("+")})` : "";
 }
 
 /** Builds the full ffmpeg argv for one final 9:16 export. Deterministic: same plan + inputs = same command. */
 export function ffmpegArgs(r: RenderInput): string[] {
   const { plan } = r;
   if (r.inputs.length !== plan.clips.length) throw new Error("inputs e clips com tamanhos diferentes");
-  const font = r.fontFile.replace(/\\/g, "/").replace(/:/g, "\\:");
   const W = plan.width;
   const H = plan.height;
   const parts: string[] = [];
@@ -159,23 +169,14 @@ export function ffmpegArgs(r: RenderInput): string[] {
   } else {
     parts.push(`${concatIn.join("")}concat=n=${plan.clips.length}:v=1:a=1[vcat][ac]`);
   }
-  // legendas sincronizadas com a fala (ASS/libass) sobre o vídeo já montado — tempos globais
-  if (r.assFile && plan.captionStyle !== "nenhuma") {
-    parts.push(`[vcat]subtitles=filename='${filterPath(r.assFile)}'${r.fontsDir ? `:fontsdir='${filterPath(r.fontsDir)}'` : ""}[vc]`);
+  // cor de cinema: um pouco mais de contraste e cor, bordas levemente escuras (o olho vai para o rosto)
+  parts.push("[vcat]eq=contrast=1.06:gamma=0.98,vibrance=intensity=0.12,vignette=angle=PI/6[vg]");
+  // legendas sincronizadas com a fala, gancho e assinatura do perfil (ASS/libass, fonte manuscrita) — tempos globais
+  if (r.assFile) {
+    parts.push(`[vg]subtitles=filename='${filterPath(r.assFile)}'${r.fontsDir ? `:fontsdir='${filterPath(r.fontsDir)}'` : ""}[vout]`);
   } else {
-    parts.push("[vcat]null[vc]");
+    parts.push("[vg]null[vout]");
   }
-  const endAt = sec(Math.max(0, total - SIGNATURE_MS));
-  // assinatura pequena no canto durante o vídeo; no fim ela vai para o centro, maior
-  const corner = plan.watermark && plan.watermark !== "off" && plan.signature.trim() ? watermarkXY(plan.watermark) : null;
-  const cornerText = corner
-    ? `drawtext=fontfile='${font}':text='${escapeDrawtext(plan.signature)}':fontsize=34:fontcolor=white@0.75:shadowcolor=0x000000@0.6:shadowx=2:shadowy=2` +
-      `:x=${corner.x}:y=${corner.y}:enable='lt(t\\,${endAt})',`
-    : "";
-  parts.push(
-    `[vc]${cornerText}drawtext=fontfile='${font}':text='${escapeDrawtext(plan.signature)}':fontsize=44:fontcolor=white@0.9:shadowcolor=0x000000@0.6:shadowx=2:shadowy=2` +
-      `:x=(w-text_w)/2:y=h*0.86:enable='gte(t\\,${endAt})'[vout]`,
-  );
   const withMusic = Boolean(r.musicFile && plan.music);
   if (withMusic) {
     // música por baixo da voz: abaixa sozinha quando há fala (sidechain), entra e sai suave

@@ -6,7 +6,7 @@ import { promisify } from "node:util";
 import { describe, expect, it } from "vitest";
 import { RODRIGO_PROFILE, assignBroll, buildAss, buildEditPlan, buildSegments, generateLocal, withClips, type SpokenWord } from "@postai/domain";
 import { writeFileSync } from "node:fs";
-import { escapeDrawtext, ffmpegArgs, filterPath, zoomExpr } from "../src/render";
+import { escapeDrawtext, ffmpegArgs, filterPath, jumpCutPunch, zoomExpr } from "../src/render";
 import { editChoices, editFromSpeech, jobVariant } from "../src/job";
 import { probe, render } from "../src/ffmpeg";
 
@@ -43,22 +43,25 @@ describe("renderizador (comando)", () => {
     const cut = ffmpegArgs({ plan: { ...plan, transitions: [] }, inputs: ["a.mp4", "b.mp4", "c.mp4"], hasAudio: [true, false, true], fontFile: "f.ttf", output: "o.mp4" });
     expect(cut[cut.indexOf("-filter_complex") + 1]).toContain("concat=n=3:v=1:a=1");
     expect(graph).toContain("loudnorm");
-    expect(graph).toContain("RodrigoSerra.me");
     expect(args).toContain("[vout]");
     expect(graph).toContain("bilateral="); // retoque leve on by default
     const off = ffmpegArgs({ plan: { ...plan, retouch: "off" }, inputs: ["a.mp4", "b.mp4", "c.mp4"], hasAudio: [true, true, true], fontFile: "f.ttf", output: "o.mp4" });
     expect(off[off.indexOf("-filter_complex") + 1]).not.toContain("bilateral=");
   });
-  it("assinatura do perfil no canto escolhido durante o vídeo e no centro no fim", () => {
-    const g = (p: typeof plan) => { const a = ffmpegArgs({ plan: p, inputs: ["a.mp4", "b.mp4", "c.mp4"], hasAudio: [true, true, true], fontFile: "f.ttf", output: "o.mp4" }); return a[a.indexOf("-filter_complex") + 1]!; };
-    const drawtexts = (graph: string) => graph.split("drawtext=").length - 1;
-    expect(drawtexts(g(plan))).toBe(1); // sem canto escolhido: só a assinatura final
-    const cp = g({ ...plan, signature: "ControlPot", watermark: "inf-esq" });
-    expect(drawtexts(cp)).toBe(2);
-    expect(cp).toContain("text='ControlPot':fontsize=34");
-    expect(cp).toContain("x=w*0.05:y=h*0.78-text_h:enable='lt(t");
-    expect(g({ ...plan, watermark: "sup-dir" })).toContain("x=w-text_w-w*0.05:y=h*0.065");
-    expect(drawtexts(g({ ...plan, watermark: "off" }))).toBe(1);
+  it("cor de cinema e legenda/assinatura pela camada ASS (sem texto queimado à parte)", () => {
+    const g = (p: typeof plan, assFile?: string) => { const a = ffmpegArgs({ plan: p, inputs: ["a.mp4", "b.mp4", "c.mp4"], hasAudio: [true, true, true], fontFile: "f.ttf", output: "o.mp4", assFile }); return a[a.indexOf("-filter_complex") + 1]!; };
+    expect(g(plan)).toContain("eq=contrast=1.06:gamma=0.98,vibrance=intensity=0.12");
+    expect(g(plan)).toContain("vignette=");
+    expect(g(plan)).not.toContain("drawtext=");
+    // a assinatura vem no .ass: aplica mesmo com "sem legenda"
+    expect(g({ ...plan, captionStyle: "nenhuma" }, "l.ass")).toContain("subtitles=filename='l.ass'");
+  });
+  it("jump cut: a cada corte dentro da parte o quadro alterna normal ↔ mais perto", () => {
+    expect(jumpCutPunch({ keep: [{ startMs: 0, endMs: 1000 }] }, 30)).toBe("");
+    const z = jumpCutPunch({ keep: [{ startMs: 0, endMs: 1000 }, { startMs: 1500, endMs: 2500 }, { startMs: 3000, endMs: 3500 }, { startMs: 4000, endMs: 5000 }] }, 30);
+    // 2º trecho = quadros 30..59, 4º = 75..104 (o 3º tem 15 quadros)
+    expect(z).toBe(String.raw`+0.1*(between(on\,30\,59)+between(on\,75\,104))`);
+    expect(zoomExpr({ ...plan.clips[0]!, keep: [{ startMs: 0, endMs: 1000 }, { startMs: 1500, endMs: 2500 }] }, 30)).toContain("+0.1*(between(on");
   });
   it("embelezamento só na pele (máscara), 3 níveis, sem saturar a boca, e tirar tremido", () => {
     const g = (p: typeof plan) => { const a = ffmpegArgs({ plan: p, inputs: ["a.mp4", "b.mp4", "c.mp4"], hasAudio: [true, true, true], fontFile: "f.ttf", output: "o.mp4" }); return a[a.indexOf("-filter_complex") + 1]!; };
@@ -128,7 +131,8 @@ describe("renderizador (comando)", () => {
     expect(graph).toContain("afade=t=in");
     expect(args.slice(args.indexOf("-stream_loop"), args.indexOf("-stream_loop") + 4)).toEqual(["-stream_loop", "-1", "-i", "m.mp3"]);
     const none = ffmpegArgs({ plan: { ...plan, captionStyle: "nenhuma" }, inputs: ["a.mp4", "b.mp4", "c.mp4"], hasAudio: [true, true, true], fontFile: "f.ttf", output: "o.mp4", assFile: "x.ass" });
-    expect(none[none.indexOf("-filter_complex") + 1]).not.toContain("subtitles=");
+    // "sem legenda" ainda leva o .ass: ele carrega a assinatura do perfil e o gancho
+    expect(none[none.indexOf("-filter_complex") + 1]).toContain("subtitles=filename='x.ass'");
     expect(none).not.toContain("-stream_loop");
     expect(filterPath(String.raw`D:\a b\c's.ass`)).toBe(String.raw`D\:/a b/c\'s.ass`);
   });

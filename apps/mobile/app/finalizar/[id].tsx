@@ -2,10 +2,8 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { Text, View } from "react-native";
 import { router, useFocusEffect, useLocalSearchParams } from "expo-router";
 import { useKeepAwake } from "expo-keep-awake";
-import {
-  DEFAULT_EDIT_CHOICES, MOOD_LABEL, MUSIC_LIBRARY, moodForPillar, pickTrack, trackById,
-  type EditChoices, type MusicMood, type MusicTrack, type Retouch,
-} from "@postai/domain";
+import { DEFAULT_EDIT_CHOICES, type EditChoices, type Retouch } from "@postai/domain";
+import { chosenTrack, nextTrack } from "../../src/musicChoice";
 import { getContent, getTake, setEditChoices, type ContentItem, type Take } from "../../src/db/repo";
 import { contentPlan, type ContentPlan } from "../../src/finalPlan";
 import { downloadFinal, kickRenderWorker, latestRenderJob, requestFinalRender, type RenderJob } from "../../src/finalRender";
@@ -19,21 +17,6 @@ const POLL_MS = 8_000;
 const CAPTION_NAME: Record<string, string> = { manuscrito: "Manuscrito (creme, pincel)", destaque: "Destaque (palavra acende)", limpo: "Limpa", nenhuma: "Sem legenda" };
 const RETOUCH_NAME: Record<Retouch, string> = { forte: "Forte", leve: "Natural", off: "Desligado" };
 
-/** A música que vai entrar (o servidor escolhe igual: mesmo clima e mesma semente = mesma faixa). */
-function chosenTrack(edit: EditChoices, contentId: string, pillarSlug: string, business: boolean): MusicTrack | null {
-  if (edit.music === "none") return null;
-  const exact = trackById(edit.music);
-  if (exact) return exact;
-  const mood = (edit.music in MOOD_LABEL ? edit.music : moodForPillar(pillarSlug, business)) as MusicMood;
-  return pickTrack(mood, contentId);
-}
-
-/** Próxima faixa do mesmo clima (botão TROCAR). */
-function nextTrack(current: MusicTrack): MusicTrack {
-  const pool = MUSIC_LIBRARY.filter((t) => t.mood === current.mood);
-  return pool[(pool.findIndex((t) => t.id === current.id) + 1) % pool.length]!;
-}
-
 type Step = "confirmar" | "enviando" | "fila" | "montando" | "baixando" | "falhou";
 
 /**
@@ -42,17 +25,20 @@ type Step = "confirmar" | "enviando" | "fila" | "montando" | "baixando" | "falho
  */
 export default function FinalizarScreen() {
   useKeepAwake();
-  const { id } = useLocalSearchParams<{ id: string }>();
+  // refazer=1: veio do vídeo pronto ("TROCAR MÚSICA E REFAZER") — monta de novo sem perguntar
+  const { id, refazer } = useLocalSearchParams<{ id: string; refazer?: string }>();
   const [c, setC] = useState<ContentItem | null>(null);
   const [cp, setCp] = useState<ContentPlan | null>(null);
   const [takes, setTakes] = useState<Take[]>([]);
   const [job, setJob] = useState<RenderJob | null>(null);
-  const [confirmed, setConfirmed] = useState(false);
+  const [confirmed, setConfirmed] = useState(refazer === "1");
   const [waitMsg, setWaitMsg] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [showOptions, setShowOptions] = useState(false);
   const opening = useRef(false);
   const retryAsked = useRef(false);
+  // pedir montagem nova mesmo que já exista um vídeo pronto (confirmar de novo / refazer)
+  const forceRequest = useRef(refazer === "1");
 
   const refresh = useCallback(async () => {
     const item = await getContent(id);
@@ -94,10 +80,12 @@ export default function FinalizarScreen() {
       const j = await latestRenderJob(c.id).catch(() => null);
       if (stop) return;
       // falhou: só pede de novo quando a pessoa toca em TENTAR DE NOVO (sem loop de pedidos)
-      if (!j || (j.status === "failed" && retryAsked.current)) {
+      if (!j || forceRequest.current || (j.status === "failed" && retryAsked.current)) {
         retryAsked.current = false;
         const r = await requestFinalRender(c.workspaceId, c.id, plan);
         if (r.ok) {
+          // só esquece o "refazer" quando o pedido novo entrou (vídeos ainda subindo = tenta na próxima volta)
+          forceRequest.current = false;
           setWaitMsg(null);
           void kickRenderWorker();
           setJob(await latestRenderJob(c.id).catch(() => null));
@@ -158,7 +146,7 @@ export default function FinalizarScreen() {
             <Row label={`✓ Embelezar a pele: ${RETOUCH_NAME[retouch]}`} />
             <Row label={`✓ Voz limpa, gancho na tela, capa e assinatura`} />
           </Card>
-          <Button label="CONFIRMAR E MONTAR" onPress={() => setConfirmed(true)} testID="confirm-render" />
+          <Button label="CONFIRMAR E MONTAR" onPress={() => { forceRequest.current = true; setConfirmed(true); }} testID="confirm-render" />
           <Button variant="ghost" compact label={showOptions ? "Fechar opções" : "Mudar alguma coisa"} onPress={() => setShowOptions(!showOptions)} testID="change-options" />
           {showOptions ? <FinishOptions value={edit} onChange={save} pillarSlug={c.pillarSlug} business={cp.business} /> : null}
         </>

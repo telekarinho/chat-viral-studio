@@ -1,3 +1,18 @@
+# Edição "de editor" — 02/10/2026
+
+| O quê | Como | Onde |
+|---|---|---|
+| Legenda Manuscrito | **Covered By Your Grace** (OFL, escolhida pelo Rodrigo pelo print), creme `#F3E6CF`, caixa alta, 118 px, na altura do rosto (~58%), blocos de até 4 palavras, entra com “pop” 92%→100% | `packages/domain/src/captions.ts` |
+| Gancho na tela | mesma fonte, 132 px, no alto, sombra, sem caixa | `buildAss` estilo `gancho` |
+| Assinatura | mesma fonte, 74 px, **o vídeo inteiro**, embaixo no centro (padrão) ou canto escolhido em Perfis | `buildAss` estilo `assinatura`, `watermark.ts` |
+| Corte seco | pausa > 450 ms vira 160 ms de respiro | `packages/domain/src/cuts.ts` |
+| Jump cut com “soco” | a cada corte dentro da parte o quadro alterna normal ↔ +10% | `jumpCutPunch` em `apps/worker/src/render.ts` |
+| Cor | contraste +6%, vibrance (não satura boca/pele), vinheta leve | `render.ts` |
+| Refazer | no vídeo pronto: TROCAR MÚSICA E REFAZER / mudar opções e refazer | `app/final/[id].tsx` → `/finalizar?refazer=1` |
+| Prévia local | `npx tsx apps/worker/scripts/preview.ts <pasta>` gera quadros PNG | `apps/worker/scripts/preview.ts` |
+
+---
+
 # Editor automático — 30/09/2026
 
 | Função | Como funciona | Onde |
