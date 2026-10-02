@@ -55,6 +55,7 @@ export default function RecordScreen() {
   const [content, setContent] = useState<ContentItem | null>(null);
   const [retouch, setRetouch] = useState<Retouch>("forte");
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [showScene, setShowScene] = useState(false);
   const [phase, setPhase] = useState<Phase>("ready");
   const [message, setMessage] = useState<string | null>(null);
   const [saved, setSaved] = useState<Take | null>(null);
@@ -303,10 +304,14 @@ export default function RecordScreen() {
   // dica de gravação da parte atual; antes da 1ª parte, o básico de luz/enquadramento
   const role = segments && segIndex !== null ? segments[segIndex]?.role : null;
   const firstPart = !segments || recordedParts.length === 0;
-  // roteiro com direção: a instrução do diretor para ESTE take vem no lugar da dica genérica
+  // roteiro com direção: a instrução do diretor para ESTE take vem no lugar da dica genérica,
+  // curta (como falar) e a cena (onde/como filmar) só ao tocar — não cobre o rosto
   const direction = segments && segIndex !== null ? segments[segIndex]?.direction : undefined;
+  const speech = (direction ?? []).filter((d) => SPEECH_LABELS.includes(d.label));
+  const scene = (direction ?? []).filter((d) => !SPEECH_LABELS.includes(d.label));
+  const join = (xs: { label: string; value: string }[]) => xs.map((d) => `${d.label}: ${d.value}`).join(" · ");
   const tip = direction?.length
-    ? direction.map((d) => `${d.label}: ${d.value}`).join(" · ")
+    ? (showScene ? `🎥 ${join(scene)}` : `🎙 ${join(speech) || "Fale com calma, olhando para a lente."}`)
     : role && !firstPart ? RECORDING_TIPS[role] : `${RECORDING_CHECKLIST}. ${RECORDING_TIPS[role ?? "hook"]}`;
   return (
     <View style={[st.root, ringLight && { backgroundColor: RING_COLOR[light] }]} testID="record-screen">
@@ -329,7 +334,8 @@ export default function RecordScreen() {
         {/* luz de tela estilo TikTok: brilho suave vindo das bordas */}
         {ringLight ? <SoftGlow color={RING_COLOR[light]} /> : null}
       </View>
-      <Teleprompter text={script || "Sem roteiro — fale livremente."} state={tp} dispatch={dispatch} visible={prompterOn} />
+      {/* abaixo da etiqueta "Parte x/y" (que fica abaixo da ilha/entalhe do celular) */}
+      <Teleprompter text={script || "Sem roteiro — fale livremente."} state={tp} dispatch={dispatch} visible={prompterOn} top={insets.top + PROMPTER_GAP_TOP} />
       {tp.phase === "countdown" ? (
         <View style={st.countdown} pointerEvents="none" testID="countdown">
           <Text style={st.countdownText}>{Math.ceil(tp.countdownMs / 1000)}</Text>
@@ -377,10 +383,12 @@ export default function RecordScreen() {
       <View style={[st.bottom, { bottom: 28 + insets.bottom }]}>
         {message ? <Text style={st.message} accessibilityRole="alert">{message}</Text> : null}
         {!recording && !settingsOpen && !patrimonio ? (
-          <View style={st.tip} testID="recording-tip">
-            <Text style={st.tipText}>{`💡 ${tip}`}</Text>
-            {content && retouch !== "off" ? <Text style={st.tipSub}>{`✨ Embelezamento ${RETOUCH_SHORT[retouch].toLowerCase()} entra no vídeo final (a câmera mostra sem filtro)`}</Text> : null}
-          </View>
+          <Pressable style={st.tip} testID="recording-tip" disabled={!scene.length} onPress={() => setShowScene(!showScene)}
+            accessibilityRole={scene.length ? "button" : undefined} accessibilityHint={scene.length ? "Alterna entre como falar e como filmar" : undefined}>
+            <Text style={st.tipText} numberOfLines={showScene ? 6 : 3}>{direction?.length ? tip : `💡 ${tip}`}</Text>
+            {scene.length ? <Text style={st.tipSub}>{showScene ? "Toque para ver como falar" : "Toque para ver a cena (local, luz, enquadramento)"}</Text> : null}
+            {content && retouch !== "off" && !direction?.length ? <Text style={st.tipSub}>{`✨ Embelezamento ${RETOUCH_SHORT[retouch].toLowerCase()} entra no vídeo final (a câmera mostra sem filtro)`}</Text> : null}
+          </Pressable>
         ) : null}
         {settingsOpen && !recording ? (
           <View style={st.sheet} testID="settings-sheet">
@@ -507,6 +515,11 @@ function SoftGlow({ color }: { color: string }) {
 type LightMode = "off" | "warm" | "neutral";
 const NEXT_LIGHT: Record<LightMode, LightMode> = { off: "neutral", neutral: "warm", warm: "off" };
 const LIGHT_LABEL: Record<LightMode, string> = { off: "Luz", neutral: "Luz máx.", warm: "Quente" };
+/** instruções do diretor sobre a fala (o resto é a cena: local, luz, enquadramento…) */
+const SPEECH_LABELS = ["Ritmo", "Emoção", "Olhar"];
+/** teleprompter começa abaixo da etiqueta da parte (que fica a 18px da área segura) */
+const PROMPTER_GAP_TOP = 76;
+
 const RING_COLOR: Record<LightMode, string> = { off: "#000000", warm: "#FFE2BF", neutral: "#FFFFFF" };
 /** largura da janela da câmera com a luz ligada (o resto da tela vira luz) */
 const LIGHT_WINDOW = 0.66;

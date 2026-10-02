@@ -9,10 +9,12 @@ interface Props {
   state: TeleprompterState;
   dispatch: (a: TeleprompterAction) => void;
   visible: boolean;
+  /** distância do topo da tela (abaixo da barra de status e da etiqueta da parte) */
+  top?: number;
 }
 
 /** Scroll position is fully driven by the pure reducer (tested in @postai/domain). */
-export function Teleprompter({ text, state, dispatch, visible }: Props) {
+export function Teleprompter({ text, state, dispatch, visible, top }: Props) {
   const ref = useRef<ScrollView>(null);
   const [content, setContent] = useState(0);
   const [viewport, setViewport] = useState(0);
@@ -39,7 +41,7 @@ export function Teleprompter({ text, state, dispatch, visible }: Props) {
   if (!visible) return null;
   const step = state.fontSize * 1.4 * 2; // two lines
   return (
-    <View style={st.wrap} pointerEvents="box-none" testID="teleprompter">
+    <View style={[st.wrap, top !== undefined && { top }]} pointerEvents="box-none" testID="teleprompter">
       <ScrollView
         ref={ref}
         style={{ flex: 1 }}
