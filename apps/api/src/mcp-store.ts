@@ -1,12 +1,20 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
-import type { PostMetrics, ProjectInfo } from "@postai/domain";
+import { BRASILIA_OFFSET_MIN, buildDayPlan, type ContentDraft, type ContentFormat, type EditChoices, type Pillar, type PostMetrics, type ProjectInfo, type RoutineBlock } from "@postai/domain";
 import { supabaseMemory } from "./adapters";
-import type { McpContent, McpPost, McpStore } from "./mcp";
+import type { McpContent, McpContext, McpPost, McpProfile, McpScript, McpStore } from "./mcp-tools";
 
 type ContentRow = { id: string; format: string; pillar_slug: string | null; title: string; plan_date: string | null; structured_payload: Record<string, unknown> | null };
 const COLS = "id, format, pillar_slug, title, plan_date, structured_payload";
 
 const asProject = (p: Record<string, unknown> | null) => (p?.project ?? null) as ProjectInfo | null;
+const daysAgo = (n: number) => new Date(Date.now() - n * 24 * 60 * 60 * 1000).toISOString();
+const addDays = (dateKey: string, n: number) => new Date(Date.parse(`${dateKey}T12:00:00Z`) + n * 86_400_000).toISOString().slice(0, 10);
+/** início/fim de um dia de Brasília em UTC (para achar missões já criadas naquele dia) */
+const brtDayRange = (dateKey: string) => {
+  const start = new Date(Date.parse(`${dateKey}T00:00:00Z`) - BRASILIA_OFFSET_MIN * 60_000);
+  return [start.toISOString(), new Date(start.getTime() + 86_400_000).toISOString()] as const;
+};
+const WRITE_ROLES = ["owner", "editor"];
 
 /**
  * Store do conector MCP. Usa a chave de serviço, então TODA consulta filtra pelo workspace do link
@@ -22,11 +30,96 @@ export function supabaseMcpStore(db: SupabaseClient, workspaceId: string, userId
       id: r.id, format: r.format, pillarSlug: r.pillar_slug ?? "", title: r.title, date: r.plan_date ?? "", hasScript: scripted.has(r.id), project: asProject(r.structured_payload),
     }));
   };
-  return {
+  const store: McpStore = {
     async contentsOn(date) {
       const { data, error } = await db.from("content_items").select(COLS).eq("workspace_id", workspaceId).eq("plan_date", date).order("scheduled_for");
       if (error) throw new Error(error.message);
       return withScript((data ?? []) as ContentRow[]);
+    },
+    async readScript(contentId): Promise<McpScript> {
+      const [script, content, pending] = await Promise.all([
+        db.from("scripts").select("draft").eq("workspace_id", workspaceId).eq("content_item_id", contentId).order("updated_at", { ascending: false }).limit(1).maybeSingle(),
+        db.from("content_items").select("structured_payload").eq("workspace_id", workspaceId).eq("id", contentId).maybeSingle(),
+        db.from("assistant_drafts").select("id", { count: "exact", head: true }).eq("workspace_id", workspaceId).eq("content_item_id", contentId).is("consumed_at", null),
+      ]);
+      const sp = (content.data?.structured_payload ?? {}) as Record<string, unknown>;
+      return {
+        draft: (script.data?.draft ?? null) as ContentDraft | null,
+        edit: (sp.edit ?? null) as EditChoices | null,
+        metrics: (sp.metrics ?? null) as PostMetrics | null,
+        postedAt: typeof sp.posted_at === "string" ? sp.posted_at : null,
+        pendingFromAssistant: (pending.count ?? 0) > 0,
+      };
+    },
+    async planDays(startDate, days) {
+      const out: { date: string; created: boolean; items: McpContent[] }[] = [];
+      const [pillarRows, blockRows, recentRows] = await Promise.all([
+        db.from("content_pillars").select("slug, name, target_percent, active").eq("workspace_id", workspaceId),
+        db.from("routine_blocks").select("id, weekday, start_time, title, content_hint, optional, default_format").eq("workspace_id", workspaceId),
+        db.from("content_items").select("pillar_slug").eq("workspace_id", workspaceId).order("plan_date", { ascending: false }).limit(30),
+      ]);
+      const err = pillarRows.error ?? blockRows.error ?? recentRows.error;
+      if (err) throw new Error(err.message);
+      const pillars: Pillar[] = (pillarRows.data ?? []).map((p) => ({ slug: p.slug, name: p.name, targetPercent: Number(p.target_percent), active: p.active }));
+      const routine: RoutineBlock[] = (blockRows.data ?? []).map((b) => ({
+        id: b.id, weekday: b.weekday, startTime: String(b.start_time).slice(0, 5), title: b.title, contentHint: b.content_hint, optional: b.optional, format: b.default_format as ContentFormat,
+      }));
+      const history = (recentRows.data ?? []).map((r) => r.pillar_slug as string).filter(Boolean).reverse();
+      for (let i = 0; i < days; i++) {
+        const date = addDays(startDate, i);
+        const [from, to] = brtDayRange(date);
+        const tasks = await db.from("recording_tasks").select("id").eq("workspace_id", workspaceId).gte("scheduled_for", from).lt("scheduled_for", to).limit(1);
+        if (tasks.error) throw new Error(tasks.error.message);
+        const existing = await store.contentsOn(date);
+        // dia já planejado (pelo app ou antes): fica como está
+        if (existing.length || tasks.data?.length) {
+          out.push({ date, created: false, items: existing });
+          continue;
+        }
+        const plan = buildDayPlan({ date: new Date(0), dateKey: date, utcOffsetMinutes: BRASILIA_OFFSET_MIN, workspaceId, routine, pillars, recentPillarSlugs: history, newId: () => crypto.randomUUID(), now: new Date().toISOString() });
+        history.push(...plan.contentItems.map((c) => c.pillarSlug));
+        if (plan.contentItems.length) {
+          const ci = await db.from("content_items").insert(plan.contentItems.map((c) => ({
+            id: c.id, workspace_id: workspaceId, pillar_slug: c.pillarSlug, plan_date: c.date, scheduled_for: c.scheduledFor, format: c.format, title: c.title, status: c.status, structured_payload: {},
+          })));
+          if (ci.error) throw new Error(ci.error.message);
+        }
+        if (plan.tasks.length) {
+          const rt = await db.from("recording_tasks").insert(plan.tasks.map((t) => ({
+            id: t.id, workspace_id: workspaceId, content_item_id: t.contentItemId, scheduled_for: t.scheduledFor, title: t.title, kind: t.kind, hint: t.hint,
+            suggested_duration_seconds: t.suggestedDurationSeconds, optional: t.optional, status: t.status, updated_at: t.updatedAt,
+          })));
+          if (rt.error) throw new Error(rt.error.message);
+        }
+        out.push({ date, created: true, items: await store.contentsOn(date) });
+      }
+      return out;
+    },
+    async pillarCounts(days) {
+      const scripts = await db.from("scripts").select("content_item_id").eq("workspace_id", workspaceId).gte("created_at", daysAgo(days));
+      if (scripts.error) throw new Error(scripts.error.message);
+      const ids = [...new Set((scripts.data ?? []).map((r) => r.content_item_id as string).filter(Boolean))];
+      if (!ids.length) return {};
+      const items = await db.from("content_items").select("pillar_slug").eq("workspace_id", workspaceId).in("id", ids);
+      if (items.error) throw new Error(items.error.message);
+      const counts: Record<string, number> = {};
+      for (const r of items.data ?? []) if (r.pillar_slug) counts[r.pillar_slug] = (counts[r.pillar_slug] ?? 0) + 1;
+      return counts;
+    },
+    async recentTopics(days) {
+      const { data, error } = await db.from("scripts").select("draft").eq("workspace_id", workspaceId).gte("created_at", daysAgo(days)).order("created_at", { ascending: false }).limit(60);
+      if (error) throw new Error(error.message);
+      return (data ?? []).map((r) => String((r.draft as { topic?: string } | null)?.topic ?? "")).filter(Boolean);
+    },
+    async saveImprovement(i) {
+      const { data, error } = await db.from("melhorias").insert({ workspace_id: workspaceId, user_id: userId, ...i }).select("id").single();
+      if (error) throw new Error(error.message);
+      return data.id as string;
+    },
+    async improvements() {
+      const { data, error } = await db.from("melhorias").select("id, titulo, prioridade, status, issue_number, created_at").eq("workspace_id", workspaceId).order("created_at", { ascending: false }).limit(30);
+      if (error) throw new Error(error.message);
+      return (data ?? []).map((m) => ({ id: m.id, titulo: m.titulo, prioridade: m.prioridade, status: m.status, issueNumber: m.issue_number, createdAt: m.created_at }));
     },
     async content(id) {
       const { data, error } = await db.from("content_items").select(COLS).eq("workspace_id", workspaceId).eq("id", id).maybeSingle();
@@ -67,6 +160,33 @@ export function supabaseMcpStore(db: SupabaseClient, workspaceId: string, userId
           metrics: (p.metrics ?? null) as PostMetrics | null,
         };
       });
+    },
+  };
+  return store;
+}
+
+/** Perfis em que a pessoa do link pode escrever (dono/editor); cada chamada usa só os dados do perfil escolhido. */
+export function supabaseMcpContext(db: SupabaseClient, userId: string, defaultProfileId: string): McpContext {
+  const canWrite = async (workspaceId: string) => {
+    const { data } = await db.from("workspace_members").select("role").eq("workspace_id", workspaceId).eq("user_id", userId).maybeSingle();
+    return Boolean(data && WRITE_ROLES.includes(data.role as string));
+  };
+  return {
+    defaultProfileId,
+    async profiles(): Promise<McpProfile[]> {
+      const { data, error } = await db.from("workspace_members").select("workspace_id, role, workspaces(name, deleted_at)").eq("user_id", userId);
+      if (error) throw new Error(error.message);
+      const rows = (data ?? []) as unknown as { workspace_id: string; role: string; workspaces: { name: string; deleted_at: string | null } | null }[];
+      const mine = rows.filter((r) => WRITE_ROLES.includes(r.role) && r.workspaces && !r.workspaces.deleted_at);
+      const ids = mine.map((r) => r.workspace_id);
+      const prof = ids.length ? await db.from("creator_profiles").select("workspace_id, signature, tone").in("workspace_id", ids) : { data: [] };
+      const byWs = new Map(((prof.data ?? []) as { workspace_id: string; signature: string | null; tone: { kind?: string } | null }[]).map((p) => [p.workspace_id, p]));
+      return mine.map((r) => ({
+        id: r.workspace_id, name: r.workspaces!.name, kind: byWs.get(r.workspace_id)?.tone?.kind === "empresa" ? "empresa" : "pessoal", signature: byWs.get(r.workspace_id)?.signature ?? "",
+      }));
+    },
+    async store(profileId) {
+      return /^[0-9a-f-]{36}$/i.test(profileId) && (await canWrite(profileId)) ? supabaseMcpStore(db, profileId, userId) : null;
     },
   };
 }

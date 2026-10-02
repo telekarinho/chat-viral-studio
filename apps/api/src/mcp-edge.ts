@@ -6,7 +6,7 @@
  */
 import { createClient } from "@supabase/supabase-js";
 import { handleMcp } from "./mcp";
-import { resolveMcpToken, supabaseMcpStore } from "./mcp-store";
+import { resolveMcpToken, supabaseMcpContext } from "./mcp-store";
 
 declare const Deno: { env: { get(k: string): string | undefined }; serve(h: (r: Request) => Promise<Response>): void };
 
@@ -28,11 +28,11 @@ Deno.serve(async (req) => {
   } catch {
     return json(400, { jsonrpc: "2.0", id: null, error: { code: -32700, message: "Parse error" } });
   }
-  const store = supabaseMcpStore(db, who.workspaceId, who.userId);
+  const ctx = supabaseMcpContext(db, who.userId, who.workspaceId);
   if (Array.isArray(msg)) {
-    const out = (await Promise.all(msg.map((m) => handleMcp(m, store)))).filter(Boolean);
+    const out = (await Promise.all(msg.map((m) => handleMcp(m, ctx)))).filter(Boolean);
     return out.length ? json(200, out) : new Response(null, { status: 202 });
   }
-  const res = await handleMcp(msg, store);
+  const res = await handleMcp(msg, ctx);
   return res ? json(200, res) : new Response(null, { status: 202 });
 });
