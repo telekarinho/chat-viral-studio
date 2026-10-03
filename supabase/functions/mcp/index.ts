@@ -1183,6 +1183,29 @@ function describeEditProposal(p, own = []) {
   return bits.join(" \xB7 ");
 }
 
+// ../../packages/domain/src/takeQuality.ts
+var WORDS_PER_S = 2.5;
+var MIN_SHORT_DIM = 720;
+var TOO_SHORT = 0.5;
+var TOO_LONG = 2.5;
+var LONG_SLACK_S = 3;
+function takeTechNotes(t2, text3) {
+  const notes = [];
+  if (!t2.synced) notes.push("ainda n\xE3o subiu para a nuvem");
+  const words2 = text3.split(/\s+/).filter(Boolean).length;
+  if (t2.durationMs !== null && words2) {
+    const expected = words2 / WORDS_PER_S;
+    const got = t2.durationMs / 1e3;
+    if (got < expected * TOO_SHORT) notes.push(`curto demais (${got.toFixed(1)}s para ~${expected.toFixed(0)}s de texto): pode ter cortado a fala`);
+    else if (got > expected * TOO_LONG + LONG_SLACK_S) notes.push(`bem mais longo que o texto (${got.toFixed(0)}s para ~${expected.toFixed(0)}s): muitas pausas ou erros (o AutoCut corta pausas)`);
+  }
+  if (t2.width && t2.height) {
+    if (Math.min(t2.width, t2.height) < MIN_SHORT_DIM) notes.push(`resolu\xE7\xE3o baixa (${t2.width}x${t2.height})`);
+    if (t2.width > t2.height) notes.push("gravado na horizontal: o v\xEDdeo final \xE9 vertical e corta as laterais");
+  }
+  return notes;
+}
+
 // src/mcp-profiles.ts
 import { z as z3 } from "npm:zod@4";
 var str = (max) => z3.string().trim().min(1).max(max);
@@ -1461,6 +1484,7 @@ var MCP_TOOLS = [
   { name: "registrar_metricas", title: "Registrar n\xFAmeros do post", description: "Salva os n\xFAmeros REAIS de um post (ex.: lidos no Metricool ou no painel da rede) para o app e o ranking. Nunca invente n\xFAmeros.", inputSchema: obj({ content_id: { type: "string" }, visualizacoes: { type: "number" }, curtidas: { type: "number" }, comentarios: { type: "number" }, compartilhamentos: { type: "number" }, salvamentos: { type: "number" }, retencao: { type: "number", description: "% de conclus\xE3o/reten\xE7\xE3o m\xE9dia (0\u2013100)" }, tempo_medio_segundos: { type: "number" }, seguidores_ganhos: { type: "number" }, fonte: { type: "string", description: "ex.: Metricool, Instagram" } }, ["content_id", "visualizacoes"]), annotations: WRITE2 },
   { name: "listar_musicas", title: "M\xFAsicas licenciadas", description: "Faixas da biblioteca licenciada (id, clima, dura\xE7\xE3o, licen\xE7a). Use o id em direcao.musica.id. Conta de empresa s\xF3 v\xEA faixas com licen\xE7a comercial.", inputSchema: obj({ clima: { type: "string", description: `opcional: ${Object.keys(MOOD_LABEL).join(", ")}` }, bpm: { type: "number", description: "opcional (as faixas ainda n\xE3o t\xEAm BPM medido)" } }), annotations: RO2 },
   { name: "propor_edicao", title: "Propor a edi\xE7\xE3o", description: "Depois de ver o que foi gravado (ler_status_gravacao), prop\xF5e a montagem: estilo AutoCut, m\xFAsica, volume e trecho, com o motivo. O criador v\xEA no app e escolhe MONTAR ASSIM (monta) ou AJUSTAR. Nada \xE9 montado nem publicado sem ele.", inputSchema: obj({ content_id: { type: "string" }, autocut: { type: "string", enum: [...AUTOCUT_IDS], description: `estilo da montagem (cortes, zoom, transi\xE7\xE3o, ritmo): ${AUTOCUT_THEMES.map((t2) => `${t2.id} = ${t2.label.replace(/^\S+\s/, "")}`).join("; ")}` }, musica: { type: "string", description: 'id de listar_musicas, "auto", "none" ou um clima' }, volume: { type: "number", description: "0.05 a 0.45, relativo \xE0 voz (0.22 padr\xE3o)" }, inicio_musica_s: { type: "number", description: "segundo da faixa onde a trilha come\xE7a (s\xF3 com faixa espec\xEDfica)" }, motivo: { type: "string", description: "por que esta edi\xE7\xE3o, em 1\u20132 frases simples" } }, ["content_id", "motivo"]), annotations: WRITE2 },
+  { name: "listar_takes", title: "Takes gravados", description: "Cada take gravado do conte\xFAdo, por parte do roteiro: n\xFAmero do take, dura\xE7\xE3o, resolu\xE7\xE3o, c\xE2mera, se subiu, se foi descartado e uma checagem t\xE9cnica (dura\xE7\xE3o \xD7 texto, resolu\xE7\xE3o, orienta\xE7\xE3o). N\xE3o \xE9 nota de viralidade. A montagem usa o take mais recente n\xE3o descartado de cada parte.", inputSchema: obj({ content_id: { type: "string" } }, ["content_id"]), annotations: RO2 },
   { name: "ler_status_gravacao", title: "Status da grava\xE7\xE3o", description: "O que j\xE1 foi gravado (por take/parte), o que falta, se j\xE1 subiu e como est\xE1 a montagem do v\xEDdeo.", inputSchema: obj({ content_id: { type: "string" } }, ["content_id"]), annotations: RO2 },
   { name: "registrar_melhoria", title: "Registrar melhoria", description: "Manda uma sugest\xE3o de melhoria do app/conector para o backlog do desenvolvedor, com contexto e crit\xE9rio de aceite. Use para toda recomenda\xE7\xE3o de mudan\xE7a no sistema.", inputSchema: obj({ titulo: { type: "string" }, descricao: { type: "string", description: "o problema, a proposta e o crit\xE9rio de aceite" }, prioridade: { type: "string", enum: ["baixa", "media", "alta"] } }, ["titulo", "descricao"]), annotations: WRITE2 },
   { name: "listar_melhorias", title: "Melhorias pedidas", description: "Melhorias j\xE1 registradas e o andamento (nova, no backlog, feita, recusada).", inputSchema: obj({}), annotations: RO2 },
@@ -1701,6 +1725,30 @@ Postado em ${brt(script.postedAt)}` : "";
     return text2(`Grava\xE7\xE3o de "${content.title}" (${content.date}):
 ${lines.join("\n")}
 Montagem: ${render}${posted}`);
+  }
+  if (name === "listar_takes") {
+    const [takes, script, profile] = await Promise.all([store.takes(content.id), store.readScript(content.id), store.profile()]);
+    if (!takes.length) return text2(`Nenhum take gravado ainda em "${content.title}".`);
+    const draft = script.draft ?? script.pending?.draft ?? null;
+    const segs = draft ? buildSegments(draft, { selectedHook: 0, userEdited: false, closingPhrase: profile.closingPhrase, business: profile.kind === "empresa" }) : [];
+    const groups = /* @__PURE__ */ new Map();
+    for (const t2 of takes) groups.set(t2.segmentIndex, [...groups.get(t2.segmentIndex) ?? [], t2]);
+    const blocks = [...groups.entries()].sort(([a], [b]) => (a ?? -1) - (b ?? -1)).map(([idx, list2]) => {
+      const seg = idx === null ? null : segs[idx];
+      const title = idx === null ? "V\xEDdeo inteiro de uma vez" : `Parte ${idx + 1}${seg ? ` \u2014 ${seg.label}` : ""}`;
+      const used = [...list2].reverse().find((t2) => !t2.discarded)?.id;
+      const rows = list2.map((t2, i) => {
+        const facts = [t2.durationMs !== null ? `${(t2.durationMs / 1e3).toFixed(1)}s` : "dura\xE7\xE3o ?", t2.width && t2.height ? `${t2.width}x${t2.height}` : "", t2.camera === "front" ? "c\xE2mera frontal" : t2.camera === "back" ? "c\xE2mera traseira" : "", t2.favorite ? "\u2665" : ""].filter(Boolean).join(" \xB7 ");
+        const status = t2.discarded ? "DESCARTADO" : t2.id === used ? "USADO NA MONTAGEM" : "reserva";
+        const notes = t2.discarded ? [] : takeTechNotes(t2, seg?.text ?? "");
+        return `  - take ${i + 1} (id ${t2.id}) \xB7 ${status} \xB7 ${facts}${notes.length ? `
+    aten\xE7\xE3o: ${notes.join("; ")}` : ""}`;
+      });
+      return `${title}:
+${rows.join("\n")}`;
+    });
+    return text2(`Takes de "${content.title}" (checagem t\xE9cnica, n\xE3o mede qualidade da fala nem viralidade):
+${blocks.join("\n")}`);
   }
   if (name === "salvar_cenas") {
     if (content.format !== "broll") return text2("salvar_cenas \xE9 s\xF3 para cena de apoio (B-roll). Para v\xEDdeo com fala use salvar_roteiro (com direcao.takes).", true);
@@ -1985,6 +2033,22 @@ function supabaseMcpStore(db, workspaceId, userId) {
           warnings: r.result?.warnings ?? []
         }))
       };
+    },
+    async takes(contentId) {
+      const { data, error } = await db.from("takes").select("id, segment_index, created_at, tags, favorite, camera, media_files(state, duration_ms, width, height)").eq("workspace_id", workspaceId).eq("content_item_id", contentId).is("deleted_at", null).order("created_at").limit(100);
+      if (error) throw new Error(error.message);
+      return (data ?? []).map((t2) => ({
+        id: t2.id,
+        segmentIndex: t2.segment_index,
+        createdAt: t2.created_at,
+        discarded: (t2.tags ?? []).includes("descartado"),
+        synced: t2.media_files?.state === "uploaded_original",
+        favorite: t2.favorite,
+        camera: t2.camera,
+        durationMs: t2.media_files?.duration_ms ?? null,
+        width: t2.media_files?.width ?? null,
+        height: t2.media_files?.height ?? null
+      }));
     },
     async ownMusic() {
       const { data, error } = await db.from("musicas_proprias").select("id, titulo, comercial, storage_key").eq("workspace_id", workspaceId).order("created_at", { ascending: false }).limit(50);

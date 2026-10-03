@@ -24,3 +24,4 @@ export * from "./watermark";
 export * from "./metrics";
 export * from "./recordingTips";
 export * from "./editProposal";
+export * from "./takeQuality";
