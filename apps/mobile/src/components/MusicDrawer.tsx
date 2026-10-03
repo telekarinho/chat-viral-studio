@@ -38,6 +38,8 @@ export function MusicDrawer({ value, onChange, workspaceId, business, voiceUri, 
   const [own, setOwn] = useState<OwnMusic[]>([]);
   const [usage, setUsage] = useState<{ recents: string[]; count: Record<string, number> }>({ recents: [], count: {} });
   const [withVoice, setWithVoice] = useState(false);
+  // faixa do mini player: a última que tocou (ou a escolhida)
+  const [focusId, setFocusId] = useState<string | null>(null);
   const preview = useMusicPreview();
 
   const reload = useCallback(async () => {
@@ -62,9 +64,11 @@ export function MusicDrawer({ value, onChange, workspaceId, business, voiceUri, 
   const current = catalog.find((r) => r.id === value.music);
   const ownGone = ownMusicUuid(value.music) && !current && own.length > 0;
 
-  const play = (row: MusicRow, from = 0) => void preview.toggle(row.id, row.own ? ownMusicUrl(row.own.storageKey) : row.url, {
-    volume, startS: from, voiceUri: withVoice ? voiceUri : null,
-  });
+  const play = (row: MusicRow, from = row.id === value.music ? startS : 0) => {
+    setFocusId(row.id);
+    void preview.toggle(row.id, row.own ? ownMusicUrl(row.own.storageKey) : row.url, { volume, startS: from, voiceUri: withVoice ? voiceUri : null });
+  };
+  const focus = catalog.find((r) => r.id === (focusId ?? value.music));
   const fav = async (id: string) => setFavorites(await toggleMusicFavorite(id, workspaceId));
   // trocou a faixa: o trecho escolhido era da outra música
   const use = (id: string) => onChange({ ...value, music: id, musicStartS: id === value.music ? value.musicStartS : undefined });
@@ -78,7 +82,7 @@ export function MusicDrawer({ value, onChange, workspaceId, business, voiceUri, 
       <Modal visible={open} animationType="slide" presentationStyle="pageSheet" onRequestClose={() => setOpen(false)}>
         <View style={{ flex: 1, backgroundColor: colors.bg, padding: 16, gap: 10 }} testID="music-sheet">
           <View style={[s.row, { justifyContent: "space-between", alignItems: "center" }]}>
-            <Text style={{ fontSize: 22, fontWeight: "900", color: colors.ink }}>Músicas</Text>
+            <Text style={{ fontSize: 22, fontWeight: "900", color: colors.ink }}>Escolher música</Text>
             <Button compact variant="ghost" label="FECHAR" onPress={() => setOpen(false)} testID="close-music-drawer" />
           </View>
           <TextInput value={query} onChangeText={setQuery} placeholder="Buscar: nome, artista, clima ou BPM (ex.: 120)" style={s.input} testID="music-search" accessibilityLabel="Buscar música" />
@@ -89,9 +93,6 @@ export function MusicDrawer({ value, onChange, workspaceId, business, voiceUri, 
                 <Chip key={m} label={MOOD_LABEL[m]} selected={tab === m} onPress={() => setTab(m)} testID={`music-tab-${m}`} />
               ))}
             </ScrollView>
-          ) : null}
-          {voiceUri ? (
-            <Chip label={withVoice ? "🎙 Ouvindo com a sua voz" : "🎙 Ouvir com a minha voz"} selected={withVoice} onPress={() => setWithVoice(!withVoice)} testID="music-with-voice" />
           ) : null}
           {preview.error ? <Text style={{ color: colors.bad }}>{preview.error}</Text> : null}
           <FlatList
@@ -110,25 +111,48 @@ export function MusicDrawer({ value, onChange, workspaceId, business, voiceUri, 
             <OwnMusicSection workspaceId={workspaceId} business={business} list={own} usage={usage.count} onListChange={setOwn}
               onSelect={(music) => use(music)} />
           ) : null}
-          <View style={{ gap: 8, borderTopWidth: 1, borderTopColor: colors.line, paddingTop: 8 }}>
-            <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8 }}>
-              <Chip label="✨ Automática" selected={value.music === "auto"} onPress={() => onChange({ ...value, music: "auto", musicStartS: undefined })} testID="music-auto" />
-              <Chip label="Sem música" selected={value.music === "none"} onPress={() => onChange({ ...value, music: "none" })} testID="music-none" />
-            </View>
-            {value.music !== "none" ? (
+          <View style={{ gap: 8, borderTopWidth: 1, borderTopColor: colors.line, paddingTop: 8 }} testID="mini-player">
+            {focus && value.music !== "none" ? (
               <>
-                <VolumeControl volume={volume} onChange={setVolume} />
-                {current ? (
+                <View style={[s.row, { alignItems: "center", gap: 8 }]}>
+                  <Pressable onPress={() => play(focus)} accessibilityRole="button" accessibilityLabel={preview.playing === focus.id ? "Parar" : "Ouvir"} testID="mini-play"
+                    style={{ width: 40, height: 40, borderRadius: 20, alignItems: "center", justifyContent: "center", backgroundColor: colors.ink }}>
+                    <Text style={{ color: colors.bg, fontWeight: "900" }}>{preview.playing === focus.id ? "■" : "▶"}</Text>
+                  </Pressable>
+                  <Text style={{ flex: 1, fontWeight: "800", color: colors.ink }} numberOfLines={1} testID="mini-title">{focus.title}</Text>
+                  <Pressable onPress={() => void fav(focus.id)} hitSlop={8} accessibilityRole="button" accessibilityLabel="Favoritar" testID="mini-fav">
+                    <Text style={{ fontSize: 22, color: favorites.includes(focus.id) ? colors.bad : colors.muted }}>{favorites.includes(focus.id) ? "♥" : "♡"}</Text>
+                  </Pressable>
+                  <Button compact variant={value.music === focus.id ? "secondary" : "primary"} label={value.music === focus.id ? "✓ USANDO" : "USAR"} onPress={() => use(focus.id)} testID="mini-use" />
+                </View>
+                {focus.durationSec ? (
+                  <Timeline durationS={focus.durationSec} positionS={preview.playing === focus.id ? preview.position : null}
+                    startS={value.music === focus.id ? startS : null}
+                    onPick={(sec) => {
+                      // na faixa escolhida, tocar na linha define onde a música começa no vídeo
+                      if (value.music === focus.id) setStart(sec);
+                      if (preview.playing === focus.id) preview.stop();
+                      play(focus, sec);
+                    }} />
+                ) : null}
+                {value.music === focus.id ? (
                   <View style={[s.row, { alignItems: "center", gap: 6, flexWrap: "wrap" }]} testID="music-start">
-                    <Text style={s.body}>{`Trecho: começa em ${mmss(startS)}${value.musicStartS === undefined ? " (automático)" : ""}`}</Text>
-                    {([-10, -2, 2, 10] as const).map((d) => <Button key={d} compact variant="ghost" label={`${d > 0 ? "+" : ""}${d}s`} onPress={() => setStart(startS + d)} testID={`music-start-${d}`} />)}
-                    <Button compact variant="secondary" label={preview.playing === current.id ? "■" : "▶ trecho"} onPress={() => play(current, startS)} testID="music-start-play" />
+                    <Text style={s.body}>{`Começar em ${mmss(startS)}${value.musicStartS === undefined ? " (automático)" : ""}`}</Text>
+                    {([-2, 2] as const).map((d) => <Button key={d} compact variant="ghost" label={`${d > 0 ? "+" : ""}${d}s`} onPress={() => setStart(startS + d)} testID={`music-start-${d}`} />)}
                     {value.musicStartS !== undefined ? <Button compact variant="ghost" label="automático" onPress={() => setStart(undefined)} /> : null}
                   </View>
                 ) : null}
               </>
             ) : null}
-            <Text style={s.muted}>A música abaixa sozinha quando você fala (no vídeo final). Músicas próprias: a licença é a que você declarou ao enviar.</Text>
+            <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8 }}>
+              <Chip label="✨ Automática" selected={value.music === "auto"} onPress={() => onChange({ ...value, music: "auto", musicStartS: undefined })} testID="music-auto" />
+              <Chip label="Sem música" selected={value.music === "none"} onPress={() => onChange({ ...value, music: "none" })} testID="music-none" />
+              {voiceUri && value.music !== "none" ? (
+                <Chip label={withVoice ? "🎙 OUVINDO COM MINHA VOZ" : "🎙 OUVIR COM MINHA VOZ"} selected={withVoice} onPress={() => { setWithVoice(!withVoice); preview.stop(); }} testID="music-with-voice" />
+              ) : null}
+            </View>
+            {value.music !== "none" ? <VolumeControl volume={volume} onChange={setVolume} /> : null}
+            <Text style={s.muted}>{withVoice ? "Prévia aproximada com a sua voz. O render final aplica o ducking completo (a música abaixa quando você fala)." : "O render final aplica o ducking completo: a música abaixa sozinha quando você fala. Músicas próprias: a licença é a que você declarou."}</Text>
           </View>
         </View>
       </Modal>
@@ -155,6 +179,30 @@ function MusicRowView({ row, playing, fav, using, used, onPlay, onFav, onUse }: 
         <Text style={{ fontSize: 22, color: fav ? colors.bad : colors.muted }}>{fav ? "♥" : "♡"}</Text>
       </Pressable>
       <Button compact variant={using ? "secondary" : "primary"} label={using ? "✓ USANDO" : "USAR"} onPress={onUse} testID={`music-use-${row.id}`} />
+    </View>
+  );
+}
+
+/**
+ * Linha do tempo da faixa: tocar em um ponto toca dali (e, na faixa escolhida, define onde ela começa no vídeo).
+ * ponytail: sem arrastar (só toque) — um slider nativo exigiria módulo novo no build.
+ */
+function Timeline({ durationS, positionS, startS, onPick }: { durationS: number; positionS: number | null; startS: number | null; onPick: (sec: number) => void }) {
+  const [width, setWidth] = useState(1);
+  const pct = (sec: number) => `${Math.min(100, Math.max(0, (sec / durationS) * 100))}%` as const;
+  return (
+    <View style={{ gap: 2 }}>
+      <Pressable onLayout={(e) => setWidth(e.nativeEvent.layout.width || 1)} onPress={(e) => onPick(Math.round((e.nativeEvent.locationX / width) * durationS))}
+        accessibilityRole="adjustable" accessibilityLabel="Linha do tempo da música" testID="music-timeline" style={{ height: 28, justifyContent: "center" }}>
+        <View style={{ height: 6, borderRadius: 3, backgroundColor: colors.line }}>
+          {positionS !== null ? <View style={{ width: pct(positionS), height: 6, borderRadius: 3, backgroundColor: colors.ink }} /> : null}
+        </View>
+        {startS !== null ? <View style={{ position: "absolute", left: pct(startS), width: 3, height: 22, backgroundColor: colors.accent }} testID="music-start-marker" /> : null}
+      </Pressable>
+      <View style={[s.row, { justifyContent: "space-between" }]}>
+        <Text style={s.muted}>{mmss(positionS ?? startS ?? 0)}</Text>
+        <Text style={s.muted}>{mmss(durationS)}</Text>
+      </View>
     </View>
   );
 }

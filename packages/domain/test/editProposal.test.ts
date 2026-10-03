@@ -37,3 +37,16 @@ describe("proposta de edição do diretor", () => {
     expect(describeEditProposal({ autocut: "tiktok", music: "mixkit-22", musicStartS: 72, musicVolume: 0.3 })).toBe("AutoCut Acelerada TikTok · música Piano Reflections a partir de 1:12 · volume 30%");
   });
 });
+
+describe("objetivo + estilo", () => {
+  it("proposta com objetivo; rótulo 'Venda + Viral'; objetivo não desfaz o tema", async () => {
+    const { styleLabel } = await import("../src");
+    const r = parseEditProposal({ intencao: "venda", autocut: "viral" }, { business: true, own: [] });
+    expect(r).toEqual({ ok: true, edit: { intencao: "venda", autocut: "viral" } });
+    expect(parseEditProposal({ intencao: "fofoca" }, { business: false, own: [] }).ok).toBe(false);
+    const v = applyEditProposal(DEFAULT_EDIT_CHOICES, { intencao: "venda", autocut: "viral" });
+    expect(styleLabel(v)).toBe("Venda + Viral");
+    expect(activeAutoCutTheme(v)).toBe("viral");
+    expect(describeEditProposal({ intencao: "venda", autocut: "viral" })).toBe("Objetivo Venda · AutoCut Viral");
+  });
+});

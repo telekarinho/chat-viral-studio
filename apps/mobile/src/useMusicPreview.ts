@@ -12,6 +12,13 @@ export function useMusicPreview() {
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [playing, setPlaying] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  // posição da música tocando (segundos), para a linha do tempo do mini player
+  const [position, setPosition] = useState(0);
+  useEffect(() => {
+    if (!playing) return;
+    const t = setInterval(() => setPosition(players.current[0]?.currentTime ?? 0), POSITION_MS);
+    return () => clearInterval(t);
+  }, [playing]);
 
   const stop = useCallback(() => {
     if (timer.current) clearTimeout(timer.current);
@@ -41,6 +48,7 @@ export function useMusicPreview() {
       const music = createVideoPlayer(src);
       music.volume = opts.voiceUri ? opts.volume : Math.max(opts.volume, SOLO_MIN_VOLUME);
       if (opts.startS) music.currentTime = opts.startS;
+      setPosition(opts.startS ?? 0);
       players.current.push(music);
       if (opts.voiceUri) {
         const voice = createVideoPlayer(opts.voiceUri);
@@ -57,9 +65,10 @@ export function useMusicPreview() {
     }
   }, [playing, stop]);
 
-  return { playing, error, toggle, stop };
+  return { playing, error, position, toggle, stop };
 }
 
 /** sozinha a música toca mais alto (dá para ouvir); com a voz, no volume do vídeo */
 const SOLO_MIN_VOLUME = 0.6;
 const PREVIEW_MS = 30_000;
+const POSITION_MS = 500;

@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { Text, View } from "react-native";
 import { router, useFocusEffect, useLocalSearchParams } from "expo-router";
 import { useKeepAwake } from "expo-keep-awake";
-import { DEFAULT_EDIT_CHOICES, applyEditProposal, autoCutTheme, nextTask, ownMusicUuid, toLocalDateKey, type EditChoices, type RecordingTask, type Retouch } from "@postai/domain";
+import { DEFAULT_EDIT_CHOICES, applyEditProposal, styleLabel, nextTask, ownMusicUuid, toLocalDateKey, type EditChoices, type RecordingTask, type Retouch } from "@postai/domain";
 import { chosenTrack, nextTrack } from "../../src/musicChoice";
 import { getContent, getTake, listTakes, listTasks, setEditChoices, type ContentItem, type Take } from "../../src/db/repo";
 import { contentPlan, type ContentPlan } from "../../src/finalPlan";
@@ -188,7 +188,7 @@ export default function FinalizarScreen() {
           {proposal ? <DirectorProposal proposal={proposal} onDecide={(d) => void decide(d).catch((e) => setError(String(e)))} /> : null}
           <Card style={{ gap: 10 }} testID="final-summary">
             <Text style={{ fontSize: 22, fontWeight: "900", color: colors.ink }} testID="summary-style">
-              {`${autoCutTheme(edit.autocut)?.label ?? "Montagem padrão"} · ~${Math.round(cp.plan.totalMs / 1000)}s`}
+              {`${styleLabel(edit) ?? "Montagem padrão"} · ~${Math.round(cp.plan.totalMs / 1000)}s`}
             </Text>
             <Row label={`Gancho: ${hookTake ?? "parte 1"}`} />
             <Row label={`Cortes: erros, pausas e repetições${edit.autoCut === false ? " (desligado)" : ""} · ${cp.plan.clips.length} parte(s)`} />

@@ -96,8 +96,15 @@ describe("biblioteca de música", () => {
     fireEvent.press(screen.getByTestId("music-volume-Baixinha"));
     expect(state().vol).toBe(0.12);
     fireEvent.press(screen.getByTestId("music-use-mixkit-839"));
-    fireEvent.press(screen.getByTestId("music-start-10"));
+    for (let i = 0; i < 5; i++) fireEvent.press(screen.getByTestId("music-start-2"));
     expect(state().start).toBe(10);
+    // linha do tempo do mini player: tocar no meio define o início ali (Tears of Joy tem duração conhecida)
+    const line = screen.getByTestId("music-timeline");
+    fireEvent(line, "layout", { nativeEvent: { layout: { width: 200 } } });
+    fireEvent.press(line, { nativeEvent: { locationX: 100 } });
+    expect(state().start).toBeGreaterThan(10);
+    expect(screen.getByTestId("music-start-marker")).toBeTruthy();
+    expect(screen.getByTestId("mini-title")).toHaveTextContent("Tears of Joy");
     // trocar a faixa zera o trecho (era da outra música)
     fireEvent.press(screen.getByTestId("music-use-mixkit-801"));
     expect(state().start).toBeNull();
