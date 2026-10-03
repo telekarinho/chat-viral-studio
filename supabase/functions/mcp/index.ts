@@ -300,6 +300,7 @@ var MUSIC_LIBRARY = [
 var trackById = (id) => MUSIC_LIBRARY.find((t2) => t2.id === id);
 var OWN_MUSIC_PREFIX = "own:";
 var ownMusicId = (uuid) => `${OWN_MUSIC_PREFIX}${uuid}`;
+var ownMusicUuid = (id) => id.startsWith(OWN_MUSIC_PREFIX) && /^[0-9a-f-]{36}$/i.test(id.slice(OWN_MUSIC_PREFIX.length)) ? id.slice(OWN_MUSIC_PREFIX.length) : null;
 
 // ../../packages/domain/src/ai/direction.ts
 var MOODS = Object.keys(MOOD_LABEL);
@@ -843,6 +844,7 @@ function directorIssues(draft) {
 }
 
 // ../../packages/domain/src/autocut.ts
+var AUTOCUT_THEME_IDS = ["viral", "longa", "psicologica", "engracada", "suspense", "dramatica", "tiktok", "calma", "jovem"];
 var t = (id, label, description, params, choices) => ({ id, label, description, params, choices });
 var base = { stabilize: true, autoCut: true, voiceClean: true };
 var AUTOCUT_THEMES = [
@@ -910,6 +912,7 @@ var AUTOCUT_THEMES = [
     { ...base, captionStyle: "destaque", music: "motivacional", musicVolume: 0.24, retouch: "forte", broll: true, hook: true }
   )
 ];
+var autoCutTheme = (id) => AUTOCUT_THEMES.find((x) => x.id === id);
 
 // ../../packages/domain/src/segments.ts
 var SEGMENT_LABEL = {
@@ -1118,6 +1121,66 @@ function engagementRate(m) {
 }
 function sharesPer1k(m) {
   return m.views > 0 ? m.shares / m.views * 1e3 : 0;
+}
+
+// ../../packages/domain/src/editProposal.ts
+var MUSIC_VOLUME_MIN = 0.05;
+var MUSIC_VOLUME_MAX = 0.45;
+var OWN_MAX_START_S = 600;
+var MIN_TAIL_S = 5;
+function parseEditProposal(input, ctx) {
+  const errors = [];
+  const edit = {};
+  if (input.autocut !== void 0) {
+    if (typeof input.autocut === "string" && AUTOCUT_THEME_IDS.includes(input.autocut)) edit.autocut = input.autocut;
+    else errors.push(`autocut: use um destes: ${AUTOCUT_THEME_IDS.join(", ")}.`);
+  }
+  let trackDuration = null;
+  if (input.musica !== void 0) {
+    const m = typeof input.musica === "string" ? input.musica.trim() : "";
+    const track = trackById(m);
+    const ownId = ownMusicUuid(m);
+    const own = ownId ? ctx.own.find((o) => o.id === ownId) : void 0;
+    if (m === "auto" || m === "none" || m in MOOD_LABEL) edit.music = m;
+    else if (track) {
+      if (ctx.business && track.license !== "comercial") errors.push(`musica: "${track.title}" n\xE3o tem licen\xE7a comercial (perfil de empresa).`);
+      else {
+        edit.music = m;
+        trackDuration = track.durationSec;
+      }
+    } else if (own) {
+      if (ctx.business && !own.comercial) errors.push(`musica: "${own.titulo}" foi enviada sem licen\xE7a comercial declarada (perfil de empresa).`);
+      else {
+        edit.music = m;
+        trackDuration = OWN_MAX_START_S + MIN_TAIL_S;
+      }
+    } else errors.push(`musica: "${m}" n\xE3o existe. Use um id de listar_musicas, "auto", "none" ou um clima (${Object.keys(MOOD_LABEL).join(", ")}).`);
+  }
+  if (input.volume !== void 0) {
+    const v = input.volume;
+    if (typeof v === "number" && v >= MUSIC_VOLUME_MIN && v <= MUSIC_VOLUME_MAX) edit.musicVolume = Math.round(v * 100) / 100;
+    else errors.push(`volume: entre ${MUSIC_VOLUME_MIN} e ${MUSIC_VOLUME_MAX} (relativo \xE0 voz; acima disso a m\xFAsica cobre a fala).`);
+  }
+  if (input.inicio_musica_s !== void 0) {
+    const s2 = input.inicio_musica_s;
+    if (trackDuration === null) errors.push("inicio_musica_s: s\xF3 vale junto de uma faixa espec\xEDfica em musica (id de listar_musicas).");
+    else if (typeof s2 !== "number" || s2 < 0 || s2 > trackDuration - MIN_TAIL_S) errors.push(`inicio_musica_s: de 0 a ${trackDuration - MIN_TAIL_S} segundos.`);
+    else edit.musicStartS = Math.round(s2);
+  }
+  if (!errors.length && !Object.keys(edit).length) errors.push("Proponha pelo menos um item: autocut, musica, volume ou inicio_musica_s.");
+  return errors.length ? { ok: false, errors } : { ok: true, edit };
+}
+function describeEditProposal(p, own = []) {
+  const bits = [];
+  if (p.autocut) bits.push(`AutoCut ${autoCutTheme(p.autocut).label.replace(/^\S+\s/, "")}`);
+  if (p.music) {
+    const ownId = ownMusicUuid(p.music);
+    const name = p.music === "auto" ? "autom\xE1tica" : p.music === "none" ? "sem m\xFAsica" : p.music in MOOD_LABEL ? `clima ${MOOD_LABEL[p.music]}` : trackById(p.music)?.title ?? own.find((o) => o.id === ownId)?.titulo ?? "m\xFAsica pr\xF3pria";
+    const start = p.musicStartS ? ` a partir de ${Math.floor(p.musicStartS / 60)}:${String(p.musicStartS % 60).padStart(2, "0")}` : "";
+    bits.push(`m\xFAsica ${name}${start}`);
+  }
+  if (p.musicVolume !== void 0) bits.push(`volume ${Math.round(p.musicVolume * 100)}%`);
+  return bits.join(" \xB7 ");
 }
 
 // src/mcp-profiles.ts
@@ -1369,6 +1432,7 @@ var MAX_PLAN_DAYS = 14;
 var PILLAR_WINDOW_DAYS = 30;
 var TOPIC_WINDOW_DAYS = 14;
 var MIN_POSTS_FOR_CONCLUSIONS = 5;
+var AUTOCUT_IDS = AUTOCUT_THEMES.map((t2) => t2.id);
 var BPM_TOLERANCE = 10;
 var WEEKDAY = ["dom", "seg", "ter", "qua", "qui", "sex", "s\xE1b"];
 var DIRECTION_GUIDE = [
@@ -1396,6 +1460,7 @@ var MCP_TOOLS = [
   { name: "salvar_cenas", title: "Salvar cenas de apoio", description: "Para conte\xFAdo de cena de apoio (B-roll / prova visual): a lista de takes com instru\xE7\xE3o de filmagem. O app mostra cada take para gravar.", inputSchema: obj({ content_id: { type: "string" }, takes: { type: "array", description: "takes {ordem, nome, duracao_segundos, enquadramento, movimento_camera, local, luz, olhar, emocao, broll, erro_comum, fala_exata (opcional)}", items: { type: "object" } }, provas: { type: "array", items: { type: "string" }, description: "provas film\xE1veis do perfil que esta cena filma (ficam 'filmada' quando a cena for gravada)" } }, ["content_id", "takes"]), annotations: WRITE2 },
   { name: "registrar_metricas", title: "Registrar n\xFAmeros do post", description: "Salva os n\xFAmeros REAIS de um post (ex.: lidos no Metricool ou no painel da rede) para o app e o ranking. Nunca invente n\xFAmeros.", inputSchema: obj({ content_id: { type: "string" }, visualizacoes: { type: "number" }, curtidas: { type: "number" }, comentarios: { type: "number" }, compartilhamentos: { type: "number" }, salvamentos: { type: "number" }, retencao: { type: "number", description: "% de conclus\xE3o/reten\xE7\xE3o m\xE9dia (0\u2013100)" }, tempo_medio_segundos: { type: "number" }, seguidores_ganhos: { type: "number" }, fonte: { type: "string", description: "ex.: Metricool, Instagram" } }, ["content_id", "visualizacoes"]), annotations: WRITE2 },
   { name: "listar_musicas", title: "M\xFAsicas licenciadas", description: "Faixas da biblioteca licenciada (id, clima, dura\xE7\xE3o, licen\xE7a). Use o id em direcao.musica.id. Conta de empresa s\xF3 v\xEA faixas com licen\xE7a comercial.", inputSchema: obj({ clima: { type: "string", description: `opcional: ${Object.keys(MOOD_LABEL).join(", ")}` }, bpm: { type: "number", description: "opcional (as faixas ainda n\xE3o t\xEAm BPM medido)" } }), annotations: RO2 },
+  { name: "propor_edicao", title: "Propor a edi\xE7\xE3o", description: "Depois de ver o que foi gravado (ler_status_gravacao), prop\xF5e a montagem: estilo AutoCut, m\xFAsica, volume e trecho, com o motivo. O criador v\xEA no app e escolhe MONTAR ASSIM (monta) ou AJUSTAR. Nada \xE9 montado nem publicado sem ele.", inputSchema: obj({ content_id: { type: "string" }, autocut: { type: "string", enum: [...AUTOCUT_IDS], description: `estilo da montagem (cortes, zoom, transi\xE7\xE3o, ritmo): ${AUTOCUT_THEMES.map((t2) => `${t2.id} = ${t2.label.replace(/^\S+\s/, "")}`).join("; ")}` }, musica: { type: "string", description: 'id de listar_musicas, "auto", "none" ou um clima' }, volume: { type: "number", description: "0.05 a 0.45, relativo \xE0 voz (0.22 padr\xE3o)" }, inicio_musica_s: { type: "number", description: "segundo da faixa onde a trilha come\xE7a (s\xF3 com faixa espec\xEDfica)" }, motivo: { type: "string", description: "por que esta edi\xE7\xE3o, em 1\u20132 frases simples" } }, ["content_id", "motivo"]), annotations: WRITE2 },
   { name: "ler_status_gravacao", title: "Status da grava\xE7\xE3o", description: "O que j\xE1 foi gravado (por take/parte), o que falta, se j\xE1 subiu e como est\xE1 a montagem do v\xEDdeo.", inputSchema: obj({ content_id: { type: "string" } }, ["content_id"]), annotations: RO2 },
   { name: "registrar_melhoria", title: "Registrar melhoria", description: "Manda uma sugest\xE3o de melhoria do app/conector para o backlog do desenvolvedor, com contexto e crit\xE9rio de aceite. Use para toda recomenda\xE7\xE3o de mudan\xE7a no sistema.", inputSchema: obj({ titulo: { type: "string" }, descricao: { type: "string", description: "o problema, a proposta e o crit\xE9rio de aceite" }, prioridade: { type: "string", enum: ["baixa", "media", "alta"] } }, ["titulo", "descricao"]), annotations: WRITE2 },
   { name: "listar_melhorias", title: "Melhorias pedidas", description: "Melhorias j\xE1 registradas e o andamento (nova, no backlog, feita, recusada).", inputSchema: obj({}), annotations: RO2 },
@@ -1574,11 +1639,13 @@ ${lines.join("\n")}`);
     const business = (await store.profile()).kind === "empresa";
     const mood = typeof args.clima === "string" ? normalizeMood(args.clima) || null : null;
     const bpm = typeof args.bpm === "number" ? args.bpm : null;
+    const favs = new Set(await store.musicFavorites());
+    const fav = (id2) => favs.has(id2) ? " \xB7 \u2665 favorita do criador" : "";
     const list2 = MUSIC_LIBRARY.filter((t2) => (!business || t2.license === "comercial") && (!mood || t2.mood === mood) && (bpm === null || t2.bpm !== null && Math.abs(t2.bpm - bpm) <= BPM_TOLERANCE));
     const own = (await store.ownMusic()).filter((m) => !business || m.comercial);
-    const ownRows = mood || bpm !== null ? [] : own.map((m) => `- id ${ownMusicId(m.id)} \xB7 "${m.titulo}" \xB7 m\xFAsica pr\xF3pria do criador \xB7 licen\xE7a ${m.comercial ? "comercial (declarada)" : "pessoal (declarada)"}`);
+    const ownRows = mood || bpm !== null ? [] : own.map((m) => `- id ${ownMusicId(m.id)} \xB7 "${m.titulo}" \xB7 m\xFAsica pr\xF3pria do criador \xB7 licen\xE7a ${m.comercial ? "comercial (declarada)" : "pessoal (declarada)"}${fav(ownMusicId(m.id))}`);
     if (!list2.length && !ownRows.length) return text2(`Nenhuma faixa com esse filtro${bpm !== null ? ` (BPM ${bpm} \xB1 ${BPM_TOLERANCE})` : ""}.`);
-    const rows = list2.map((t2) => `- id ${t2.id} \xB7 "${t2.title}" \u2014 ${t2.artist} \xB7 clima ${t2.mood} (${MOOD_LABEL[t2.mood]}) \xB7 ${t2.bpm ? `${t2.bpm} BPM` : "sem batida definida"} \xB7 ${t2.durationSec}s \xB7 licen\xE7a ${t2.license}`);
+    const rows = [...list2].sort((a, b) => Number(favs.has(b.id)) - Number(favs.has(a.id))).map((t2) => `- id ${t2.id} \xB7 "${t2.title}" \u2014 ${t2.artist} \xB7 clima ${t2.mood} (${MOOD_LABEL[t2.mood]}) \xB7 ${t2.bpm ? `${t2.bpm} BPM` : "sem batida definida"} \xB7 ${t2.durationSec}s \xB7 licen\xE7a ${t2.license}${fav(t2.id)}`);
     const note = `Use o valor de "clima" (ex.: ${list2[0]?.mood ?? "reflexao"}) em direcao.musica.clima. BPM medido no \xE1udio. Tend\xEAncia ("em alta"): ainda sem fonte de dados \u2014 n\xE3o informada.`;
     return text2([...ownRows, ...rows, note].join("\n"));
   }
@@ -1649,6 +1716,17 @@ Montagem: ${render}${posted}`);
     const current = new Map((await store.proofs()).map((p) => [p.descricao.toLowerCase(), p.status]));
     for (const d of provas) await store.saveProof({ descricao: d, status: current.get(d.toLowerCase()) ?? "falta_filmar", contentItemId: content.id });
     return text2(`${parsed.data.length} take(s) de "${content.title}" enviados para o Post.ai. Aparecem no app ao abrir esta cena.${provas.length ? ` Provas ligadas: ${provas.join("; ")}.` : ""}`);
+  }
+  if (name === "propor_edicao") {
+    if (content.format !== "thought" && content.format !== "main_video") return text2("propor_edicao \xE9 para v\xEDdeo com fala (Pensamento do Dia ou V\xEDdeo principal).", true);
+    const motivo = typeof args.motivo === "string" ? args.motivo.trim().slice(0, 600) : "";
+    if (motivo.length < 3) return text2("Explique o motivo em 1\u20132 frases simples (o criador l\xEA no app antes de aceitar).", true);
+    const [profile, own] = await Promise.all([store.profile(), store.ownMusic()]);
+    const parsed = parseEditProposal(args, { business: profile.kind === "empresa", own });
+    if (!parsed.ok) return text2(`Ajuste e mande de novo:
+- ${parsed.errors.join("\n- ")}`, true);
+    await store.saveEditProposal(content.id, parsed.edit, motivo);
+    return text2(`Proposta enviada para "${content.title}": ${describeEditProposal(parsed.edit, own)}. O criador v\xEA ao finalizar o v\xEDdeo no app e escolhe MONTAR ASSIM ou AJUSTAR \u2014 nada \xE9 montado sem ele. Acompanhe com ler_status_gravacao.`);
   }
   if (content.format === "broll") return text2("Cena de apoio (B-roll, sem roteiro falado): use salvar_cenas com a lista de takes (nome, duracao_segundos, enquadramento, movimento_camera, local, luz, broll, erro_comum).", true);
   if (content.format !== "thought" && content.format !== "main_video") return text2("Este conte\xFAdo n\xE3o usa roteiro falado (\xE9 story).", true);
@@ -1912,6 +1990,16 @@ function supabaseMcpStore(db, workspaceId, userId) {
       const { data, error } = await db.from("musicas_proprias").select("id, titulo, comercial, storage_key").eq("workspace_id", workspaceId).order("created_at", { ascending: false }).limit(50);
       if (error) throw new Error(error.message);
       return (data ?? []).map((m) => ({ id: m.id, titulo: m.titulo, comercial: Boolean(m.comercial), storageKey: m.storage_key }));
+    },
+    async musicFavorites() {
+      const { data, error } = await db.from("musicas_favoritas").select("track_id").eq("workspace_id", workspaceId).limit(200);
+      if (error?.code === "42P01") return [];
+      if (error) throw new Error(error.message);
+      return [...new Set((data ?? []).map((r) => r.track_id))];
+    },
+    async saveEditProposal(contentId, edit, motivo) {
+      const { error } = await db.from("propostas_edicao").insert({ workspace_id: workspaceId, content_item_id: contentId, edit, motivo });
+      if (error) throw new Error(error.message);
     },
     async readScript(contentId) {
       const [script, content, pending] = await Promise.all([

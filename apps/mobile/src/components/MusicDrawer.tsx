@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { FlatList, Modal, Pressable, ScrollView, Text, TextInput, View } from "react-native";
 import {
-  MOOD_LABEL, MUSIC_TABS, MUSIC_TAB_LABEL, autoCutTheme, moodForPillar, musicCatalog, musicTab, ownMusicUuid, searchMusic,
+  MOOD_LABEL, MUSIC_TABS, MUSIC_VOLUME_MAX, MUSIC_VOLUME_MIN, MUSIC_TAB_LABEL, autoCutTheme, moodForPillar, musicCatalog, musicTab, ownMusicUuid, searchMusic,
   type EditChoices, type MusicMood, type MusicRow, type MusicTab, type OwnMusic,
 } from "@postai/domain";
 import { listOwnMusic, ownMusicUrl } from "../ownMusic";
@@ -11,9 +11,6 @@ import { useMusicPreview } from "../useMusicPreview";
 import { Button, Chip, colors, s } from "../ui";
 import { OwnMusicSection } from "./OwnMusicSection";
 
-/** volume da música sob a voz: abaixo de 5% some; acima de 45% a fala começa a sumir */
-export const MUSIC_VOLUME_MIN = 0.05;
-export const MUSIC_VOLUME_MAX = 0.45;
 const VOLUME_STEP = 0.05;
 const DEFAULT_VOLUME = 0.22;
 const PRESETS = [["Baixinha", 0.12], ["Normal", 0.22], ["Mais alta", 0.35]] as const;

@@ -2,13 +2,15 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { Text, View } from "react-native";
 import { router, useFocusEffect, useLocalSearchParams } from "expo-router";
 import { useKeepAwake } from "expo-keep-awake";
-import { DEFAULT_EDIT_CHOICES, nextTask, ownMusicUuid, toLocalDateKey, type EditChoices, type RecordingTask, type Retouch } from "@postai/domain";
+import { DEFAULT_EDIT_CHOICES, applyEditProposal, nextTask, ownMusicUuid, toLocalDateKey, type EditChoices, type RecordingTask, type Retouch } from "@postai/domain";
 import { chosenTrack, nextTrack } from "../../src/musicChoice";
 import { getContent, getTake, listTasks, setEditChoices, type ContentItem, type Take } from "../../src/db/repo";
 import { contentPlan, type ContentPlan } from "../../src/finalPlan";
 import { downloadFinal, kickRenderWorker, latestRenderJob, requestFinalRender, type RenderJob } from "../../src/finalRender";
 import { MusicPreview } from "../../src/components/MusicPreview";
 import { FinishOptions } from "../../src/components/FinishOptions";
+import { DirectorProposal } from "../../src/components/DirectorProposal";
+import { decideEditProposal, pullEditProposal, type PendingProposal, type ProposalDecision } from "../../src/editProposals";
 import { useApp } from "../../src/app-state";
 import { setContentOnScreen } from "../../src/renderWatch";
 import { syncNow } from "../../src/sync/engine";
@@ -38,6 +40,7 @@ export default function FinalizarScreen() {
   const [waitMsg, setWaitMsg] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [showOptions, setShowOptions] = useState(false);
+  const [proposal, setProposal] = useState<PendingProposal | null>(null);
   const opening = useRef(false);
   const retryAsked = useRef(false);
   // pedir montagem nova mesmo que já exista um vídeo pronto (confirmar de novo / refazer)
@@ -66,6 +69,8 @@ export default function FinalizarScreen() {
     const plan = await contentPlan(item);
     setCp(plan);
     setTakes((await Promise.all((plan?.takes ?? []).map((t) => getTake(t.id)))).filter((t): t is Take => Boolean(t)));
+    // sugestão do diretor (Claude) para esta montagem, se houver
+    if (plan) void pullEditProposal(item.workspaceId, item.id, plan.business).then(setProposal).catch(() => undefined);
     try {
       const j = await latestRenderJob(item.id);
       setJob(j);
@@ -142,6 +147,16 @@ export default function FinalizarScreen() {
   // automática sem faixa da direção: o servidor escolhe na montagem (não repete as últimas do perfil)
   const autoPick = edit.music === "auto" && !c.draft?.direcao?.musica;
   const save = (v: EditChoices) => void setEditChoices(c.id, v).then(setC);
+  const decide = async (d: ProposalDecision) => {
+    const p = proposal;
+    setProposal(null);
+    if (!p) return;
+    // a escolha fica salva no aparelho antes de pedir a montagem (o servidor monta pelo que o app manda)
+    if (d !== "dispensar") setC(await setEditChoices(c.id, applyEditProposal(edit, p.edit)));
+    void decideEditProposal(c.id, d).catch((e) => reportError(e, "proposta do diretor"));
+    if (d === "montar") { forceRequest.current = true; setConfirmed(true); }
+    if (d === "ajustar") setShowOptions(true);
+  };
   const uploaded = takes.filter((t) => t.media.state === "uploaded_original").length;
   const allUp = takes.length > 0 && uploaded === takes.length;
   const step: Step = !confirmed ? "confirmar"
@@ -158,6 +173,7 @@ export default function FinalizarScreen() {
 
       {step === "confirmar" ? (
         <>
+          {proposal ? <DirectorProposal proposal={proposal} onDecide={(d) => void decide(d).catch((e) => setError(String(e)))} /> : null}
           <Card style={{ gap: 10 }} testID="final-summary">
             <Row label={`✓ ${cp.plan.clips.length} parte(s) juntas, ~${Math.round(cp.plan.totalMs / 1000)}s`} />
             <Row label={`✓ Cortar erros, pausas e repetições${edit.autoCut === false ? " (desligado)" : ""}`} />

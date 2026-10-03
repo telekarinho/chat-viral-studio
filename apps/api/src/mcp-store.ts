@@ -104,6 +104,17 @@ export function supabaseMcpStore(db: SupabaseClient, workspaceId: string, userId
       if (error) throw new Error(error.message);
       return (data ?? []).map((m) => ({ id: m.id as string, titulo: m.titulo as string, comercial: Boolean(m.comercial), storageKey: m.storage_key as string }));
     },
+    async musicFavorites() {
+      const { data, error } = await db.from("musicas_favoritas").select("track_id").eq("workspace_id", workspaceId).limit(200);
+      // 42P01 = tabela ainda não criada (migration pendente): segue sem favoritas
+      if (error?.code === "42P01") return [];
+      if (error) throw new Error(error.message);
+      return [...new Set((data ?? []).map((r) => r.track_id as string))];
+    },
+    async saveEditProposal(contentId, edit, motivo) {
+      const { error } = await db.from("propostas_edicao").insert({ workspace_id: workspaceId, content_item_id: contentId, edit, motivo });
+      if (error) throw new Error(error.message);
+    },
     async readScript(contentId): Promise<McpScript> {
       const [script, content, pending] = await Promise.all([
         db.from("scripts").select("draft").eq("workspace_id", workspaceId).eq("content_item_id", contentId).order("updated_at", { ascending: false }).limit(1).maybeSingle(),
