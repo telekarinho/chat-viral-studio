@@ -89,6 +89,9 @@ export function isValidTime(hhmm: string): boolean {
  * Converts the routine of a weekday into capture missions. Thought/Main video blocks
  * also get a content item with a pillar chosen by target deficit.
  */
+const LIGHT_DAY_BLOCK = { startTime: "10:00", title: "Pensamento do Dia", contentHint: "dia leve: um pensamento curto, se der vontade", optional: true, format: "thought" as const };
+const DAILY_PROOF_BLOCK = { startTime: "14:30", title: "Prova visual / B-roll do produto", contentHint: "textura, máquina em uso, bastidor", optional: false, format: "broll" as const };
+
 export function buildDayPlan(input: {
   date: Date;
   workspaceId: string;
@@ -105,10 +108,19 @@ export function buildDayPlan(input: {
   dateKey?: string;
   /** empresa: a cena de apoio (prova visual) também vira conteúdo, com lista de takes dirigida */
   directedBroll?: boolean;
+  /** dia sem rotina (fim de semana): um Pensamento do Dia opcional, leve, sem culpa */
+  lightDay?: boolean;
 }): DayPlan {
   const dateKey = input.dateKey ?? toLocalDateKey(input.date);
   const weekday = input.weekdayOverride ?? (input.dateKey ? new Date(`${input.dateKey}T12:00:00Z`).getUTCDay() : input.date.getDay());
-  const blocks = input.routine.filter((b) => b.weekday === weekday).sort((a, b) => a.startTime.localeCompare(b.startTime));
+  const routineBlocks = input.routine.filter((b) => b.weekday === weekday);
+  const extra: Omit<RoutineBlock, "id">[] = [];
+  if (!routineBlocks.length && input.lightDay) extra.push({ ...LIGHT_DAY_BLOCK, weekday });
+  // empresa: todo dia útil com rotina tem cena de prova visual (enche a biblioteca de provas), não só um dia
+  if (input.directedBroll && routineBlocks.length && weekday >= 1 && weekday <= 5 && !routineBlocks.some((b) => b.format === "broll" && !b.optional)) {
+    extra.push({ ...DAILY_PROOF_BLOCK, weekday });
+  }
+  const blocks = [...routineBlocks, ...extra.map((b, i) => ({ ...b, id: `extra-${weekday}-${i}` }))].sort((a, b) => a.startTime.localeCompare(b.startTime));
   const history = [...input.recentPillarSlugs];
   const contentItems: PlannedContentItem[] = [];
   const tasks: RecordingTask[] = blocks.map((b) => {

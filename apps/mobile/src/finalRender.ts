@@ -158,3 +158,16 @@ export function describeResult(r: RenderResult | null | undefined): string | nul
   if (r.music) bits.push(`música: ${r.music}`);
   return bits.length ? `Edição automática: ${bits.join(" · ")}.` : null;
 }
+
+/** Situação da montagem (vídeo completo) de vários conteúdos de uma vez — para a tela Hoje. Sem internet: vazio. */
+export async function renderStatuses(contentIds: string[]): Promise<Map<string, RenderJob["status"]>> {
+  const out = new Map<string, RenderJob["status"]>();
+  if (!supabase || !contentIds.length) return out;
+  const { data, error } = await supabase.from("render_jobs").select("content_item_id, status, plan, created_at").in("content_item_id", contentIds).order("created_at", { ascending: false }).limit(100);
+  if (error) return out;
+  for (const r of (data ?? []) as { content_item_id: string; status: RenderJob["status"]; plan: { variant?: string } | null }[]) {
+    if (r.plan?.variant === "curto" || out.has(r.content_item_id)) continue;
+    out.set(r.content_item_id, r.status);
+  }
+  return out;
+}

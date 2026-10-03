@@ -43,6 +43,7 @@ function fakeStore(opts: { profile?: typeof RODRIGO_PROFILE; recent?: ContentDra
       ? { draft: null, edit: null, metrics: null, postedAt: null, pendingFromAssistant: true, pending: { sentAt: "2026-10-02T12:00:00Z", draft: opts.pending, scenes: null } }
       : { draft: raw, edit: null, metrics: null, postedAt: null, pendingFromAssistant: true }),
     musicFavorites: async () => ["mixkit-963"],
+    addExtraContent: async (date, formats) => formats.map((f, i) => ({ id: `extra-${i}`, format: f, pillarSlug: "familia", title: f, date, hasScript: false, project: null })),
     mediaLibrary: async ({ categoria }) => [
       { id: "b1", segmentIndex: null, createdAt: "2026-10-01T12:00:00Z", discarded: false, synced: true, favorite: true, camera: "back", durationMs: 3200, width: 1080, height: 1920, category: "broll", contentId: ID, tags: [], capitulo: null },
       { id: "p1", segmentIndex: null, createdAt: "2026-10-01T13:00:00Z", discarded: false, synced: false, favorite: false, camera: "back", durationMs: 8000, width: 1080, height: 1920, category: "main_video", contentId: null, tags: ["mixer"], capitulo: "Close do produto" },
@@ -229,10 +230,14 @@ describe("conector MCP do Post.ai (diretor de gravações)", () => {
   it("histórias de cliente: só com caso real autorizado; provas com status", async () => {
     const story = fakeStore({ profile: CONTROLPOT_PROFILE, content: { ...thought, pillarSlug: "historias" } });
     const ctx: McpContext = { defaultProfileId: EMPRESA, profiles: async () => [], store: async () => story.store, createProfile: async () => "x" };
-    const roteiro = { ...draft, hook_options: ["O que mudou na lanchonete do Zé", "Eu duvidei disso", "Você já passou por isso?"] };
-    expect(textOf(await call(ctx, "salvar_roteiro", { content_id: ID, roteiro }))).toContain("não tem caso real autorizado");
+    const roteiro = { ...draft, hook_options: ["O que meu cliente da lanchonete viu", "Eu duvidei disso", "Você já passou por isso?"] };
+    // sem caso autorizado o slot não trava o dia: vira história do dono/fábrica (instrução dita); só barra falar de cliente
+    expect(textOf(await call(ctx, "instrucoes_do_roteiro", { content_id: ID }))).toContain("Nunca invente cliente nem depoimento");
+    expect(textOf(await call(ctx, "salvar_roteiro", { content_id: ID, roteiro }))).toContain("sem caso real autorizado não dá para falar de cliente");
     expect(textOf(await call(ctx, "cadastrar_caso_real", { cliente_segmento: "lanchonete de bairro", problema: "milk-shake aguado", resultado: "textura igual todo dia" }))).toContain("SEM autorização");
-    expect(textOf(await call(ctx, "salvar_roteiro", { content_id: ID, roteiro }))).toContain("não tem caso real autorizado");
+    expect(textOf(await call(ctx, "salvar_roteiro", { content_id: ID, roteiro }))).toContain("sem caso real autorizado não dá para falar de cliente");
+    const bastidor = { ...draft, hook_options: ["Como nasceu o nosso copo", "Eu duvidei disso", "Você já passou por isso?"] };
+    expect(textOf(await call(ctx, "salvar_roteiro", { content_id: ID, roteiro: bastidor }))).toContain("enviado para o Post.ai");
     const caseId = "00000000-0000-4000-8000-000000000001";
     expect(textOf(await call(ctx, "cadastrar_caso_real", { id: caseId, cliente_segmento: "lanchonete de bairro", problema: "milk-shake aguado", resultado: "textura igual todo dia", autorizacao: "dono autorizou por WhatsApp em 02/10" }))).toContain("liberado");
     expect(textOf(await call(ctx, "instrucoes_do_roteiro", { content_id: ID }))).toContain(`[${caseId}] lanchonete de bairro`);
@@ -275,6 +280,16 @@ describe("conector MCP do Post.ai (diretor de gravações)", () => {
     const ok = textOf(await call(ctx, "propor_edicao", { content_id: ID, autocut: "tiktok", musica: "mixkit-963", volume: 0.3, inicio_musica_s: 10, motivo: "Fala curta e animada: ritmo rápido na batida." }));
     expect(ok).toContain("MONTAR ASSIM");
     expect(pessoal.proposals[0]).toMatchObject({ contentId: ID, edit: { autocut: "tiktok", music: "mixkit-963", musicVolume: 0.3, musicStartS: 10 } });
+  });
+
+  it("criar_plano com extra: conteúdo a mais num sábado; id curto não vira erro de banco", async () => {
+    const { ctx } = fakeCtx();
+    const t = textOf(await call(ctx, "criar_plano", { data_inicio: "2026-10-03", dias: 1, extra: ["pensamento", "principal", "outra-coisa"] }));
+    expect(t).toContain("id extra-0 · Pensamento do Dia");
+    expect(t).toContain("id extra-1 · Vídeo principal");
+    const bad = await call(ctx, "ler_roteiro", { content_id: "39f1a8da" });
+    expect(isError(bad)).toBe(true);
+    expect(textOf(bad)).toContain("Conteúdo não encontrado");
   });
 
   it("buscar_midias: o diretor acha B-roll e provas já gravados antes de pedir de novo", async () => {

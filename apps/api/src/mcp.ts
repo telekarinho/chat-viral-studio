@@ -48,7 +48,10 @@ export async function handleMcp(msg: unknown, ctx: McpContext, now = new Date())
       try {
         return ok(await callTool(ctx, name, args, now));
       } catch (e) {
-        return ok(text(`Não consegui falar com o Post.ai agora (${e instanceof Error ? e.message : "erro"}). Tente de novo em instantes.`, true));
+        const msg = e instanceof Error ? e.message : "erro";
+        // id em formato errado (ex.: só o começo do id): não é queda do serviço
+        if (/invalid input syntax for type uuid/i.test(msg)) return ok(text("Algum id está incompleto ou em formato errado. Use o id inteiro (36 caracteres) que aparece em conteudos_do_dia, listar_takes ou pedidos_do_criador.", true));
+        return ok(text(`Não consegui falar com o Post.ai agora (${msg}). Tente de novo em instantes.`, true));
       }
     }
     default:

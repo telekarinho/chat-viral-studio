@@ -59,7 +59,9 @@ function similarity(a, b) {
   const ta = contentTokens(a);
   const tb = contentTokens(b);
   if (ta.length === 0 || tb.length === 0) return 0;
-  const uni = jaccard(new Set(ta), new Set(tb));
+  const sa = new Set(ta);
+  const shared = [...new Set(tb)].filter((w) => sa.has(w)).length;
+  const uni = shared >= 2 || ta.join(" ") === tb.join(" ") ? jaccard(sa, new Set(tb)) : 0;
   const bi = jaccard(bigrams(ta), bigrams(tb));
   const small = ta.length <= tb.length ? ta : tb;
   const big = new Set(ta.length <= tb.length ? tb : ta);

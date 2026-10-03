@@ -96,19 +96,7 @@ appId: me.rodrigoserra.postai
     visible:
       id: finalizar-screen
     timeout: 30000
-- extendedWaitUntil:
-    visible:
-      id: final-summary
-    timeout: 30000
-- scrollUntilVisible:
-    element:
-      text: ".*Música: .*"
-    timeout: 30000
-- tapOn:
-    id: swap-music
-- takeScreenshot: 09_resumo_montagem
-- tapOn:
-    id: confirm-render
+# modo 1 botão: terminou de gravar, o Diretor já monta sozinho (sem tela de confirmar)
 - extendedWaitUntil:
     visible:
       id: render-progress

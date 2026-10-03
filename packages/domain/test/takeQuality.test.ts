@@ -41,3 +41,13 @@ describe("diagnóstico para o criador", () => {
     expect(recommendTake([fast, ok], TEXT)?.id).toBe("velho");
   });
 });
+
+describe("meta de duração do roteiro (#101)", () => {
+  it("28s para meta de 16s: avisa e sugere regravar; perto da meta: ok", async () => {
+    const { takeChecks } = await import("../src");
+    const long = takeChecks({ durationMs: 28300, width: 1080, height: 1920 }, TEXT, 16).find((c) => c.key === "duracao");
+    expect(long).toMatchObject({ ok: false });
+    expect(long?.label).toContain("28s para ~16s");
+    expect(takeChecks({ durationMs: 17000, width: 1080, height: 1920 }, TEXT, 16).filter((c) => c.key === "duracao")).toEqual([{ key: "duracao", ok: true, label: "Dentro da meta (17s de ~16s)" }]);
+  });
+});

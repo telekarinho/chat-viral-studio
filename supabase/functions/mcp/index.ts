@@ -94,10 +94,18 @@ function zonedDateTime(dateKey, hhmm, utcOffsetMinutes) {
   return new Date(Date.UTC(y, m - 1, d, h, mi, 0, 0) - utcOffsetMinutes * 6e4);
 }
 var BRASILIA_OFFSET_MIN = -180;
+var LIGHT_DAY_BLOCK = { startTime: "10:00", title: "Pensamento do Dia", contentHint: "dia leve: um pensamento curto, se der vontade", optional: true, format: "thought" };
+var DAILY_PROOF_BLOCK = { startTime: "14:30", title: "Prova visual / B-roll do produto", contentHint: "textura, m\xE1quina em uso, bastidor", optional: false, format: "broll" };
 function buildDayPlan(input) {
   const dateKey = input.dateKey ?? toLocalDateKey(input.date);
   const weekday = input.weekdayOverride ?? (input.dateKey ? (/* @__PURE__ */ new Date(`${input.dateKey}T12:00:00Z`)).getUTCDay() : input.date.getDay());
-  const blocks = input.routine.filter((b) => b.weekday === weekday).sort((a, b) => a.startTime.localeCompare(b.startTime));
+  const routineBlocks = input.routine.filter((b) => b.weekday === weekday);
+  const extra = [];
+  if (!routineBlocks.length && input.lightDay) extra.push({ ...LIGHT_DAY_BLOCK, weekday });
+  if (input.directedBroll && routineBlocks.length && weekday >= 1 && weekday <= 5 && !routineBlocks.some((b) => b.format === "broll" && !b.optional)) {
+    extra.push({ ...DAILY_PROOF_BLOCK, weekday });
+  }
+  const blocks = [...routineBlocks, ...extra.map((b, i) => ({ ...b, id: `extra-${weekday}-${i}` }))].sort((a, b) => a.startTime.localeCompare(b.startTime));
   const history = [...input.recentPillarSlugs];
   const contentItems = [];
   const tasks = blocks.map((b) => {
@@ -164,7 +172,9 @@ function similarity(a, b) {
   const ta = contentTokens(a);
   const tb = contentTokens(b);
   if (ta.length === 0 || tb.length === 0) return 0;
-  const uni = jaccard(new Set(ta), new Set(tb));
+  const sa = new Set(ta);
+  const shared = [...new Set(tb)].filter((w) => sa.has(w)).length;
+  const uni = shared >= 2 || ta.join(" ") === tb.join(" ") ? jaccard(sa, new Set(tb)) : 0;
   const bi = jaccard(bigrams(ta), bigrams(tb));
   const small = ta.length <= tb.length ? ta : tb;
   const big = new Set(ta.length <= tb.length ? tb : ta);
@@ -1483,6 +1493,7 @@ ${pending.map((c) => `- [${c.id}] ${c.cliente_segmento}: ${c.problema}`).join("\
 
 // src/mcp-tools.ts
 var CLIENT_STORY_PILLAR = "historias";
+var CLIENT_TALK = /\b(cliente|clientes|depoimento|depoimentos|comprou|compraram|me contou que comprou)\b/i;
 var FORMAT_LABEL2 = { thought: "Pensamento do Dia", main_video: "V\xEDdeo principal", story: "Story", broll: "Cena de apoio" };
 var DATE = /^\d{4}-\d{2}-\d{2}$/;
 var MAX_PLAN_DAYS = 14;
@@ -1509,11 +1520,11 @@ var MCP_TOOLS = [
   { name: "listar_perfis", title: "Perfis", description: "Lista os perfis do criador (pessoal, empresas\u2026) com id, nome, tipo e assinatura. Use o id em profile_id nas outras ferramentas.", inputSchema: { type: "object", properties: {}, additionalProperties: false }, annotations: RO2 },
   { name: "perfil_e_estrategia", title: "Perfil e estrat\xE9gia", description: "Voz, posicionamento, fechamento, assinatura, temas com meta, rotina da semana e, se for empresa, produto, dores, obje\xE7\xF5es, provas e chamadas.", inputSchema: obj({}), annotations: RO2 },
   { name: "desempenho_dos_posts", title: "Desempenho dos posts", description: "Posts recentes: tema, formato, dia/hora e redes, gancho e m\xFAsica usados, visualiza\xE7\xF5es, curtidas, coment\xE1rios, compartilhamentos, salvamentos, engajamento, envios a cada mil, reten\xE7\xE3o, tempo m\xE9dio e seguidores; no fim, o top 3 de ganchos, formatos, hor\xE1rios e m\xFAsicas.", inputSchema: obj({ limite: { type: "number", description: "quantos posts (padr\xE3o 30, m\xE1x. 100)" } }), annotations: RO2 },
-  { name: "criar_plano", title: "Planejar dias", description: "Cria o plano (miss\xF5es e conte\xFAdos) a partir de uma data, para at\xE9 14 dias, seguindo a rotina e as metas dos temas. Dias j\xE1 planejados ficam como est\xE3o.", inputSchema: obj({ data_inicio: { type: "string", description: "AAAA-MM-DD (padr\xE3o: hoje)" }, dias: { type: "number", description: "1 a 14 (padr\xE3o 7)" } }), annotations: WRITE2 },
+  { name: "criar_plano", title: "Planejar dias", description: "Cria o plano (miss\xF5es e conte\xFAdos) a partir de uma data, para at\xE9 14 dias, seguindo a rotina e as metas dos temas. Dias j\xE1 planejados ficam como est\xE3o. Fim de semana do perfil pessoal ganha um Pensamento opcional. Para gravar a mais num dia (ex.: s\xE1bado), use extra.", inputSchema: obj({ data_inicio: { type: "string", description: "AAAA-MM-DD (padr\xE3o: hoje)" }, dias: { type: "number", description: "1 a 14 (padr\xE3o 7)" }, extra: { type: "array", items: { type: "string", enum: ["pensamento", "principal"] }, description: "conte\xFAdos a mais na data_inicio (qualquer dia, inclusive fim de semana)" } }), annotations: WRITE2 },
   { name: "conteudos_do_dia", title: "Conte\xFAdos do dia", description: "Conte\xFAdos de uma data (padr\xE3o: hoje, Bras\xEDlia) com id, formato, tema e se j\xE1 tem roteiro. Datas futuras sem plano: use criar_plano antes.", inputSchema: obj({ data: { type: "string", description: "AAAA-MM-DD (opcional)" } }), annotations: RO2 },
   { name: "ler_roteiro", title: "Ler roteiro salvo", description: "Devolve o roteiro j\xE1 salvo de um conte\xFAdo (JSON completo), as escolhas de edi\xE7\xE3o/m\xFAsica, os n\xFAmeros e se h\xE1 um roteiro do assistente esperando o app abrir.", inputSchema: obj({ content_id: { type: "string" } }, ["content_id"]), annotations: RO2 },
   { name: "instrucoes_do_roteiro", title: "Regras para o roteiro", description: "Regras do perfil (voz, formatos que viralizam, fechamento, o que n\xE3o repetir), temas abaixo da meta nos \xFAltimos 30 dias, assuntos bloqueados por 14 dias e o JSON exato.", inputSchema: obj({ content_id: { type: "string", description: "id de conteudos_do_dia" }, acontecimento: { type: "string", description: "o que aconteceu hoje (opcional)" } }, ["content_id"]), annotations: RO2 },
-  { name: "salvar_roteiro", title: "Salvar roteiro no app", description: "Valida (contrato, gancho \u2264 12 palavras, texto de tela 2\u20135 palavras, dura\xE7\xE3o coerente, sem repetir, sem pre\xE7o/alega\xE7\xE3o sem prova no comercial) e envia ao app. Se falhar, devolve o que corrigir.", inputSchema: obj({ content_id: { type: "string" }, roteiro: { type: "object", description: "o JSON completo do roteiro" } }, ["content_id", "roteiro"]), annotations: WRITE2 },
+  { name: "salvar_roteiro", title: "Salvar roteiro no app", description: "Valida (contrato, gancho \u2264 12 palavras, texto de tela 2\u20135 palavras, dura\xE7\xE3o coerente, sem repetir, sem pre\xE7o/alega\xE7\xE3o sem prova no comercial) e envia ao app. Se falhar, devolve o que corrigir.", inputSchema: obj({ content_id: { type: "string" }, roteiro: { type: "object", description: "o JSON completo do roteiro" }, continua_de: { type: "string", description: "s\xE9rie: id do conte\xFAdo anterior que este continua (a repeti\xE7\xE3o de assunto com ele n\xE3o conta)" } }, ["content_id", "roteiro"]), annotations: WRITE2 },
   { name: "salvar_cenas", title: "Salvar cenas de apoio", description: "Para conte\xFAdo de cena de apoio (B-roll / prova visual): a lista de takes com instru\xE7\xE3o de filmagem. O app mostra cada take para gravar.", inputSchema: obj({ content_id: { type: "string" }, takes: { type: "array", description: "takes {ordem, nome, duracao_segundos, enquadramento, movimento_camera, local, luz, olhar, emocao, broll, erro_comum, fala_exata (opcional)}", items: { type: "object" } }, provas: { type: "array", items: { type: "string" }, description: "provas film\xE1veis do perfil que esta cena filma (ficam 'filmada' quando a cena for gravada)" } }, ["content_id", "takes"]), annotations: WRITE2 },
   { name: "registrar_metricas", title: "Registrar n\xFAmeros do post", description: "Salva os n\xFAmeros REAIS de um post (ex.: lidos no Metricool ou no painel da rede) para o app e o ranking. Nunca invente n\xFAmeros.", inputSchema: obj({ content_id: { type: "string" }, visualizacoes: { type: "number" }, curtidas: { type: "number" }, comentarios: { type: "number" }, compartilhamentos: { type: "number" }, salvamentos: { type: "number" }, retencao: { type: "number", description: "% de conclus\xE3o/reten\xE7\xE3o m\xE9dia (0\u2013100)" }, tempo_medio_segundos: { type: "number" }, seguidores_ganhos: { type: "number" }, fonte: { type: "string", description: "ex.: Metricool, Instagram" } }, ["content_id", "visualizacoes"]), annotations: WRITE2 },
   { name: "listar_musicas", title: "M\xFAsicas licenciadas", description: "Faixas da biblioteca licenciada (id, clima, dura\xE7\xE3o, licen\xE7a). Use o id em direcao.musica.id. Conta de empresa s\xF3 v\xEA faixas com licen\xE7a comercial.", inputSchema: obj({ clima: { type: "string", description: `opcional: ${Object.keys(MOOD_LABEL).join(", ")}` }, bpm: { type: "number", description: "opcional (as faixas ainda n\xE3o t\xEAm BPM medido)" } }), annotations: RO2 },
@@ -1679,6 +1690,12 @@ async function callProfileTool(store, name, args, now) {
   if (name === "criar_plano") {
     const start = typeof args.data_inicio === "string" && DATE.test(args.data_inicio) ? args.data_inicio : todayBrasilia(now);
     const days = await store.planDays(start, clampDays(args.dias));
+    const extra = Array.isArray(args.extra) ? [...new Set(args.extra.map((x) => x === "pensamento" ? "thought" : x === "principal" ? "main_video" : null).filter((x) => x !== null))] : [];
+    if (extra.length) {
+      const added = await store.addExtraContent(start, extra);
+      const first = days.find((d) => d.date === start);
+      if (first) first.items = [...first.items, ...added];
+    }
     const lines = await Promise.all(days.map(async (d) => {
       const items = await Promise.all(d.items.map(async (c) => `  \xB7 id ${c.id} \xB7 ${FORMAT_LABEL2[c.format] ?? c.format} \xB7 ${await store.pillarName(c.pillarSlug)}${scriptState(c)}`));
       return `${d.date}${d.created ? " (plano criado agora)" : ""}:
@@ -1788,8 +1805,10 @@ B-roll do dia entra sozinho na montagem; para outro, pe\xE7a ao criador para usa
     } else lines.push("- ainda sem roteiro");
     const whole = rec.takes.filter((x) => x.segmentIndex === null);
     if (whole.length) lines.push(`- v\xEDdeo inteiro de uma vez: ${whole.some((x) => x.synced) ? "enviado" : "ainda subindo"}`);
-    const r = rec.renders[0];
-    const render = !r ? "ainda n\xE3o pediu a montagem" : r.status === "done" ? `montado (${r.variant})${r.warnings.length ? ` \u2014 avisos: ${r.warnings.join("; ")}` : ""}` : r.status === "failed" ? `montagem falhou: ${r.error ?? "erro"}` : r.status === "rendering" ? "montando agora" : "na fila para montar";
+    const r = rec.renders.find((x) => x.variant !== "curto");
+    const short = rec.renders.find((x) => x.variant === "curto");
+    const render = (!r ? "ainda n\xE3o pediu a montagem" : r.status === "done" ? `montado${r.warnings.length ? ` \u2014 avisos: ${r.warnings.join("; ")}` : ""}` : r.status === "failed" ? `montagem falhou: ${r.error ?? "erro"}` : r.status === "rendering" ? "montando agora" : "na fila para montar") + (short?.status === "failed" ? `
+Vers\xE3o curta: n\xE3o deu (${short.error ?? "erro"}). A\xE7\xE3o: o v\xEDdeo completo n\xE3o \xE9 afetado; para ter a curta, grave por partes (gancho e chamada separados).` : short?.status === "done" ? "\nVers\xE3o curta: montada" : "");
     const posted = script.postedAt ? `
 Postado em ${brt(script.postedAt)}` : "";
     return text2(`Grava\xE7\xE3o de "${content.title}" (${content.date}):
@@ -1858,10 +1877,12 @@ ${blocks.join("\n")}`);
     ]);
     const eventText = typeof args.acontecimento === "string" && args.acontecimento.trim() ? args.acontecimento.trim().slice(0, 1500) : null;
     const prompt = buildManualPrompt({ profile, pillarName, format: content.format, eventText, brief: content.project ? projectBrief(content.project) : null, recentSummaries, avoid: "" });
-    const cases = profile.kind === "empresa" ? describeCases(await store.realCases()) : "";
+    const realCases = profile.kind === "empresa" ? await store.realCases() : [];
+    const cases = profile.kind === "empresa" ? describeCases(realCases) : "";
+    const storyNote = profile.kind === "empresa" && content.pillarSlug === CLIENT_STORY_PILLAR && !realCases.some(authorized) ? "HIST\xD3RIAS sem caso real autorizado: conte uma hist\xF3ria do pr\xF3prio dono ou da f\xE1brica (bastidor, como nasceu um produto, um erro que virou aprendizado). Nunca invente cliente nem depoimento." : "";
     const limits = `LIMITES DE CADA CAMPO (o validador confere exatamente isto; erros voltam todos juntos com o caminho do campo):
 ${contractLimits().join("\n")}`;
-    return text2([prompt, deficit, blocked, cases, "Regras do diretor: gancho \u2264 12 palavras; screen_text 2\u20135 palavras; duration_seconds \u2248 palavras do script \xF7 2,5.", DIRECTION_GUIDE, limits].filter(Boolean).join("\n\n"));
+    return text2([prompt, deficit, blocked, cases, storyNote, "Regras do diretor: gancho \u2264 12 palavras; screen_text 2\u20135 palavras; duration_seconds \u2248 palavras do script \xF7 2,5.", DIRECTION_GUIDE, limits].filter(Boolean).join("\n\n"));
   }
   if (name === "salvar_roteiro") {
     const profile = await store.profile();
@@ -1876,11 +1897,11 @@ ${contractLimits().join("\n")}`;
     ];
     if (biz?.noPrice && mentionsPrice(draft)) problems.push("pre\xE7o: o roteiro fala pre\xE7o/valor \u2014 neste perfil de empresa pre\xE7o n\xE3o aparece no v\xEDdeo.");
     for (const c of biz ? pendingClaimsIn(`${draft.script} ${draft.cta}`, biz.pendingClaims ?? []) : []) problems.push(`alega\xE7\xE3o sem prova: "${c}" \u2014 reescreva sem isso.`);
-    if (biz && content.pillarSlug === CLIENT_STORY_PILLAR && !(await store.realCases()).some(authorized)) {
-      problems.push("hist\xF3rias de cliente: este perfil n\xE3o tem caso real autorizado \u2014 cadastre com cadastrar_caso_real (com autoriza\xE7\xE3o) antes.");
+    if (biz && content.pillarSlug === CLIENT_STORY_PILLAR && CLIENT_TALK.test(`${draft.script} ${draft.cta} ${draft.hook_options.join(" ")}`) && !(await store.realCases()).some(authorized)) {
+      problems.push("hist\xF3rias de cliente: sem caso real autorizado n\xE3o d\xE1 para falar de cliente/depoimento. Conte uma hist\xF3ria do pr\xF3prio dono ou da f\xE1brica (bastidor), ou cadastre o caso com cadastrar_caso_real (com autoriza\xE7\xE3o).");
     }
     const [fps, topics] = await Promise.all([store.recentFingerprints(), store.recentTopics(TOPIC_WINDOW_DAYS)]);
-    const recent = [...fps, ...topics.map((t2) => ({ type: "topic", value: normalizeText(t2.topic), contentItemId: t2.contentItemId }))].filter((f) => f.contentItemId !== content.id);
+    const recent = [...fps, ...topics.map((t2) => ({ type: "topic", value: normalizeText(t2.topic), contentItemId: t2.contentItemId }))].filter((f) => f.contentItemId !== content.id && (typeof args.continua_de !== "string" || f.contentItemId !== args.continua_de));
     const report = checkRepetition(fingerprintsFor(draft), recent);
     if (report.repeated) {
       const ids = [...new Set(report.hits.map((h) => h.previousContentId).filter((x) => Boolean(x)))];
@@ -1948,7 +1969,9 @@ async function handleMcp(msg, ctx, now = /* @__PURE__ */ new Date()) {
       try {
         return ok(await callTool(ctx, name, args, now));
       } catch (e) {
-        return ok(text2(`N\xE3o consegui falar com o Post.ai agora (${e instanceof Error ? e.message : "erro"}). Tente de novo em instantes.`, true));
+        const msg2 = e instanceof Error ? e.message : "erro";
+        if (/invalid input syntax for type uuid/i.test(msg2)) return ok(text2("Algum id est\xE1 incompleto ou em formato errado. Use o id inteiro (36 caracteres) que aparece em conteudos_do_dia, listar_takes ou pedidos_do_criador.", true));
+        return ok(text2(`N\xE3o consegui falar com o Post.ai agora (${msg2}). Tente de novo em instantes.`, true));
       }
     }
     default:
@@ -2228,7 +2251,7 @@ function supabaseMcpStore(db, workspaceId, userId) {
           out2.push({ date, created: false, items: added ? await store.contentsOn(date) : existing });
           continue;
         }
-        const plan = buildDayPlan({ date: /* @__PURE__ */ new Date(0), dateKey: date, utcOffsetMinutes: BRASILIA_OFFSET_MIN, workspaceId, routine, pillars, recentPillarSlugs: history, newId: () => crypto.randomUUID(), now: (/* @__PURE__ */ new Date()).toISOString(), directedBroll: business });
+        const plan = buildDayPlan({ date: /* @__PURE__ */ new Date(0), dateKey: date, utcOffsetMinutes: BRASILIA_OFFSET_MIN, workspaceId, routine, pillars, recentPillarSlugs: history, newId: () => crypto.randomUUID(), now: (/* @__PURE__ */ new Date()).toISOString(), directedBroll: business, lightDay: !business });
         history.push(...plan.contentItems.filter((c) => c.format !== "broll").map((c) => c.pillarSlug));
         if (plan.contentItems.length) {
           const ci = await db.from("content_items").insert(plan.contentItems.map((c) => ({
@@ -2264,6 +2287,25 @@ function supabaseMcpStore(db, workspaceId, userId) {
       }
       return out2;
     },
+    async addExtraContent(date, formats) {
+      const [pillarRows, recentRows] = await Promise.all([
+        db.from("content_pillars").select("slug, name, target_percent, active").eq("workspace_id", workspaceId),
+        db.from("content_items").select("pillar_slug").eq("workspace_id", workspaceId).neq("format", "broll").order("plan_date", { ascending: false }).limit(30)
+      ]);
+      const err = pillarRows.error ?? recentRows.error;
+      if (err) throw new Error(err.message);
+      const pillars = (pillarRows.data ?? []).map((p) => ({ slug: p.slug, name: p.name, targetPercent: Number(p.target_percent), active: p.active }));
+      const history = (recentRows.data ?? []).map((r) => r.pillar_slug).filter(Boolean).reverse();
+      const scheduledFor = new Date(Date.parse(`${date}T12:00:00Z`)).toISOString();
+      const rows = formats.map((format) => {
+        const pillar = pickNextPillar(pillars, history);
+        history.push(pillar.slug);
+        return { id: crypto.randomUUID(), workspace_id: workspaceId, pillar_slug: pillar.slug, plan_date: date, scheduled_for: scheduledFor, format, title: FORMAT_LABEL[format], status: "planned", structured_payload: {} };
+      });
+      const ins = await db.from("content_items").insert(rows);
+      if (ins.error) throw new Error(ins.error.message);
+      return withScript(rows.map((r) => ({ id: r.id, format: r.format, pillar_slug: r.pillar_slug, title: r.title, plan_date: date, structured_payload: {} })));
+    },
     async pillarCounts(days) {
       const [scripts, pending] = await Promise.all([db.from("scripts").select("content_item_id").eq("workspace_id", workspaceId).gte("created_at", daysAgo(days)), pendingDrafts(days)]);
       if (scripts.error) throw new Error(scripts.error.message);
@@ -2295,6 +2337,7 @@ function supabaseMcpStore(db, workspaceId, userId) {
       return (data ?? []).map((m) => ({ id: m.id, titulo: m.titulo, prioridade: m.prioridade, status: m.status, issueNumber: m.issue_number, createdAt: m.created_at }));
     },
     async content(id) {
+      if (!/^[0-9a-f-]{36}$/i.test(id)) return null;
       const { data, error } = await db.from("content_items").select(COLS).eq("workspace_id", workspaceId).eq("id", id).maybeSingle();
       if (error) throw new Error(error.message);
       return data ? (await withScript([data]))[0] : null;
