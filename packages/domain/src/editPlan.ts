@@ -274,6 +274,8 @@ export interface EditChoices {
   autocut?: AutoCutThemeId;
   /** objetivo do vídeo (Venda, Autoridade…), combinado com o estilo do AutoCut */
   intencao?: VideoIntent;
+  /** título da capa ("" = sem título; ausente = o do diretor) — vale na próxima montagem */
+  capaTexto?: string;
   /** trecho da música: segundo da faixa onde a trilha começa (ausente = automático) */
   musicStartS?: number;
 }

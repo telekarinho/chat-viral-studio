@@ -49,6 +49,8 @@ export interface ServerChoices {
   autoCut: boolean; voiceClean: boolean; broll: boolean; hook: boolean;
   /** ritmo da montagem (tema do AutoCut ou o padrão) */
   autocut: AutoCutParams;
+  /** título da capa escolhido pelo criador ("" = sem título); ausente = o do diretor */
+  capaTexto?: string;
 }
 
 /**
@@ -78,7 +80,8 @@ function editChoicesBase(payload: Record<string, unknown> | null | undefined, pi
   const narration = edit.narracao === true;
   // narração: sem corte de pausas (a fala fica no tempo da música que tocava no fone)
   const autocut = autoCutParams({ autocut: typeof edit.autocut === "string" ? (edit.autocut as AutoCutThemeId) : undefined });
-  const base = { captionStyle, accentColor, retouch, stabilize: flag("stabilize"), autoCut: narration ? false : flag("autoCut"), voiceClean: flag("voiceClean"), broll: flag("broll"), hook: flag("hook"), autocut };
+  const capaTexto = typeof edit.capaTexto === "string" ? edit.capaTexto.trim().slice(0, 60) : undefined;
+  const base = { ...(capaTexto !== undefined ? { capaTexto } : {}), captionStyle, accentColor, retouch, stabilize: flag("stabilize"), autoCut: narration ? false : flag("autoCut"), voiceClean: flag("voiceClean"), broll: flag("broll"), hook: flag("hook"), autocut };
   const choice = typeof edit.music === "string" ? edit.music : "auto";
   if (choice === "none") return { ...base, music: null };
   // música própria do criador (escolhida no app ou pela direção); empresa só com licença comercial declarada
@@ -400,7 +403,7 @@ export async function processJob(db: SupabaseClient, job: RenderJobRow, fontFile
       const cover = join(dir, "capa.jpg");
       const capa = sp.direction?.capa ?? null;
       const atMs = capa ? Math.min(Math.max(0, plan.totalMs - 100), capa.frame * 1000) : Math.min(1200, plan.totalMs / 3);
-      const coverText = capa?.texto.trim() ?? "";
+      const coverText = sp.choices.capaTexto ?? capa?.texto.trim() ?? "";
       if (coverText) {
         const src = coverSource(plan, atMs);
         const layout = coverTextLayout(coverText);

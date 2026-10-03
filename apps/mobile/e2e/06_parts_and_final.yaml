@@ -116,6 +116,13 @@ appId: me.rodrigoserra.postai
     visible:
       id: final-screen
     timeout: 900000
+# assistir → aprovar → publicar
+- scrollUntilVisible:
+    element:
+      id: approve-final
+    timeout: 60000
+- tapOn:
+    id: approve-final
 - scrollUntilVisible:
     element:
       id: share-final
