@@ -97,6 +97,15 @@ appId: me.rodrigoserra.postai
     visible:
       id: content-screen
     timeout: 20000
+# material completo: os detalhes (roteiro, takes) ficam recolhidos
+- assertVisible:
+    id: phase-complete
+- scrollUntilVisible:
+    element:
+      id: toggle-details
+    timeout: 60000
+- tapOn:
+    id: toggle-details
 - scrollUntilVisible:
     element:
       text: 'Takes deste conteúdo .1.'
