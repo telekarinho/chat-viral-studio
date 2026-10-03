@@ -23,8 +23,8 @@ appId: me.rodrigoserra.postai
     timeout: 60000
 - tapOn:
     id: open-thought
-- extendedWaitUntil:
-    visible:
+- scrollUntilVisible:
+    element:
       id: record-parts
     timeout: 20000
 - tapOn:
@@ -100,7 +100,10 @@ appId: me.rodrigoserra.postai
     visible:
       id: final-summary
     timeout: 30000
-- assertVisible: ".*Música: .*"
+- scrollUntilVisible:
+    element:
+      text: ".*Música: .*"
+    timeout: 30000
 - tapOn:
     id: swap-music
 - takeScreenshot: 09_resumo_montagem

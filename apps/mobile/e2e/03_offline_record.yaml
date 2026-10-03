@@ -28,8 +28,8 @@ appId: me.rodrigoserra.postai
     timeout: 60000
 - tapOn:
     id: open-main_video
-- extendedWaitUntil:
-    visible:
+- scrollUntilVisible:
+    element:
       id: open-teleprompter
     timeout: 20000
 - tapOn:
