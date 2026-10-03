@@ -122,7 +122,7 @@ export default function Today() {
       <UpdateBanner />
       <View style={[s.row, { alignItems: "center", gap: 8 }]}>
         <View style={{ flex: 1 }}><ProfileSwitcher /></View>
-        <Button compact variant="ghost" label="Plano" onPress={() => router.push("/(tabs)/plano")} testID="open-plan" />
+        <Button compact variant="ghost" label="Estratégia" onPress={() => router.push("/(tabs)/plano")} testID="open-plan" />
       </View>
 
       {error ? <ErrorBox message={error} onRetry={load} /> : null}

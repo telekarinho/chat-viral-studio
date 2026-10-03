@@ -1,7 +1,7 @@
 import { useCallback, useState } from "react";
 import { Pressable, Text, View } from "react-native";
 import { router, useFocusEffect } from "expo-router";
-import { engagementRate, metricsInsights, pillarBalance, sharesPer1k } from "@postai/domain";
+import { FORMAT_LABEL, directorLearnings, engagementRate, metricsInsights, pillarBalance, sharesPer1k, styleLabel, trackById } from "@postai/domain";
 import { useApp } from "../../src/app-state";
 import { donePillarSlugs, history, listContentWithMetrics, pullImportedMetrics, type ContentItem, type DayHistory } from "../../src/db/repo";
 import { Card, Empty, Eyebrow, H1, Screen, Section, colors, s } from "../../src/ui";
@@ -21,6 +21,12 @@ export default function Resultados() {
   const pillarName = (slug: string) => workspace?.pillars.find((p) => p.slug === slug)?.name ?? slug;
   const insights = metricsInsights(posts.map((p) => ({ id: p.id, title: p.draft?.title ?? p.title, pillarSlug: p.pillarSlug, metrics: p.metrics! })), pillarName);
   const fmt = (n: number) => n.toLocaleString("pt-BR");
+  // só posts com números reais; cada post entra com o que usou (tema, duração, estilo, música, horário, gancho)
+  const learned = directorLearnings(posts.map((p) => ({
+    metrics: p.metrics!, tema: pillarName(p.pillarSlug), formato: FORMAT_LABEL[p.format], duracaoS: p.draft?.duration_seconds ?? null,
+    estilo: p.edit ? styleLabel(p.edit) : null, musica: p.edit?.music ? trackById(p.edit.music)?.title ?? null : null,
+    hora: p.posted?.at ? new Date(p.posted.at).getHours() : null, gancho: p.draft?.hook_options[p.selectedHook ?? 0] ?? null,
+  })));
 
   const totalDone = days.reduce((a, d) => a + d.done, 0);
   const streak = (() => {
@@ -34,9 +40,17 @@ export default function Resultados() {
 
   return (
     <Screen testID="resultados-screen">
-      <Eyebrow>O que está funcionando</Eyebrow>
-      <H1>Resultados</H1>
-      <Text style={s.muted}>Anote os números de cada post (na tela do vídeo final, em “Como foi este post?”) e o app compara os temas para você.</Text>
+      <Eyebrow>{workspace ? `Perfil: ${workspace.name}` : "Resultados"}</Eyebrow>
+      <H1>O que seu Diretor aprendeu</H1>
+      <Card style={{ gap: 6 }} testID="learnings">
+        <Text style={s.label} testID="learnings-sample">{`Baseado em ${learned.posts} post${learned.posts === 1 ? "" : "s"} com números${learned.small && learned.posts ? " · amostra pequena" : ""}`}</Text>
+        {learned.learnings.length ? learned.learnings.map((l) => (
+          <Text key={l.dimensao} style={[s.body, { fontWeight: "700" }]}>{`• ${l.texto}`}</Text>
+        )) : (
+          <Text style={s.muted}>{learned.posts < 3 ? "Ainda poucos posts com números. Anote em “Como foi este post?” (ou peça ao Claude para importar do Metricool) — a partir de 3 o Diretor começa a comparar." : "Ainda sem diferença clara entre os grupos (cada grupo precisa de pelo menos 2 posts)."}</Text>
+        )}
+        <Text style={s.muted}>Comparação entre os seus posts, não causa garantida. Leads e vendas aparecem quando estiverem integrados.</Text>
+      </Card>
 
       <Section>Seus posts</Section>
       {insights.posts === 0 ? <Empty title="Nenhum número anotado ainda" body="Abra um vídeo final e preencha “Como foi este post?”." /> : (

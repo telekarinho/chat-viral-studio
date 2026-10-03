@@ -70,6 +70,8 @@ export interface McpStore extends ProfileDataStore {
   musicFavorites(): Promise<string[]>;
   /** proposta de edição do diretor: o app mostra MONTAR ASSIM / AJUSTAR; nada monta sem o criador */
   saveEditProposal(contentId: string, edit: EditProposal, motivo: string): Promise<void>;
+  /** acervo do perfil (takes de todos os conteúdos), mais novos primeiro */
+  mediaLibrary(opts: { categoria: string | null; favoritas: boolean; limite: number }): Promise<(McpTake & { category: string; contentId: string | null; tags: string[]; capitulo: string | null })[]>;
   /** pedidos que o criador fez ao diretor no app (sem resposta primeiro) */
   creatorRequests(contentId: string | null): Promise<McpRequest[]>;
   /** false = pedido não existe neste perfil */
@@ -134,6 +136,7 @@ export const MCP_TOOLS = [
   { name: "listar_musicas", title: "Músicas licenciadas", description: "Faixas da biblioteca licenciada (id, clima, duração, licença). Use o id em direcao.musica.id. Conta de empresa só vê faixas com licença comercial.", inputSchema: obj({ clima: { type: "string", description: `opcional: ${Object.keys(MOOD_LABEL).join(", ")}` }, bpm: { type: "number", description: "opcional (as faixas ainda não têm BPM medido)" } }), annotations: RO },
   { name: "propor_edicao", title: "Propor a edição", description: "Depois de ver o que foi gravado (ler_status_gravacao), propõe a montagem: estilo AutoCut, música, volume e trecho, com o motivo. O criador vê no app e escolhe MONTAR ASSIM (monta) ou AJUSTAR. Nada é montado nem publicado sem ele.", inputSchema: obj({ content_id: { type: "string" }, intencao: { type: "string", enum: [...VIDEO_INTENTS], description: "objetivo do vídeo (combina com o estilo: Venda + Viral)" }, autocut: { type: "string", enum: [...AUTOCUT_IDS], description: `estilo da montagem (cortes, zoom, transição, ritmo): ${AUTOCUT_THEMES.map((t) => `${t.id} = ${t.label.replace(/^\S+\s/, "")}`).join("; ")}` }, musica: { type: "string", description: "id de listar_musicas, \"auto\", \"none\" ou um clima" }, volume: { type: "number", description: "0.05 a 0.45, relativo à voz (0.22 padrão)" }, inicio_musica_s: { type: "number", description: "segundo da faixa onde a trilha começa (só com faixa específica)" }, motivo: { type: "string", description: "por que esta edição, em 1–2 frases simples" } }, ["content_id", "motivo"]), annotations: WRITE },
   { name: "listar_takes", title: "Takes gravados", description: "Cada take gravado do conteúdo, por parte do roteiro: número do take, duração, resolução, câmera, se subiu, se foi descartado e uma checagem técnica (duração × texto, resolução, orientação). Não é nota de viralidade. A montagem usa o take escolhido pelo criador em cada parte (sem escolha: o mais recente não descartado).", inputSchema: obj({ content_id: { type: "string" } }, ["content_id"]), annotations: RO },
+  { name: "buscar_midias", title: "Acervo de mídias", description: "Procura no acervo do perfil (takes já gravados em qualquer conteúdo): B-roll, provas/produto, falas, favoritos. Use ANTES de pedir para gravar de novo — dá para reaproveitar cena de apoio e prova já filmadas.", inputSchema: obj({ categoria: { type: "string", enum: ["broll", "prova", "fala", "todas"], description: "padrão: todas" }, favoritas: { type: "boolean", description: "só os marcados com ★ pelo criador" }, limite: { type: "number", description: "padrão 30, máx. 100" } }), annotations: RO },
   { name: "pedidos_do_criador", title: "Pedidos do criador", description: "O que o criador pediu ao diretor no app sobre um vídeo (\"quero mais rápido\", \"troca o começo\"…), sem resposta primeiro. Atenda com as ferramentas de sempre (propor_edicao, salvar_roteiro, listar_takes) e responda com responder_pedido.", inputSchema: obj({ content_id: { type: "string", description: "opcional: só deste conteúdo" } }), annotations: RO },
   { name: "responder_pedido", title: "Responder pedido", description: "Responde um pedido do criador (aparece no app, no painel do Diretor). Diga em 1–3 frases simples o que você fez ou propôs.", inputSchema: obj({ pedido_id: { type: "string" }, resposta: { type: "string" } }, ["pedido_id", "resposta"]), annotations: WRITE },
   { name: "ler_status_gravacao", title: "Status da gravação", description: "O que já foi gravado (por take/parte), o que falta, se já subiu e como está a montagem do vídeo.", inputSchema: obj({ content_id: { type: "string" } }, ["content_id"]), annotations: RO },
@@ -325,6 +328,18 @@ export async function callProfileTool(store: McpStore, name: string, args: Json,
       .map((t) => `- id ${t.id} · "${t.title}" — ${t.artist} · clima ${t.mood} (${MOOD_LABEL[t.mood]}) · ${t.bpm ? `${t.bpm} BPM` : "sem batida definida"} · ${t.durationSec}s · licença ${t.license}${fav(t.id)}`);
     const note = `Use o valor de "clima" (ex.: ${list[0]?.mood ?? "reflexao"}) em direcao.musica.clima. BPM medido no áudio. Tendência ("em alta"): ainda sem fonte de dados — não informada.`;
     return text([...ownRows, ...rows, note].join("\n"));
+  }
+  if (name === "buscar_midias") {
+    const cat = typeof args.categoria === "string" && ["broll", "prova", "fala"].includes(args.categoria) ? args.categoria : null;
+    const limite = typeof args.limite === "number" && args.limite > 0 ? Math.min(100, Math.floor(args.limite)) : 30;
+    const list = await store.mediaLibrary({ categoria: cat, favoritas: args.favoritas === true, limite });
+    if (!list.length) return text("Nada no acervo com esse filtro.");
+    const rows = await Promise.all(list.map(async (t) => {
+      const c = t.contentId ? await store.content(t.contentId) : null;
+      const facts = [t.durationMs !== null ? `${(t.durationMs / 1000).toFixed(1)}s` : "", t.width && t.height ? `${t.width}x${t.height}` : "", t.favorite ? "★" : "", t.synced ? "na nuvem" : "ainda no celular"].filter(Boolean).join(" · ");
+      return `- take ${t.id} · ${t.category}${t.capitulo ? ` (${t.capitulo})` : ""} · ${brt(t.createdAt)} · ${facts}${c ? ` · de "${c.title}" (${c.id})` : ""}${t.tags.length ? ` · ${t.tags.join(", ")}` : ""}`;
+    }));
+    return text(`${list.length} mídia(s) no acervo (descartadas ficam de fora):\n${rows.join("\n")}\nB-roll do dia entra sozinho na montagem; para outro, peça ao criador para usar a cena (ou grave só o que falta).`);
   }
   if (name === "pedidos_do_criador") {
     const cid = typeof args.content_id === "string" && args.content_id ? args.content_id : null;

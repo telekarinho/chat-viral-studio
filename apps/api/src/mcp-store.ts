@@ -121,6 +121,22 @@ export function supabaseMcpStore(db: SupabaseClient, workspaceId: string, userId
       if (error) throw new Error(error.message);
       return [...new Set((data ?? []).map((r) => r.track_id as string))];
     },
+    async mediaLibrary({ categoria, favoritas, limite }) {
+      let q = db.from("takes").select("id, segment_index, created_at, tags, favorite, camera, category, content_item_id, meta, media_files(state, duration_ms, width, height)")
+        .eq("workspace_id", workspaceId).is("deleted_at", null);
+      if (categoria === "broll") q = q.eq("category", "broll");
+      else if (categoria === "prova") q = q.or("category.eq.patrimonio,meta->>shot.not.is.null");
+      else if (categoria === "fala") q = q.neq("category", "broll").is("meta->>shot", null);
+      if (favoritas) q = q.eq("favorite", true);
+      const { data, error } = await q.order("created_at", { ascending: false }).limit(limite * 2);
+      if (error) throw new Error(error.message);
+      type T = { id: string; segment_index: number | null; created_at: string; tags: string[] | null; favorite: boolean; camera: string | null; category: string | null; content_item_id: string | null; meta: { capitulo?: string | null } | null; media_files: { state: string; duration_ms: number | null; width: number | null; height: number | null } | null };
+      return ((data ?? []) as unknown as T[]).filter((t) => !(t.tags ?? []).includes("descartado")).slice(0, limite).map((t) => ({
+        id: t.id, segmentIndex: t.segment_index, createdAt: t.created_at, discarded: false, chosen: (t.tags ?? []).includes("escolhido"), synced: t.media_files?.state === "uploaded_original",
+        favorite: t.favorite, camera: t.camera, durationMs: t.media_files?.duration_ms ?? null, width: t.media_files?.width ?? null, height: t.media_files?.height ?? null,
+        category: t.category ?? "livre", contentId: t.content_item_id, tags: (t.tags ?? []).filter((g) => g !== "escolhido"), capitulo: t.meta?.capitulo ?? null,
+      }));
+    },
     async creatorRequests(contentId): Promise<McpRequest[]> {
       let q = db.from("pedidos_diretor").select("id, content_item_id, texto, resposta, created_at").eq("workspace_id", workspaceId);
       if (contentId) q = q.eq("content_item_id", contentId);

@@ -10,6 +10,8 @@ appId: me.rodrigoserra.postai
       - tapOn: "Wait"
 - tapOn:
     id: tab-Biblioteca
+- tapOn:
+    id: library-tab-takes
 - extendedWaitUntil:
     visible: "SINCRONIZADO"
     timeout: 240000

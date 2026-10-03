@@ -16,6 +16,8 @@ appId: me.rodrigoserra.postai
     text: "Offline.*"
 - tapOn:
     id: tab-Biblioteca
+- tapOn:
+    id: library-tab-takes
 - extendedWaitUntil:
     visible:
       id: take-row
