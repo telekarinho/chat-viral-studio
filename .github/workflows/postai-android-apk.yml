@@ -17,7 +17,8 @@ permissions:
   contents: read
 
 concurrency:
-  group: postai-apk-${{ github.ref }}
+  # versão (disparo manual) tem fila própria: um merge na main nunca toma o lugar dela
+  group: postai-apk-${{ github.ref }}-${{ github.event_name == 'workflow_dispatch' && 'release' || 'build' }}
   # só cancela build de PR substituído; versão (main/release) nunca é cancelada por outro merge
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
