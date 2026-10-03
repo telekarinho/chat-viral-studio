@@ -89,3 +89,15 @@ describe("clima da música padronizado", () => {
     expect(r.ok && r.draft.direcao?.musica?.clima).toBe("reflexao");
   });
 });
+
+describe("instrução do take bate com a fala do take", () => {
+  it("trecho citado no ritmo/emoção/olhar/cuidado precisa estar na fala_exata daquele take", () => {
+    const fala = "Você está cansado, eu sei. A cabeça diz que não vai dar. Mas ela mente nos dias pesados.";
+    const ok = parseDraft({ ...base, direcao: { takes: [{ ordem: 1, nome: "Pensamento", fala_exata: fala, duracao_segundos: 8, ritmo: "Pausa de 1 segundo depois de 'eu sei' e de 'dias pesados'", erro_comum: "Tom de sermão" }] } });
+    expect(ok.ok && directionIssues(ok.draft.direcao!, { durationSeconds: 10, spoken: true, business: false })).toEqual([]);
+    const bad = parseDraft({ ...base, direcao: { takes: [{ ordem: 1, nome: "Pensamento", fala_exata: fala, duracao_segundos: 8, ritmo: "Pausa depois de “ninguém te conta”", olhar: "olhe para baixo em 'dias pesados'" }] } });
+    const issues = bad.ok ? directionIssues(bad.draft.direcao!, { durationSeconds: 10, spoken: true, business: false }) : ["parse"];
+    expect(issues).toHaveLength(1);
+    expect(issues[0]).toContain('direcao.takes[0].ritmo: cita "ninguém te conta", que não está na fala_exata deste take');
+  });
+});

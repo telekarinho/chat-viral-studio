@@ -78,6 +78,13 @@ describe.skipIf(!(url && anon && service))("conector MCP (Supabase local)", () =
     const tone = (await user.from("creator_profiles").select("tone").eq("workspace_id", newId).single()).data!.tone as { kind: string; extras: { goals: string } };
     expect(tone).toMatchObject({ kind: "empresa", extras: { goals: "100 leads" } });
 
+    // música própria: o criador registra (RLS), a pasta precisa ser a do perfil, o conector lista
+    const bad = await user.from("musicas_proprias").insert({ workspace_id: ws, storage_key: `outro/music/x.mp3`, titulo: "x", origem: "minha" });
+    expect(bad.error).not.toBeNull();
+    const mine = await user.from("musicas_proprias").insert({ workspace_id: ws, storage_key: `${ws}/music/trilha.mp3`, titulo: "Trilha", origem: "minha", comercial: true }).select("id").single();
+    expect(mine.error).toBeNull();
+    expect(await tool("listar_musicas", {})).toContain(`id own:${mine.data!.id} · "Trilha"`);
+
     const box = await user.from("assistant_drafts").select("draft, consumed_at").eq("content_item_id", contentId);
     expect(box.data).toHaveLength(1);
     expect(box.data![0]!.draft.title).toBe(draft.title);
