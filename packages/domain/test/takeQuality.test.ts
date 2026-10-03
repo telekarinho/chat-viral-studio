@@ -17,3 +17,27 @@ describe("checagem técnica do take", () => {
     expect(takeTechNotes({ durationMs: 500, width: null, height: null, synced: true }, "")).toEqual([]);
   });
 });
+
+describe("take usado em cada parte", () => {
+  const t = (id: string, segmentIndex: number | null, tags: string[] = []) => ({ id, segmentIndex, tags });
+  it("escolhido vence o mais recente; sem escolha, o mais recente; descartado nunca", async () => {
+    const { chosenTakes } = await import("../src");
+    const m = chosenTakes([t("p0-novo", 0), t("p0-velho", 0, ["escolhido"]), t("p1-desc", 1, ["descartado"]), t("p1", 1), t("inteiro", null)]);
+    expect(m.get(0)?.id).toBe("p0-velho");
+    expect(m.get(1)?.id).toBe("p1");
+    expect(m.size).toBe(2);
+  });
+});
+
+describe("diagnóstico para o criador", () => {
+  it("🟢 fala completa, ritmo, duração, vertical, resolução; 🟡 rápido; recomenda o com menos alertas", async () => {
+    const { takeChecks, recommendTake } = await import("../src");
+    const good = takeChecks({ durationMs: 4500, width: 1080, height: 1920 }, TEXT);
+    expect(good.every((c) => c.ok)).toBe(true);
+    expect(good.map((c) => c.key)).toEqual(["fala", "ritmo", "duracao", "enquadramento", "resolucao"]);
+    expect(takeChecks({ durationMs: 2600, width: 1080, height: 1920 }, TEXT).find((c) => c.key === "ritmo")).toEqual({ key: "ritmo", ok: false, label: "Falou um pouco rápido" });
+    const fast = { id: "novo", durationMs: 2600, width: 1080, height: 1920 };
+    const ok = { id: "velho", durationMs: 4500, width: 1080, height: 1920 };
+    expect(recommendTake([fast, ok], TEXT)?.id).toBe("velho");
+  });
+});

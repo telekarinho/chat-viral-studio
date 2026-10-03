@@ -5,7 +5,7 @@ import { join } from "node:path";
 import { promisify } from "node:util";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import {
-  CAPTION_STYLES, MOOD_LABEL, applyAutoCutToPlan, pickAutoTrack, autoCutParams, clipStartsMs, type AutoCutParams, type AutoCutThemeId, RETOUCH_LEVELS, SHORT_ROLES, assignBroll, buildAss, buildEditPlan, buildSegments, cuesFromWords, moodForPillar, parseDraft,
+  CAPTION_STYLES, MOOD_LABEL, applyAutoCutToPlan, chosenTakes, pickAutoTrack, autoCutParams, clipStartsMs, type AutoCutParams, type AutoCutThemeId, RETOUCH_LEVELS, SHORT_ROLES, assignBroll, buildAss, buildEditPlan, buildSegments, cuesFromWords, moodForPillar, parseDraft,
   planCuts, trackById, watermarkCorner, wholeTakeSegment, withClips,
   ownMusicId, ownMusicUuid, type CaptionStyle, type Direction, type OwnMusic, type EditClip, type EditPlan, type MusicMood, type PlanMusic, type RenderVariant, type Retouch,
 } from "@postai/domain";
@@ -157,10 +157,8 @@ export async function buildServerPlan(db: SupabaseClient, job: RenderJobRow): Pr
 
   const brolls = choices.broll && variant === "completo" ? await findBrolls(db, job.workspace_id, content.data.plan_date as string | null) : [];
   const own = ((takes.data ?? []) as unknown as TakeRow[]).filter((t) => t.workspace_id === job.workspace_id && !(t.tags ?? []).includes("descartado"));
-  const latest = new Map<number, TakeRow>();
-  for (const t of own) {
-    if (t.segment_index !== null && !latest.has(t.segment_index)) latest.set(t.segment_index, t);
-  }
+  // take escolhido de cada parte (ou o mais recente) — mesma regra do app
+  const latest = new Map([...chosenTakes(own.map((t) => ({ ...t, segmentIndex: t.segment_index }))).entries()].map(([k, v]) => [k, v as TakeRow]));
   // recorded in one go (no parts): enhance the latest whole take as a single clip
   if (latest.size === 0) {
     const whole = own.find((t) => t.segment_index === null);

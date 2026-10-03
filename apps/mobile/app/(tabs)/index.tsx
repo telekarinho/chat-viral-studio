@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import { Text, View } from "react-native";
+import { View } from "react-native";
 import { router, useFocusEffect } from "expo-router";
 import { toLocalDateKey, type RecordingTask, type TaskAction } from "@postai/domain";
 import { ensureDayPlan, listContent, listTasks, runTaskAction, type ContentItem } from "../../src/db/repo";
@@ -13,7 +13,7 @@ import { TodayView } from "../../src/components/TodayView";
 import { UpdateBanner } from "../../src/components/UpdateBanner";
 import { createFreeSpeech, importVideo } from "../../src/freeSpeech";
 import { ProfileSwitcher } from "../../src/components/ProfileSwitcher";
-import { Button, Card, ErrorBox, Loading, Screen, colors, s } from "../../src/ui";
+import { Button, Card, ErrorBox, Loading, Screen, s } from "../../src/ui";
 
 export default function Today() {
   const { workspace } = useApp();
@@ -89,22 +89,11 @@ export default function Today() {
     }
   }
 
-  if (!state && !error) return <Screen><Loading label="Montando o seu dia…" /></Screen>;
-  return (
-    <Screen testID="today-screen">
-      <UpdateBanner />
-      <ProfileSwitcher />
-
-      <View style={{ flexDirection: "row", gap: 8 }}>
-        <View style={{ flex: 1 }}>
-          <Button label={createOpen ? "FECHAR" : "+ CRIAR"} onPress={() => setCreateOpen((v) => !v)} testID="open-create" />
-        </View>
-        <Button compact variant="ghost" label="Plano" onPress={() => router.push("/(tabs)/plano")} testID="open-plan" />
-      </View>
-
+  const createMenu = (
+    <View style={{ gap: 10 }}>
+      <Button variant="secondary" label={createOpen ? "FECHAR" : "+ CRIAR OUTRA COISA"} onPress={() => setCreateOpen((v) => !v)} testID="open-create" />
       {createOpen ? (
         <Card style={{ gap: 10 }} testID="create-menu">
-          <Text style={{ color: colors.ink, fontWeight: "900", fontSize: 17 }}>O que você quer fazer?</Text>
           <Button label="🎬 GRAVAR O QUE O DIRETOR PEDIU" onPress={() => router.push("/(tabs)/gravar")} testID="create-director-record" />
           <Button variant="secondary" label="🎙 FALAR LIVRE" loading={quick === "fala"} testID="free-speech" onPress={() => void quickStart("fala", async () => {
             const c = await createFreeSpeech("gravar");
@@ -114,6 +103,7 @@ export default function Today() {
             const c = await importVideo();
             if (c) router.push(`/finalizar/${c.id}`);
           })} />
+          <Button variant="secondary" label="🎞 CENA DE APOIO (B-ROLL)" onPress={() => router.push("/record")} testID="create-broll" />
           {workspace?.profile.kind === "empresa" ? (
             <View style={{ gap: 8 }}>
               <Button variant="secondary" label="🏭 GRAVAR PRODUTO / PROVA" onPress={() => router.push("/projeto")} testID="open-projeto" />
@@ -121,9 +111,19 @@ export default function Today() {
               {workspace.cloud ? <Button variant="ghost" label="📦 PATRIMÔNIO / PEDIDO" onPress={() => router.push("/patrimonio")} testID="open-patrimonio" /> : null}
             </View>
           ) : null}
-          <Text style={s.muted}>A tela Hoje continua focada no próximo passo. Use Criar só quando quiser sair da missão recomendada.</Text>
         </Card>
       ) : null}
+    </View>
+  );
+
+  if (!state && !error) return <Screen><Loading label="Montando o seu dia…" /></Screen>;
+  return (
+    <Screen testID="today-screen">
+      <UpdateBanner />
+      <View style={[s.row, { alignItems: "center", gap: 8 }]}>
+        <View style={{ flex: 1 }}><ProfileSwitcher /></View>
+        <Button compact variant="ghost" label="Plano" onPress={() => router.push("/(tabs)/plano")} testID="open-plan" />
+      </View>
 
       {error ? <ErrorBox message={error} onRetry={load} /> : null}
       {state ? (
@@ -139,6 +139,7 @@ export default function Today() {
           onGenerate={onGenerate}
           onEvent={() => router.push("/event")}
           onFreeRecord={() => router.push("/record")}
+          createSlot={createMenu}
           pillarNames={Object.fromEntries((workspace?.pillars ?? []).map((pl) => [pl.slug, pl.name]))}
         />
       ) : null}

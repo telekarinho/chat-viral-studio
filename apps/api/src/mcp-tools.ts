@@ -1,7 +1,7 @@
 import {
   AUTOCUT_THEMES, MOOD_LABEL, MUSIC_LIBRARY, buildManualPrompt, contractLimits, directionReport, normalizeMood, buildSegments, checkRepetition, describeRepetition, directionIssues, directorIssues, engagementRate, finalizeDraft, fingerprintsFor, mentionsPrice, parseDraft,
   normalizeText, pendingClaimsIn, projectBrief, rankBy, sharesPer1k, type RankRow, type RankedPost,
-  ScenesSchema, describeEditProposal, takeTechNotes, ownMusicId, parseEditProposal, type EditProposal, type ContentDraft, type CreatorProfile, type OwnMusic, type Scenes, type EditChoices, type Fingerprint, type PostMetrics, type ProjectInfo,
+  CHOSEN_TAG, DISCARDED_TAG, ScenesSchema, chosenTakes, describeEditProposal, takeTechNotes, ownMusicId, parseEditProposal, type EditProposal, type ContentDraft, type CreatorProfile, type OwnMusic, type Scenes, type EditChoices, type Fingerprint, type PostMetrics, type ProjectInfo,
 } from "@postai/domain";
 import {
   PROFILE_TOOLS, authorized, callAccountTool, callProfileDataTool, describeCases, describeProofs, type NewProfile, type ProfileDataStore,
@@ -33,7 +33,7 @@ export interface McpScript {
 export interface McpImprovement { id: string; titulo: string; prioridade: string; status: string; issueNumber: number | null; createdAt: string }
 export interface McpProfile { id: string; name: string; kind: "pessoal" | "empresa"; signature: string }
 export interface McpTake {
-  id: string; segmentIndex: number | null; createdAt: string; discarded: boolean; synced: boolean; favorite: boolean;
+  id: string; segmentIndex: number | null; createdAt: string; discarded: boolean; synced: boolean; favorite: boolean; chosen?: boolean;
   camera: string | null; durationMs: number | null; width: number | null; height: number | null;
 }
 export interface McpRecording {
@@ -102,7 +102,7 @@ const WEEKDAY = ["dom", "seg", "ter", "qua", "qui", "sex", "sáb"];
 /** Como preencher a direção completa (vai junto do roteiro em salvar_roteiro). */
 export const DIRECTION_GUIDE = [
   "DIREÇÃO COMPLETA (campo \"direcao\" no mesmo JSON do roteiro — o app grava, legenda, mixa e exporta só com isto):",
-  "- takes[]: {ordem, nome, fala_exata (palavra por palavra; vazio = cena sem fala), ritmo (pausas), duracao_segundos, enquadramento, movimento_camera, local, luz, olhar, emocao, broll, erro_comum}. Cada take com fala vira uma parte gravada, na ordem.",
+  "- takes[]: {ordem, nome, fala_exata (palavra por palavra; vazio = cena sem fala), ritmo (pausas), duracao_segundos, enquadramento, movimento_camera, local, luz, olhar, emocao, broll, erro_comum, modo_fala}. Cada take com fala vira uma parte gravada, na ordem. modo_fala: exata (lê palavra por palavra, padrão) | aproximada (com as palavras dele) | topicos (teleprompter mostra só os pontos) | improviso (só a ideia central) — peça naturalidade quando a leitura literal soaria robótica.",
   "- legendas_na_tela[]: {texto (2–5 palavras), inicio, fim (segundos do vídeo final), posicao: topo|centro|base, estilo}. Substituem o gancho automático na tela. Regra fixa do app: texto na tela SEMPRE acima da cabeça e legenda da fala SEMPRE abaixo do queixo (a posição pedida é ignorada para nunca cobrir o rosto).",
   "- musica: {id (de listar_musicas), clima, bpm (null se não souber), volume 0.05–0.6 relativo à voz (0.22 padrão), entrada, saida (segundos; saida null = até o fim)}. Empresa: só licença comercial.",
   "- edicao: {cortes, transicao, zoom} · capa: {frame (segundo do vídeo), texto curto} · publicacao_por_rede[]: {rede: instagram|tiktok|facebook|youtube_shorts, horario HH:MM, hashtags, primeiro_comentario}",
@@ -377,10 +377,12 @@ export async function callProfileTool(store: McpStore, name: string, args: Json,
     const blocks = [...groups.entries()].sort(([a], [b]) => (a ?? -1) - (b ?? -1)).map(([idx, list]) => {
       const seg = idx === null ? null : segs[idx];
       const title = idx === null ? "Vídeo inteiro de uma vez" : `Parte ${idx + 1}${seg ? ` — ${seg.label}` : ""}`;
-      const used = [...list].reverse().find((t) => !t.discarded)?.id;
+      // mesma regra do app e da montagem: o escolhido, senão o mais recente
+      const used = idx === null ? [...list].reverse().find((t) => !t.discarded)?.id
+        : chosenTakes([...list].reverse().map((t) => ({ ...t, tags: [...(t.discarded ? [DISCARDED_TAG] : []), ...(t.chosen ? [CHOSEN_TAG] : [])] }))).get(idx)?.id;
       const rows = list.map((t, i) => {
         const facts = [t.durationMs !== null ? `${(t.durationMs / 1000).toFixed(1)}s` : "duração ?", t.width && t.height ? `${t.width}x${t.height}` : "", t.camera === "front" ? "câmera frontal" : t.camera === "back" ? "câmera traseira" : "", t.favorite ? "♥" : ""].filter(Boolean).join(" · ");
-        const status = t.discarded ? "DESCARTADO" : t.id === used ? "USADO NA MONTAGEM" : "reserva";
+        const status = t.discarded ? "DESCARTADO" : t.id === used ? `USADO NA MONTAGEM${t.chosen ? " (escolhido pelo criador)" : ""}` : "reserva";
         const notes = t.discarded ? [] : takeTechNotes(t, seg?.text ?? "");
         return `  - take ${i + 1} (id ${t.id}) · ${status} · ${facts}${notes.length ? `\n    atenção: ${notes.join("; ")}` : ""}`;
       });

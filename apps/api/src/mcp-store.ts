@@ -105,7 +105,7 @@ export function supabaseMcpStore(db: SupabaseClient, workspaceId: string, userId
       if (error) throw new Error(error.message);
       type T = { id: string; segment_index: number | null; created_at: string; tags: string[] | null; favorite: boolean; camera: string | null; media_files: { state: string; duration_ms: number | null; width: number | null; height: number | null } | null };
       return ((data ?? []) as unknown as T[]).map((t) => ({
-        id: t.id, segmentIndex: t.segment_index, createdAt: t.created_at, discarded: (t.tags ?? []).includes("descartado"), synced: t.media_files?.state === "uploaded_original",
+        id: t.id, segmentIndex: t.segment_index, createdAt: t.created_at, discarded: (t.tags ?? []).includes("descartado"), chosen: (t.tags ?? []).includes("escolhido"), synced: t.media_files?.state === "uploaded_original",
         favorite: t.favorite, camera: t.camera, durationMs: t.media_files?.duration_ms ?? null, width: t.media_files?.width ?? null, height: t.media_files?.height ?? null,
       }));
     },
