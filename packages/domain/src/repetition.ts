@@ -74,7 +74,10 @@ export function similarity(a: string, b: string): number {
   const ta = contentTokens(a);
   const tb = contentTokens(b);
   if (ta.length === 0 || tb.length === 0) return 0;
-  const uni = jaccard(new Set(ta), new Set(tb));
+  const sa = new Set(ta);
+  const shared = [...new Set(tb)].filter((w) => sa.has(w)).length;
+  // uma palavra em comum ("copo") não é repetição — a não ser que seja a mesma frase
+  const uni = shared >= 2 || ta.join(" ") === tb.join(" ") ? jaccard(sa, new Set(tb)) : 0;
   const bi = jaccard(bigrams(ta), bigrams(tb));
   // containment helps short hooks reused inside longer text
   const small = ta.length <= tb.length ? ta : tb;

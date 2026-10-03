@@ -13,9 +13,11 @@ const tech = (t: Take) => ({ durationMs: t.media.durationMs, width: t.media.widt
  * "chance de viralizar") e as ações. Vários takes da mesma parte: Take 1 / Take 2… com a recomendação técnica.
  * Nenhum take é apagado: o que não for usado fica como reserva.
  */
-export function TakeReview({ takes, text, title, useLabel, useTestID, retakeLabel, retakeTestID, onUse, onRetake, children }: {
+export function TakeReview({ takes, text, targetS, title, useLabel, useTestID, retakeLabel, retakeTestID, onUse, onRetake, children }: {
   /** takes desta parte, mais novos primeiro (o primeiro é o que acabou de gravar) */
   takes: Take[]; text: string; title: string;
+  /** duração do roteiro (vídeo inteiro de uma vez) */
+  targetS?: number | null;
   useLabel: string; useTestID: string; retakeLabel: string; retakeTestID: string;
   onUse: (take: Take) => void; onRetake: () => void; children?: ReactNode;
 }) {
@@ -25,7 +27,7 @@ export function TakeReview({ takes, text, title, useLabel, useTestID, retakeLabe
   const sel = takes.find((t) => t.id === selectedId) ?? takes[0];
   if (!sel) return null;
   const recommended = takes.length > 1 ? recommendTake(takes.map((t) => ({ ...tech(t), id: t.id })), text)?.id : undefined;
-  const checks = takeChecks(tech(sel), text);
+  const checks = takeChecks(tech(sel), text, targetS);
   const fav = favs[sel.id] ?? sel.favorite;
   const toggleFav = () => {
     setFavs((f) => ({ ...f, [sel.id]: !fav }));

@@ -167,7 +167,7 @@ export async function buildServerPlan(db: SupabaseClient, job: RenderJobRow): Pr
     const whole = own.find((t) => t.segment_index === null);
     if (!whole) throw new Error("nenhum take gravado para este conteúdo");
     if (!ready(whole.media_files)) throw new NotReadyError("take ainda não sincronizado");
-    if (variant === "curto") throw new Error("a versão curta precisa do vídeo gravado por partes");
+    if (variant === "curto") throw new Error("versão curta indisponível: este vídeo foi gravado num take só. O vídeo completo monta normalmente; para a curta, grave por partes.");
     const replan = (d: number[]) => buildEditPlan({ ...planOpts, segments: [wholeTakeSegment(parsed.draft)], takes: [{ segmentIndex: 0, takeId: whole.id, durationMs: d[0] ?? 0 }] });
     return { plan: replan([whole.media_files.duration_ms ?? 0]), keys: [whole.media_files.storage_key], prompt, choices, variant, freeSpeech, brolls, replan, direction };
   }
@@ -178,7 +178,7 @@ export async function buildServerPlan(db: SupabaseClient, job: RenderJobRow): Pr
   });
   const segments = variant === "curto" ? all.filter((s) => SHORT_ROLES.includes(s.role)) : all;
   // só a versão curta exige gancho + chamada; o vídeo completo pode ter uma parte só (ex.: direção com um take)
-  if (variant === "curto" && segments.length < 2) throw new Error("a versão curta precisa de gancho e chamada gravados por partes");
+  if (variant === "curto" && segments.length < 2) throw new Error("versão curta indisponível: precisa de gancho e chamada gravados em partes separadas. O vídeo completo monta normalmente.");
   if (!segments.length) throw new Error("nenhuma parte do roteiro para montar");
   const chosen = segments.map((s) => latest.get(s.index));
   const notReady = segments.filter((_, i) => !ready(chosen[i]?.media_files ?? null)).map((s) => s.index + 1);

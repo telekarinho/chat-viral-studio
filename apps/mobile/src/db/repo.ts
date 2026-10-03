@@ -289,7 +289,9 @@ export async function ensureDayPlan(date: Date): Promise<void> {
     const ws = await requireWorkspace();
     const done = await db.getFirstAsync<{ value: string }>("SELECT value FROM kv WHERE key = ?", `plan:${ws.id}:${key}`);
     const hasTasks = await db.getFirstAsync<{ id: string }>("SELECT id FROM tasks WHERE workspace_id = ? AND date = ? LIMIT 1", ws.id, key);
-    if (done || hasTasks) {
+    // perfil pessoal: dia já marcado como "sem rotina" (fim de semana, antes do dia leve existir) ganha o dia leve agora
+    const lightDay = ws.profile.kind !== "empresa";
+    if (hasTasks || (done && !lightDay)) {
       // dia já no aparelho: traz só o que o diretor acrescentou depois (ex.: cena de apoio da empresa), em segundo plano
       if (ws.cloud) void pullDayAdditions(ws.id, key, date).catch(() => undefined);
       return;
@@ -299,7 +301,7 @@ export async function ensureDayPlan(date: Date): Promise<void> {
     const recent = await db.getAllAsync<{ pillar_slug: string }>("SELECT pillar_slug FROM content_items WHERE workspace_id = ? AND format != 'broll' ORDER BY date DESC LIMIT 30", ws.id);
     const plan = buildDayPlan({ date, workspaceId: ws.id, routine: ws.routine, pillars: ws.pillars, recentPillarSlugs: recent.map((r) => r.pillar_slug).reverse(), newId, now: nowIso(),
       // E2E builds only: CI may run on a weekend, when Rodrigo's routine is empty
-      weekdayOverride: config.e2e && (date.getDay() === 0 || date.getDay() === 6) ? 1 : undefined, directedBroll: ws.profile.kind === "empresa" });
+      weekdayOverride: config.e2e && (date.getDay() === 0 || date.getDay() === 6) ? 1 : undefined, directedBroll: ws.profile.kind === "empresa", lightDay });
     await db.withTransactionAsync(async () => {
       for (const c of plan.contentItems) {
         await db.runAsync(

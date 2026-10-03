@@ -1,5 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { BRASILIA_OFFSET_MIN, buildDayPlan, fingerprintsFor, parseDraft, summarizeForMemory, trackById, type Scenes, type ContentDraft, type ContentFormat, type EditChoices, type Pillar, type PostMetrics, type ProjectInfo, type RoutineBlock } from "@postai/domain";
+import { BRASILIA_OFFSET_MIN, FORMAT_LABEL, buildDayPlan, pickNextPillar, fingerprintsFor, parseDraft, summarizeForMemory, trackById, type Scenes, type ContentDraft, type ContentFormat, type EditChoices, type Pillar, type PostMetrics, type ProjectInfo, type RoutineBlock } from "@postai/domain";
 import { supabaseMemory } from "./adapters";
 import type { McpContent, McpContext, McpRequest, McpTake, McpPost, McpProfile, McpRecording, McpScript, McpStore } from "./mcp-tools";
 import type { FilmableProof, NewProfile, RealCase } from "./mcp-profiles";
@@ -202,7 +202,7 @@ export function supabaseMcpStore(db: SupabaseClient, workspaceId: string, userId
           out.push({ date, created: false, items: added ? await store.contentsOn(date) : existing });
           continue;
         }
-        const plan = buildDayPlan({ date: new Date(0), dateKey: date, utcOffsetMinutes: BRASILIA_OFFSET_MIN, workspaceId, routine, pillars, recentPillarSlugs: history, newId: () => crypto.randomUUID(), now: new Date().toISOString(), directedBroll: business });
+        const plan = buildDayPlan({ date: new Date(0), dateKey: date, utcOffsetMinutes: BRASILIA_OFFSET_MIN, workspaceId, routine, pillars, recentPillarSlugs: history, newId: () => crypto.randomUUID(), now: new Date().toISOString(), directedBroll: business, lightDay: !business });
         history.push(...plan.contentItems.filter((c) => c.format !== "broll").map((c) => c.pillarSlug));
         if (plan.contentItems.length) {
           const ci = await db.from("content_items").insert(plan.contentItems.map((c) => ({
@@ -220,6 +220,25 @@ export function supabaseMcpStore(db: SupabaseClient, workspaceId: string, userId
         out.push({ date, created: true, items: await store.contentsOn(date) });
       }
       return out;
+    },
+    async addExtraContent(date, formats) {
+      const [pillarRows, recentRows] = await Promise.all([
+        db.from("content_pillars").select("slug, name, target_percent, active").eq("workspace_id", workspaceId),
+        db.from("content_items").select("pillar_slug").eq("workspace_id", workspaceId).neq("format", "broll").order("plan_date", { ascending: false }).limit(30),
+      ]);
+      const err = pillarRows.error ?? recentRows.error;
+      if (err) throw new Error(err.message);
+      const pillars: Pillar[] = (pillarRows.data ?? []).map((p) => ({ slug: p.slug, name: p.name, targetPercent: Number(p.target_percent), active: p.active }));
+      const history = (recentRows.data ?? []).map((r) => r.pillar_slug as string).filter(Boolean).reverse();
+      const scheduledFor = new Date(Date.parse(`${date}T12:00:00Z`)).toISOString();
+      const rows = formats.map((format) => {
+        const pillar = pickNextPillar(pillars, history);
+        history.push(pillar.slug);
+        return { id: crypto.randomUUID(), workspace_id: workspaceId, pillar_slug: pillar.slug, plan_date: date, scheduled_for: scheduledFor, format, title: FORMAT_LABEL[format], status: "planned", structured_payload: {} };
+      });
+      const ins = await db.from("content_items").insert(rows);
+      if (ins.error) throw new Error(ins.error.message);
+      return withScript(rows.map((r) => ({ id: r.id, format: r.format, pillar_slug: r.pillar_slug, title: r.title, plan_date: date, structured_payload: {} })));
     },
     async pillarCounts(days) {
       const [scripts, pending] = await Promise.all([db.from("scripts").select("content_item_id").eq("workspace_id", workspaceId).gte("created_at", daysAgo(days)), pendingDrafts(days)]);
@@ -252,6 +271,7 @@ export function supabaseMcpStore(db: SupabaseClient, workspaceId: string, userId
       return (data ?? []).map((m) => ({ id: m.id, titulo: m.titulo, prioridade: m.prioridade, status: m.status, issueNumber: m.issue_number, createdAt: m.created_at }));
     },
     async content(id) {
+      if (!/^[0-9a-f-]{36}$/i.test(id)) return null;
       const { data, error } = await db.from("content_items").select(COLS).eq("workspace_id", workspaceId).eq("id", id).maybeSingle();
       if (error) throw new Error(error.message);
       return data ? (await withScript([data as ContentRow]))[0]! : null;

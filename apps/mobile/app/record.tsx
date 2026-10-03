@@ -311,7 +311,7 @@ export default function RecordScreen() {
   if (phase === "saved" && saved) {
     return (
       <Screen testID="saved-screen">
-        <TakeReview takes={[saved]} text={script} title="Take gravado ✓"
+        <TakeReview takes={[saved]} text={script} targetS={content?.draft && !project ? content.draft.duration_seconds : null} title="Take gravado ✓"
           useLabel={patrimonio ? "✓ USAR ESTE — ENVIAR PARA A FÁBRICA" : taskId ? "✓ USAR ESTE — MARCAR FEITO" : "✓ USAR ESTE"} useTestID="attach-done"
           retakeLabel="↺ GRAVAR NOVAMENTE" retakeTestID="record-again" onRetake={() => retake(null)} onUse={() => void attachAndDone()}>
           {project ? <StudioNotes take={saved} /> : null}
@@ -390,7 +390,7 @@ export default function RecordScreen() {
             </Text>
           </View>
         ) : (
-          <View style={st.topPill}><Text style={st.topPillText}>{FORMAT_LABEL[category as keyof typeof FORMAT_LABEL] ?? "Gravação livre"}</Text></View>
+          <View style={st.topPill}><Text style={st.topPillText}>{`${FORMAT_LABEL[category as keyof typeof FORMAT_LABEL] ?? "Gravação livre"}${content?.draft && !project ? ` · meta ~${content.draft.duration_seconds}s` : ""}`}</Text></View>
         )}
         <View style={{ width: 44 }} />
       </View>

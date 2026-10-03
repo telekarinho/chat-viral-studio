@@ -51,6 +51,8 @@ export function chosenTakes<T extends { segmentIndex: number | null; tags: reado
 
 /** acima disto (palavras por segundo) a fala fica corrida */
 const FAST_WPS = 3.4;
+/** 25% acima da duração do roteiro */
+const OVER_TARGET = 1.25;
 
 export interface TakeCheck { key: "fala" | "ritmo" | "duracao" | "enquadramento" | "resolucao"; ok: boolean; label: string }
 
@@ -58,8 +60,15 @@ export interface TakeCheck { key: "fala" | "ritmo" | "duracao" | "enquadramento"
  * Diagnóstico do take para o criador (🟢/🟡), só com o que dá para medir no aparelho: fala × texto, ritmo,
  * duração, orientação e resolução. Áudio e estabilidade não são medidos aqui — não aparecem como "bons".
  */
-export function takeChecks(t: Omit<TakeTech, "synced">, text: string): TakeCheck[] {
+export function takeChecks(t: Omit<TakeTech, "synced">, text: string, targetS?: number | null): TakeCheck[] {
   const out: TakeCheck[] = [];
+  // meta do roteiro (vídeo inteiro de uma vez): passou 25% → sugere regravar (o AutoCut corta pausas, não a fala)
+  if (targetS && t.durationMs !== null) {
+    const got = t.durationMs / 1000;
+    out.push(got > targetS * OVER_TARGET
+      ? { key: "duracao", ok: false, label: `Passou da meta: ${Math.round(got)}s para ~${targetS}s. Se quiser mais curto, grave de novo mais direto.` }
+      : { key: "duracao", ok: true, label: `Dentro da meta (${Math.round(got)}s de ~${targetS}s)` });
+  }
   const words = text.split(/\s+/).filter(Boolean).length;
   const got = t.durationMs !== null ? t.durationMs / 1000 : null;
   if (got !== null && words) {
@@ -68,7 +77,7 @@ export function takeChecks(t: Omit<TakeTech, "synced">, text: string): TakeCheck
     out.push({ key: "fala", ok: !short, label: short ? "Curto demais: pode ter cortado a fala" : "Fala completa" });
     if (!short) out.push(words / got > FAST_WPS ? { key: "ritmo", ok: false, label: "Falou um pouco rápido" } : { key: "ritmo", ok: true, label: "Ritmo bom" });
     const long = got > expected * TOO_LONG + LONG_SLACK_S;
-    out.push({ key: "duracao", ok: !long, label: long ? `Bem mais longo que o texto (${Math.round(got)}s) — o AutoCut corta as pausas` : `Duração boa (${got.toFixed(1)}s)` });
+    if (!targetS) out.push({ key: "duracao", ok: !long, label: long ? `Bem mais longo que o texto (${Math.round(got)}s) — o AutoCut corta as pausas` : `Duração boa (${got.toFixed(1)}s)` });
   } else if (got !== null) out.push({ key: "duracao", ok: got >= 1, label: got >= 1 ? `Duração ${got.toFixed(1)}s` : "Curto demais" });
   if (t.width && t.height) {
     out.push(t.width > t.height ? { key: "enquadramento", ok: false, label: "Gravado na horizontal: o vídeo final corta as laterais" } : { key: "enquadramento", ok: true, label: "Vertical ✓" });
