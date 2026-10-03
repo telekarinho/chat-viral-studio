@@ -123,6 +123,7 @@ export default function Today() {
       <View style={[s.row, { alignItems: "center", gap: 8 }]}>
         <View style={{ flex: 1 }}><ProfileSwitcher /></View>
         <Button compact variant="ghost" label="Estratégia" onPress={() => router.push("/(tabs)/plano")} testID="open-plan" />
+        <Button compact variant="ghost" label="⚙" onPress={() => router.push("/settings")} testID="open-app-settings" hint="Configurações (conta, Claude, lembretes)" />
       </View>
 
       {error ? <ErrorBox message={error} onRetry={load} /> : null}
