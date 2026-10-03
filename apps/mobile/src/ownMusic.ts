@@ -51,3 +51,24 @@ export async function ownMusicUrl(storageKey: string): Promise<string | null> {
   const { data } = await supabase.storage.from("takes").createSignedUrl(storageKey, 600);
   return data?.signedUrl ?? null;
 }
+
+/** Novo nome para a música própria (o arquivo continua o mesmo). */
+export async function renameOwnMusic(workspaceId: string, id: string, titulo: string): Promise<void> {
+  if (!supabase) throw new Error("Precisa da nuvem configurada.");
+  const name = titulo.trim().slice(0, 120);
+  if (!name) throw new Error("Dê um nome para a música.");
+  const { error } = await supabase.from("musicas_proprias").update({ titulo: name }).eq("workspace_id", workspaceId).eq("id", id);
+  if (error) throw new Error(error.message);
+}
+
+/**
+ * Tira a música da biblioteca do perfil (registro e arquivo). Vídeos já montados não mudam; vídeo ainda não
+ * montado que a escolheu passa a usar a música automática.
+ */
+export async function deleteOwnMusic(workspaceId: string, m: OwnMusic): Promise<void> {
+  if (!supabase) throw new Error("Precisa da nuvem configurada.");
+  const { error } = await supabase.from("musicas_proprias").delete().eq("workspace_id", workspaceId).eq("id", m.id);
+  if (error) throw new Error(error.message);
+  // o arquivo é do perfil; só o dono apaga do armazenamento (se não der, fica só o registro removido)
+  await supabase.storage.from("takes").remove([m.storageKey]).catch(() => undefined);
+}

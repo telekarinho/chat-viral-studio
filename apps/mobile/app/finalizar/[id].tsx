@@ -139,6 +139,8 @@ export default function FinalizarScreen() {
   const edit: EditChoices = c.edit ?? { ...DEFAULT_EDIT_CHOICES, retouch: cp.business ? "leve" : "forte" };
   const retouch = edit.retouch ?? (cp.business ? "leve" : "forte");
   const track = chosenTrack(edit, c.id, c.pillarSlug, cp.business, c.draft?.direcao);
+  // automática sem faixa da direção: o servidor escolhe na montagem (não repete as últimas do perfil)
+  const autoPick = edit.music === "auto" && !c.draft?.direcao?.musica;
   const save = (v: EditChoices) => void setEditChoices(c.id, v).then(setC);
   const uploaded = takes.filter((t) => t.media.state === "uploaded_original").length;
   const allUp = takes.length > 0 && uploaded === takes.length;
@@ -160,9 +162,11 @@ export default function FinalizarScreen() {
             <Row label={`✓ ${cp.plan.clips.length} parte(s) juntas, ~${Math.round(cp.plan.totalMs / 1000)}s`} />
             <Row label={`✓ Cortar erros, pausas e repetições${edit.autoCut === false ? " (desligado)" : ""}`} />
             <Row label={`✓ Legenda: ${CAPTION_NAME[edit.captionStyle] ?? edit.captionStyle}`} />
-            <Row label={ownMusicUuid(edit.music) ? "✓ Música: a sua (enviada por você)" : track ? `✓ Música: ${track.title} — ${track.artist}` : "✓ Sem música"}
+            <Row label={ownMusicUuid(edit.music) ? "✓ Música: a sua (enviada por você)"
+              : autoPick ? "✓ Música: automática (escolhida na montagem, sem repetir as últimas)"
+                : track ? `✓ Música: ${track.title} — ${track.artist}` : "✓ Sem música"}
               action={track ? { label: "TROCAR", onPress: () => save({ ...edit, music: nextTrack(track).id }), testID: "swap-music" } : undefined} />
-            {track ? (
+            {track && !autoPick ? (
               <MusicPreview track={track} volume={edit.musicVolume ?? c.draft?.direcao?.musica?.volume ?? DEFAULT_EDIT_CHOICES.musicVolume ?? 0.22}
                 entradaS={edit.music === "auto" && c.draft?.direcao?.musica?.id === track.id ? c.draft.direcao.musica.entrada : 0}
                 voiceUri={takes.find((t) => t.id === cp.plan!.clips[0]?.takeId)?.media.localUri ?? null} />
@@ -172,7 +176,8 @@ export default function FinalizarScreen() {
           </Card>
           <Button label="CONFIRMAR E MONTAR" onPress={() => { forceRequest.current = true; setConfirmed(true); }} testID="confirm-render" />
           <Button variant="ghost" compact label={showOptions ? "Fechar opções" : "Mudar alguma coisa"} onPress={() => setShowOptions(!showOptions)} testID="change-options" />
-          {showOptions ? <FinishOptions value={edit} onChange={save} pillarSlug={c.pillarSlug} business={cp.business} workspaceId={workspace?.cloud ? c.workspaceId : undefined} contentId={c.id} direction={c.draft?.direcao} /> : null}
+          {showOptions ? <FinishOptions value={edit} onChange={save} pillarSlug={c.pillarSlug} business={cp.business} workspaceId={workspace?.cloud ? c.workspaceId : undefined} contentId={c.id} direction={c.draft?.direcao}
+            voiceUri={takes.find((t) => t.id === cp.plan!.clips[0]?.takeId)?.media.localUri ?? null} /> : null}
         </>
       ) : (
         <Card style={{ gap: 12 }} testID="render-progress">
