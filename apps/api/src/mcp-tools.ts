@@ -30,6 +30,7 @@ export interface McpScript {
   draft: ContentDraft | null; edit: EditChoices | null; metrics: PostMetrics | null; postedAt: string | null; pendingFromAssistant: boolean; scenes?: Scenes | null;
   pending?: { sentAt: string; draft: ContentDraft | null; scenes: Scenes | null } | null;
 }
+export interface McpRequest { id: string; contentId: string; texto: string; createdAt: string; resposta: string | null }
 export interface McpImprovement { id: string; titulo: string; prioridade: string; status: string; issueNumber: number | null; createdAt: string }
 export interface McpProfile { id: string; name: string; kind: "pessoal" | "empresa"; signature: string }
 export interface McpTake {
@@ -69,6 +70,10 @@ export interface McpStore extends ProfileDataStore {
   musicFavorites(): Promise<string[]>;
   /** proposta de edição do diretor: o app mostra MONTAR ASSIM / AJUSTAR; nada monta sem o criador */
   saveEditProposal(contentId: string, edit: EditProposal, motivo: string): Promise<void>;
+  /** pedidos que o criador fez ao diretor no app (sem resposta primeiro) */
+  creatorRequests(contentId: string | null): Promise<McpRequest[]>;
+  /** false = pedido não existe neste perfil */
+  answerRequest(id: string, resposta: string): Promise<boolean>;
   /** cria o plano dos dias que ainda não têm (o app usa o mesmo plano ao abrir o dia) */
   planDays(startDate: string, days: number): Promise<{ date: string; created: boolean; items: McpContent[] }[]>;
   /** pilares com roteiro nos últimos N dias (contagem por slug) */
@@ -128,7 +133,9 @@ export const MCP_TOOLS = [
   { name: "registrar_metricas", title: "Registrar números do post", description: "Salva os números REAIS de um post (ex.: lidos no Metricool ou no painel da rede) para o app e o ranking. Nunca invente números.", inputSchema: obj({ content_id: { type: "string" }, visualizacoes: { type: "number" }, curtidas: { type: "number" }, comentarios: { type: "number" }, compartilhamentos: { type: "number" }, salvamentos: { type: "number" }, retencao: { type: "number", description: "% de conclusão/retenção média (0–100)" }, tempo_medio_segundos: { type: "number" }, seguidores_ganhos: { type: "number" }, fonte: { type: "string", description: "ex.: Metricool, Instagram" } }, ["content_id", "visualizacoes"]), annotations: WRITE },
   { name: "listar_musicas", title: "Músicas licenciadas", description: "Faixas da biblioteca licenciada (id, clima, duração, licença). Use o id em direcao.musica.id. Conta de empresa só vê faixas com licença comercial.", inputSchema: obj({ clima: { type: "string", description: `opcional: ${Object.keys(MOOD_LABEL).join(", ")}` }, bpm: { type: "number", description: "opcional (as faixas ainda não têm BPM medido)" } }), annotations: RO },
   { name: "propor_edicao", title: "Propor a edição", description: "Depois de ver o que foi gravado (ler_status_gravacao), propõe a montagem: estilo AutoCut, música, volume e trecho, com o motivo. O criador vê no app e escolhe MONTAR ASSIM (monta) ou AJUSTAR. Nada é montado nem publicado sem ele.", inputSchema: obj({ content_id: { type: "string" }, autocut: { type: "string", enum: [...AUTOCUT_IDS], description: `estilo da montagem (cortes, zoom, transição, ritmo): ${AUTOCUT_THEMES.map((t) => `${t.id} = ${t.label.replace(/^\S+\s/, "")}`).join("; ")}` }, musica: { type: "string", description: "id de listar_musicas, \"auto\", \"none\" ou um clima" }, volume: { type: "number", description: "0.05 a 0.45, relativo à voz (0.22 padrão)" }, inicio_musica_s: { type: "number", description: "segundo da faixa onde a trilha começa (só com faixa específica)" }, motivo: { type: "string", description: "por que esta edição, em 1–2 frases simples" } }, ["content_id", "motivo"]), annotations: WRITE },
-  { name: "listar_takes", title: "Takes gravados", description: "Cada take gravado do conteúdo, por parte do roteiro: número do take, duração, resolução, câmera, se subiu, se foi descartado e uma checagem técnica (duração × texto, resolução, orientação). Não é nota de viralidade. A montagem usa o take mais recente não descartado de cada parte.", inputSchema: obj({ content_id: { type: "string" } }, ["content_id"]), annotations: RO },
+  { name: "listar_takes", title: "Takes gravados", description: "Cada take gravado do conteúdo, por parte do roteiro: número do take, duração, resolução, câmera, se subiu, se foi descartado e uma checagem técnica (duração × texto, resolução, orientação). Não é nota de viralidade. A montagem usa o take escolhido pelo criador em cada parte (sem escolha: o mais recente não descartado).", inputSchema: obj({ content_id: { type: "string" } }, ["content_id"]), annotations: RO },
+  { name: "pedidos_do_criador", title: "Pedidos do criador", description: "O que o criador pediu ao diretor no app sobre um vídeo (\"quero mais rápido\", \"troca o começo\"…), sem resposta primeiro. Atenda com as ferramentas de sempre (propor_edicao, salvar_roteiro, listar_takes) e responda com responder_pedido.", inputSchema: obj({ content_id: { type: "string", description: "opcional: só deste conteúdo" } }), annotations: RO },
+  { name: "responder_pedido", title: "Responder pedido", description: "Responde um pedido do criador (aparece no app, no painel do Diretor). Diga em 1–3 frases simples o que você fez ou propôs.", inputSchema: obj({ pedido_id: { type: "string" }, resposta: { type: "string" } }, ["pedido_id", "resposta"]), annotations: WRITE },
   { name: "ler_status_gravacao", title: "Status da gravação", description: "O que já foi gravado (por take/parte), o que falta, se já subiu e como está a montagem do vídeo.", inputSchema: obj({ content_id: { type: "string" } }, ["content_id"]), annotations: RO },
   { name: "registrar_melhoria", title: "Registrar melhoria", description: "Manda uma sugestão de melhoria do app/conector para o backlog do desenvolvedor, com contexto e critério de aceite. Use para toda recomendação de mudança no sistema.", inputSchema: obj({ titulo: { type: "string" }, descricao: { type: "string", description: "o problema, a proposta e o critério de aceite" }, prioridade: { type: "string", enum: ["baixa", "media", "alta"] } }, ["titulo", "descricao"]), annotations: WRITE },
   { name: "listar_melhorias", title: "Melhorias pedidas", description: "Melhorias já registradas e o andamento (nova, no backlog, feita, recusada).", inputSchema: obj({}), annotations: RO },
@@ -318,6 +325,24 @@ export async function callProfileTool(store: McpStore, name: string, args: Json,
       .map((t) => `- id ${t.id} · "${t.title}" — ${t.artist} · clima ${t.mood} (${MOOD_LABEL[t.mood]}) · ${t.bpm ? `${t.bpm} BPM` : "sem batida definida"} · ${t.durationSec}s · licença ${t.license}${fav(t.id)}`);
     const note = `Use o valor de "clima" (ex.: ${list[0]?.mood ?? "reflexao"}) em direcao.musica.clima. BPM medido no áudio. Tendência ("em alta"): ainda sem fonte de dados — não informada.`;
     return text([...ownRows, ...rows, note].join("\n"));
+  }
+  if (name === "pedidos_do_criador") {
+    const cid = typeof args.content_id === "string" && args.content_id ? args.content_id : null;
+    if (cid && !(await store.content(cid))) return text("Conteúdo não encontrado neste perfil.", true);
+    const list = await store.creatorRequests(cid);
+    if (!list.length) return text("Nenhum pedido do criador.");
+    const rows = await Promise.all(list.map(async (r) => {
+      const c = await store.content(r.contentId);
+      return `- pedido ${r.id} · ${brt(r.createdAt)} · conteúdo ${r.contentId}${c ? ` ("${c.title}")` : ""}: "${r.texto}"${r.resposta ? `\n  respondido: ${r.resposta}` : " · SEM RESPOSTA"}`;
+    }));
+    return text(rows.join("\n"));
+  }
+  if (name === "responder_pedido") {
+    const pid = typeof args.pedido_id === "string" ? args.pedido_id : "";
+    const resposta = typeof args.resposta === "string" ? args.resposta.trim().slice(0, 2000) : "";
+    if (resposta.length < 3) return text("Escreva a resposta (1–3 frases simples).", true);
+    if (!(await store.answerRequest(pid, resposta))) return text("Pedido não encontrado neste perfil. Use um id de pedidos_do_criador.", true);
+    return text("Resposta enviada: o criador vê no painel do Diretor, no app.");
   }
   if (name === "registrar_melhoria") {
     const titulo = String(args.titulo ?? "").trim().slice(0, 140);

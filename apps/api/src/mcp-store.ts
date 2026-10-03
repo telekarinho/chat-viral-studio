@@ -1,7 +1,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { BRASILIA_OFFSET_MIN, buildDayPlan, fingerprintsFor, parseDraft, summarizeForMemory, trackById, type Scenes, type ContentDraft, type ContentFormat, type EditChoices, type Pillar, type PostMetrics, type ProjectInfo, type RoutineBlock } from "@postai/domain";
 import { supabaseMemory } from "./adapters";
-import type { McpContent, McpContext, McpTake, McpPost, McpProfile, McpRecording, McpScript, McpStore } from "./mcp-tools";
+import type { McpContent, McpContext, McpRequest, McpTake, McpPost, McpProfile, McpRecording, McpScript, McpStore } from "./mcp-tools";
 import type { FilmableProof, NewProfile, RealCase } from "./mcp-profiles";
 
 type ContentRow = { id: string; format: string; pillar_slug: string | null; title: string; plan_date: string | null; structured_payload: Record<string, unknown> | null };
@@ -120,6 +120,20 @@ export function supabaseMcpStore(db: SupabaseClient, workspaceId: string, userId
       if (error?.code === "42P01") return [];
       if (error) throw new Error(error.message);
       return [...new Set((data ?? []).map((r) => r.track_id as string))];
+    },
+    async creatorRequests(contentId): Promise<McpRequest[]> {
+      let q = db.from("pedidos_diretor").select("id, content_item_id, texto, resposta, created_at").eq("workspace_id", workspaceId);
+      if (contentId) q = q.eq("content_item_id", contentId);
+      const { data, error } = await q.order("respondido_at", { ascending: true, nullsFirst: true }).order("created_at", { ascending: false }).limit(20);
+      if (error?.code === "42P01") return [];
+      if (error) throw new Error(error.message);
+      return (data ?? []).map((r) => ({ id: r.id as string, contentId: r.content_item_id as string, texto: r.texto as string, createdAt: r.created_at as string, resposta: (r.resposta as string | null) ?? null }));
+    },
+    async answerRequest(id, resposta) {
+      if (!/^[0-9a-f-]{36}$/i.test(id)) return false;
+      const { data, error } = await db.from("pedidos_diretor").update({ resposta, respondido_at: new Date().toISOString() }).eq("workspace_id", workspaceId).eq("id", id).select("id").maybeSingle();
+      if (error) throw new Error(error.message);
+      return Boolean(data);
     },
     async saveEditProposal(contentId, edit, motivo) {
       const { error } = await db.from("propostas_edicao").insert({ workspace_id: workspaceId, content_item_id: contentId, edit, motivo });

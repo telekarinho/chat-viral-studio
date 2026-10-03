@@ -327,7 +327,9 @@ var TakeSchema = z.object({
   olhar: s(160).default(""),
   emocao: s(120).default(""),
   broll: s(300).default(""),
-  erro_comum: s(240).default("")
+  erro_comum: s(240).default(""),
+  /** como usar o texto: exata = palavra por palavra · aproximada = com suas palavras · topicos = só os pontos · improviso = fala livre dirigida */
+  modo_fala: z.enum(["exata", "aproximada", "topicos", "improviso"]).default("exata")
 });
 var ON_SCREEN_POSITIONS = ["topo", "centro", "base"];
 var OnScreenTextSchema = z.object({
@@ -937,7 +939,8 @@ function buildSegments(draft, opts) {
       role: i === 0 ? "hook" : i === takes.length - 1 && takes.length > 2 && !hasClosing ? "cta" : "free",
       text: t2.fala_exata,
       label: `Take ${t2.ordem} \u2014 ${t2.nome}`,
-      direction: takeInstructions(t2)
+      direction: takeInstructions(t2),
+      ...t2.modo_fala !== "exata" ? { speechMode: t2.modo_fala } : {}
     }));
     if (closing && !hasClosing) parts.push({ role: "closing", text: closing });
   } else if (draft.format === "thought") {
@@ -967,7 +970,8 @@ function buildSegments(draft, opts) {
     role: p.role,
     label: p.label ?? (opts.business && BUSINESS_SEGMENT_LABEL[p.role] || SEGMENT_LABEL[p.role]),
     text: p.text,
-    ...p.direction?.length ? { direction: p.direction } : {}
+    ...p.direction?.length ? { direction: p.direction } : {},
+    ...p.speechMode ? { speechMode: p.speechMode } : {}
   }));
 }
 function wordCount(s2) {
@@ -1204,6 +1208,18 @@ function takeTechNotes(t2, text3) {
     if (t2.width > t2.height) notes.push("gravado na horizontal: o v\xEDdeo final \xE9 vertical e corta as laterais");
   }
   return notes;
+}
+var CHOSEN_TAG = "escolhido";
+var DISCARDED_TAG = "descartado";
+function chosenTakes(newestFirst) {
+  const out2 = /* @__PURE__ */ new Map();
+  for (const t2 of newestFirst) {
+    const tags = t2.tags ?? [];
+    if (t2.segmentIndex === null || tags.includes(DISCARDED_TAG)) continue;
+    const cur = out2.get(t2.segmentIndex);
+    if (!cur || tags.includes(CHOSEN_TAG) && !(cur.tags ?? []).includes(CHOSEN_TAG)) out2.set(t2.segmentIndex, t2);
+  }
+  return out2;
 }
 
 // src/mcp-profiles.ts
@@ -1460,7 +1476,7 @@ var BPM_TOLERANCE = 10;
 var WEEKDAY = ["dom", "seg", "ter", "qua", "qui", "sex", "s\xE1b"];
 var DIRECTION_GUIDE = [
   'DIRE\xC7\xC3O COMPLETA (campo "direcao" no mesmo JSON do roteiro \u2014 o app grava, legenda, mixa e exporta s\xF3 com isto):',
-  "- takes[]: {ordem, nome, fala_exata (palavra por palavra; vazio = cena sem fala), ritmo (pausas), duracao_segundos, enquadramento, movimento_camera, local, luz, olhar, emocao, broll, erro_comum}. Cada take com fala vira uma parte gravada, na ordem.",
+  "- takes[]: {ordem, nome, fala_exata (palavra por palavra; vazio = cena sem fala), ritmo (pausas), duracao_segundos, enquadramento, movimento_camera, local, luz, olhar, emocao, broll, erro_comum, modo_fala}. Cada take com fala vira uma parte gravada, na ordem. modo_fala: exata (l\xEA palavra por palavra, padr\xE3o) | aproximada (com as palavras dele) | topicos (teleprompter mostra s\xF3 os pontos) | improviso (s\xF3 a ideia central) \u2014 pe\xE7a naturalidade quando a leitura literal soaria rob\xF3tica.",
   "- legendas_na_tela[]: {texto (2\u20135 palavras), inicio, fim (segundos do v\xEDdeo final), posicao: topo|centro|base, estilo}. Substituem o gancho autom\xE1tico na tela. Regra fixa do app: texto na tela SEMPRE acima da cabe\xE7a e legenda da fala SEMPRE abaixo do queixo (a posi\xE7\xE3o pedida \xE9 ignorada para nunca cobrir o rosto).",
   "- musica: {id (de listar_musicas), clima, bpm (null se n\xE3o souber), volume 0.05\u20130.6 relativo \xE0 voz (0.22 padr\xE3o), entrada, saida (segundos; saida null = at\xE9 o fim)}. Empresa: s\xF3 licen\xE7a comercial.",
   "- edicao: {cortes, transicao, zoom} \xB7 capa: {frame (segundo do v\xEDdeo), texto curto} \xB7 publicacao_por_rede[]: {rede: instagram|tiktok|facebook|youtube_shorts, horario HH:MM, hashtags, primeiro_comentario}",
@@ -1484,7 +1500,9 @@ var MCP_TOOLS = [
   { name: "registrar_metricas", title: "Registrar n\xFAmeros do post", description: "Salva os n\xFAmeros REAIS de um post (ex.: lidos no Metricool ou no painel da rede) para o app e o ranking. Nunca invente n\xFAmeros.", inputSchema: obj({ content_id: { type: "string" }, visualizacoes: { type: "number" }, curtidas: { type: "number" }, comentarios: { type: "number" }, compartilhamentos: { type: "number" }, salvamentos: { type: "number" }, retencao: { type: "number", description: "% de conclus\xE3o/reten\xE7\xE3o m\xE9dia (0\u2013100)" }, tempo_medio_segundos: { type: "number" }, seguidores_ganhos: { type: "number" }, fonte: { type: "string", description: "ex.: Metricool, Instagram" } }, ["content_id", "visualizacoes"]), annotations: WRITE2 },
   { name: "listar_musicas", title: "M\xFAsicas licenciadas", description: "Faixas da biblioteca licenciada (id, clima, dura\xE7\xE3o, licen\xE7a). Use o id em direcao.musica.id. Conta de empresa s\xF3 v\xEA faixas com licen\xE7a comercial.", inputSchema: obj({ clima: { type: "string", description: `opcional: ${Object.keys(MOOD_LABEL).join(", ")}` }, bpm: { type: "number", description: "opcional (as faixas ainda n\xE3o t\xEAm BPM medido)" } }), annotations: RO2 },
   { name: "propor_edicao", title: "Propor a edi\xE7\xE3o", description: "Depois de ver o que foi gravado (ler_status_gravacao), prop\xF5e a montagem: estilo AutoCut, m\xFAsica, volume e trecho, com o motivo. O criador v\xEA no app e escolhe MONTAR ASSIM (monta) ou AJUSTAR. Nada \xE9 montado nem publicado sem ele.", inputSchema: obj({ content_id: { type: "string" }, autocut: { type: "string", enum: [...AUTOCUT_IDS], description: `estilo da montagem (cortes, zoom, transi\xE7\xE3o, ritmo): ${AUTOCUT_THEMES.map((t2) => `${t2.id} = ${t2.label.replace(/^\S+\s/, "")}`).join("; ")}` }, musica: { type: "string", description: 'id de listar_musicas, "auto", "none" ou um clima' }, volume: { type: "number", description: "0.05 a 0.45, relativo \xE0 voz (0.22 padr\xE3o)" }, inicio_musica_s: { type: "number", description: "segundo da faixa onde a trilha come\xE7a (s\xF3 com faixa espec\xEDfica)" }, motivo: { type: "string", description: "por que esta edi\xE7\xE3o, em 1\u20132 frases simples" } }, ["content_id", "motivo"]), annotations: WRITE2 },
-  { name: "listar_takes", title: "Takes gravados", description: "Cada take gravado do conte\xFAdo, por parte do roteiro: n\xFAmero do take, dura\xE7\xE3o, resolu\xE7\xE3o, c\xE2mera, se subiu, se foi descartado e uma checagem t\xE9cnica (dura\xE7\xE3o \xD7 texto, resolu\xE7\xE3o, orienta\xE7\xE3o). N\xE3o \xE9 nota de viralidade. A montagem usa o take mais recente n\xE3o descartado de cada parte.", inputSchema: obj({ content_id: { type: "string" } }, ["content_id"]), annotations: RO2 },
+  { name: "listar_takes", title: "Takes gravados", description: "Cada take gravado do conte\xFAdo, por parte do roteiro: n\xFAmero do take, dura\xE7\xE3o, resolu\xE7\xE3o, c\xE2mera, se subiu, se foi descartado e uma checagem t\xE9cnica (dura\xE7\xE3o \xD7 texto, resolu\xE7\xE3o, orienta\xE7\xE3o). N\xE3o \xE9 nota de viralidade. A montagem usa o take escolhido pelo criador em cada parte (sem escolha: o mais recente n\xE3o descartado).", inputSchema: obj({ content_id: { type: "string" } }, ["content_id"]), annotations: RO2 },
+  { name: "pedidos_do_criador", title: "Pedidos do criador", description: 'O que o criador pediu ao diretor no app sobre um v\xEDdeo ("quero mais r\xE1pido", "troca o come\xE7o"\u2026), sem resposta primeiro. Atenda com as ferramentas de sempre (propor_edicao, salvar_roteiro, listar_takes) e responda com responder_pedido.', inputSchema: obj({ content_id: { type: "string", description: "opcional: s\xF3 deste conte\xFAdo" } }), annotations: RO2 },
+  { name: "responder_pedido", title: "Responder pedido", description: "Responde um pedido do criador (aparece no app, no painel do Diretor). Diga em 1\u20133 frases simples o que voc\xEA fez ou prop\xF4s.", inputSchema: obj({ pedido_id: { type: "string" }, resposta: { type: "string" } }, ["pedido_id", "resposta"]), annotations: WRITE2 },
   { name: "ler_status_gravacao", title: "Status da grava\xE7\xE3o", description: "O que j\xE1 foi gravado (por take/parte), o que falta, se j\xE1 subiu e como est\xE1 a montagem do v\xEDdeo.", inputSchema: obj({ content_id: { type: "string" } }, ["content_id"]), annotations: RO2 },
   { name: "registrar_melhoria", title: "Registrar melhoria", description: "Manda uma sugest\xE3o de melhoria do app/conector para o backlog do desenvolvedor, com contexto e crit\xE9rio de aceite. Use para toda recomenda\xE7\xE3o de mudan\xE7a no sistema.", inputSchema: obj({ titulo: { type: "string" }, descricao: { type: "string", description: "o problema, a proposta e o crit\xE9rio de aceite" }, prioridade: { type: "string", enum: ["baixa", "media", "alta"] } }, ["titulo", "descricao"]), annotations: WRITE2 },
   { name: "listar_melhorias", title: "Melhorias pedidas", description: "Melhorias j\xE1 registradas e o andamento (nova, no backlog, feita, recusada).", inputSchema: obj({}), annotations: RO2 },
@@ -1673,6 +1691,25 @@ ${lines.join("\n")}`);
     const note = `Use o valor de "clima" (ex.: ${list2[0]?.mood ?? "reflexao"}) em direcao.musica.clima. BPM medido no \xE1udio. Tend\xEAncia ("em alta"): ainda sem fonte de dados \u2014 n\xE3o informada.`;
     return text2([...ownRows, ...rows, note].join("\n"));
   }
+  if (name === "pedidos_do_criador") {
+    const cid = typeof args.content_id === "string" && args.content_id ? args.content_id : null;
+    if (cid && !await store.content(cid)) return text2("Conte\xFAdo n\xE3o encontrado neste perfil.", true);
+    const list2 = await store.creatorRequests(cid);
+    if (!list2.length) return text2("Nenhum pedido do criador.");
+    const rows = await Promise.all(list2.map(async (r) => {
+      const c = await store.content(r.contentId);
+      return `- pedido ${r.id} \xB7 ${brt(r.createdAt)} \xB7 conte\xFAdo ${r.contentId}${c ? ` ("${c.title}")` : ""}: "${r.texto}"${r.resposta ? `
+  respondido: ${r.resposta}` : " \xB7 SEM RESPOSTA"}`;
+    }));
+    return text2(rows.join("\n"));
+  }
+  if (name === "responder_pedido") {
+    const pid = typeof args.pedido_id === "string" ? args.pedido_id : "";
+    const resposta = typeof args.resposta === "string" ? args.resposta.trim().slice(0, 2e3) : "";
+    if (resposta.length < 3) return text2("Escreva a resposta (1\u20133 frases simples).", true);
+    if (!await store.answerRequest(pid, resposta)) return text2("Pedido n\xE3o encontrado neste perfil. Use um id de pedidos_do_criador.", true);
+    return text2("Resposta enviada: o criador v\xEA no painel do Diretor, no app.");
+  }
   if (name === "registrar_melhoria") {
     const titulo = String(args.titulo ?? "").trim().slice(0, 140);
     const descricao = String(args.descricao ?? "").trim().slice(0, 4e3);
@@ -1736,10 +1773,10 @@ Montagem: ${render}${posted}`);
     const blocks = [...groups.entries()].sort(([a], [b]) => (a ?? -1) - (b ?? -1)).map(([idx, list2]) => {
       const seg = idx === null ? null : segs[idx];
       const title = idx === null ? "V\xEDdeo inteiro de uma vez" : `Parte ${idx + 1}${seg ? ` \u2014 ${seg.label}` : ""}`;
-      const used = [...list2].reverse().find((t2) => !t2.discarded)?.id;
+      const used = idx === null ? [...list2].reverse().find((t2) => !t2.discarded)?.id : chosenTakes([...list2].reverse().map((t2) => ({ ...t2, tags: [...t2.discarded ? [DISCARDED_TAG] : [], ...t2.chosen ? [CHOSEN_TAG] : []] }))).get(idx)?.id;
       const rows = list2.map((t2, i) => {
         const facts = [t2.durationMs !== null ? `${(t2.durationMs / 1e3).toFixed(1)}s` : "dura\xE7\xE3o ?", t2.width && t2.height ? `${t2.width}x${t2.height}` : "", t2.camera === "front" ? "c\xE2mera frontal" : t2.camera === "back" ? "c\xE2mera traseira" : "", t2.favorite ? "\u2665" : ""].filter(Boolean).join(" \xB7 ");
-        const status = t2.discarded ? "DESCARTADO" : t2.id === used ? "USADO NA MONTAGEM" : "reserva";
+        const status = t2.discarded ? "DESCARTADO" : t2.id === used ? `USADO NA MONTAGEM${t2.chosen ? " (escolhido pelo criador)" : ""}` : "reserva";
         const notes = t2.discarded ? [] : takeTechNotes(t2, seg?.text ?? "");
         return `  - take ${i + 1} (id ${t2.id}) \xB7 ${status} \xB7 ${facts}${notes.length ? `
     aten\xE7\xE3o: ${notes.join("; ")}` : ""}`;
@@ -2042,6 +2079,7 @@ function supabaseMcpStore(db, workspaceId, userId) {
         segmentIndex: t2.segment_index,
         createdAt: t2.created_at,
         discarded: (t2.tags ?? []).includes("descartado"),
+        chosen: (t2.tags ?? []).includes("escolhido"),
         synced: t2.media_files?.state === "uploaded_original",
         favorite: t2.favorite,
         camera: t2.camera,
@@ -2060,6 +2098,20 @@ function supabaseMcpStore(db, workspaceId, userId) {
       if (error?.code === "42P01") return [];
       if (error) throw new Error(error.message);
       return [...new Set((data ?? []).map((r) => r.track_id))];
+    },
+    async creatorRequests(contentId) {
+      let q = db.from("pedidos_diretor").select("id, content_item_id, texto, resposta, created_at").eq("workspace_id", workspaceId);
+      if (contentId) q = q.eq("content_item_id", contentId);
+      const { data, error } = await q.order("respondido_at", { ascending: true, nullsFirst: true }).order("created_at", { ascending: false }).limit(20);
+      if (error?.code === "42P01") return [];
+      if (error) throw new Error(error.message);
+      return (data ?? []).map((r) => ({ id: r.id, contentId: r.content_item_id, texto: r.texto, createdAt: r.created_at, resposta: r.resposta ?? null }));
+    },
+    async answerRequest(id, resposta) {
+      if (!/^[0-9a-f-]{36}$/i.test(id)) return false;
+      const { data, error } = await db.from("pedidos_diretor").update({ resposta, respondido_at: (/* @__PURE__ */ new Date()).toISOString() }).eq("workspace_id", workspaceId).eq("id", id).select("id").maybeSingle();
+      if (error) throw new Error(error.message);
+      return Boolean(data);
     },
     async saveEditProposal(contentId, edit, motivo) {
       const { error } = await db.from("propostas_edicao").insert({ workspace_id: workspaceId, content_item_id: contentId, edit, motivo });

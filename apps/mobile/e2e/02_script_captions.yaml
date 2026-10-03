@@ -39,6 +39,13 @@ appId: me.rodrigoserra.postai
       text: ".*E se der certo!.*"
     timeout: 60000
 - takeScreenshot: 02_roteiro
+# legenda de postagem fica recolhida antes de gravar
+- scrollUntilVisible:
+    element:
+      id: show-caption
+    timeout: 60000
+- tapOn:
+    id: show-caption
 - scrollUntilVisible:
     element:
       id: platform-tiktok

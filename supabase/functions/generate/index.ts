@@ -221,7 +221,9 @@ var TakeSchema = z.object({
   olhar: s(160).default(""),
   emocao: s(120).default(""),
   broll: s(300).default(""),
-  erro_comum: s(240).default("")
+  erro_comum: s(240).default(""),
+  /** como usar o texto: exata = palavra por palavra · aproximada = com suas palavras · topicos = só os pontos · improviso = fala livre dirigida */
+  modo_fala: z.enum(["exata", "aproximada", "topicos", "improviso"]).default("exata")
 });
 var ON_SCREEN_POSITIONS = ["topo", "centro", "base"];
 var OnScreenTextSchema = z.object({
