@@ -5,11 +5,11 @@ import { join } from "node:path";
 import { promisify } from "node:util";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import {
-  CAPTION_STYLES, MOOD_LABEL, clipStartsMs, RETOUCH_LEVELS, SHORT_ROLES, assignBroll, buildAss, buildEditPlan, buildSegments, cuesFromWords, moodForPillar, parseDraft, pickTrack,
+  CAPTION_STYLES, MOOD_LABEL, applyAutoCutToPlan, pickAutoTrack, autoCutParams, clipStartsMs, type AutoCutParams, type AutoCutThemeId, RETOUCH_LEVELS, SHORT_ROLES, assignBroll, buildAss, buildEditPlan, buildSegments, cuesFromWords, moodForPillar, parseDraft,
   planCuts, trackById, watermarkCorner, wholeTakeSegment, withClips,
   ownMusicId, ownMusicUuid, type CaptionStyle, type Direction, type OwnMusic, type EditClip, type EditPlan, type MusicMood, type PlanMusic, type RenderVariant, type Retouch,
 } from "@postai/domain";
-import { detectFaceBottom, downloadOwnMusic, fetchTrack, transcribeClip } from "./media-extras";
+import { detectFaceBottom, downloadOwnMusic, fetchTrack, loudestWindowStartS, transcribeClip } from "./media-extras";
 import { probe, render } from "./ffmpeg";
 import { filterPath } from "./render";
 
@@ -33,6 +33,8 @@ export interface RenderResult {
   cuts: { removedMs: number; pauses: number; repeats: number; fillers: number };
   broll: number;
   music: string | null;
+  /** id da faixa que entrou (para a automática não repetir nos próximos vídeos) */
+  music_id?: string | null;
   spokenCaptions: boolean;
 }
 
@@ -45,13 +47,26 @@ export class NotReadyError extends Error {}
 export interface ServerChoices {
   captionStyle: CaptionStyle; music: PlanMusic | null; accentColor?: string; retouch: Retouch; stabilize: boolean;
   autoCut: boolean; voiceClean: boolean; broll: boolean; hook: boolean;
+  /** ritmo da montagem (tema do AutoCut ou o padrão) */
+  autocut: AutoCutParams;
 }
 
 /**
  * Escolhas do criador para a montagem (content_items.structured_payload.edit), validadas no servidor.
  * Tudo que não vier (ou vier inválido) cai no padrão automático.
  */
-export function editChoices(payload: Record<string, unknown> | null | undefined, pillarSlug: string, business: boolean, seed: string, direction?: Direction | null, own?: OwnMusic | null): ServerChoices {
+export function editChoices(payload: Record<string, unknown> | null | undefined, pillarSlug: string, business: boolean, seed: string, direction?: Direction | null, own?: OwnMusic | null, recents: readonly string[] = []): ServerChoices {
+  const ch = editChoicesBase(payload, pillarSlug, business, seed, direction, own, recents);
+  // trecho da música escolhido pelo criador (a narração já tem o ponto certo: o começo da gravação)
+  const start = ((payload?.edit ?? {}) as { musicStartS?: unknown }).musicStartS;
+  if (ch.music && !ch.music.narration && typeof start === "number" && start >= 0 && start < MAX_MUSIC_START_S) {
+    return { ...ch, music: { ...ch.music, seekMs: Math.round(start * 1000) } };
+  }
+  return ch;
+}
+const MAX_MUSIC_START_S = 600;
+
+function editChoicesBase(payload: Record<string, unknown> | null | undefined, pillarSlug: string, business: boolean, seed: string, direction: Direction | null | undefined, own: OwnMusic | null | undefined, recents: readonly string[]): ServerChoices {
   const edit = (payload?.edit ?? {}) as Record<string, unknown>;
   const flag = (k: string) => (typeof edit[k] === "boolean" ? (edit[k] as boolean) : true);
   // pessoal: "forte" (tipo iPhone); empresa: "leve" (não alisa a textura do produto que aparece junto)
@@ -62,7 +77,8 @@ export function editChoices(payload: Record<string, unknown> | null | undefined,
   const volume = typeof edit.musicVolume === "number" && edit.musicVolume >= 0.05 && edit.musicVolume <= 0.6 ? edit.musicVolume : (dm?.volume ?? 0.22);
   const narration = edit.narracao === true;
   // narração: sem corte de pausas (a fala fica no tempo da música que tocava no fone)
-  const base = { captionStyle, accentColor, retouch, stabilize: flag("stabilize"), autoCut: narration ? false : flag("autoCut"), voiceClean: flag("voiceClean"), broll: flag("broll"), hook: flag("hook") };
+  const autocut = autoCutParams({ autocut: typeof edit.autocut === "string" ? (edit.autocut as AutoCutThemeId) : undefined });
+  const base = { captionStyle, accentColor, retouch, stabilize: flag("stabilize"), autoCut: narration ? false : flag("autoCut"), voiceClean: flag("voiceClean"), broll: flag("broll"), hook: flag("hook"), autocut };
   const choice = typeof edit.music === "string" ? edit.music : "auto";
   if (choice === "none") return { ...base, music: null };
   // música própria do criador (escolhida no app ou pela direção); empresa só com licença comercial declarada
@@ -80,7 +96,8 @@ export function editChoices(payload: Record<string, unknown> | null | undefined,
   }
   const exact = trackById(choice);
   const mood: MusicMood = exact?.mood ?? (choice in MOOD_LABEL ? (choice as MusicMood) : moodForPillar(pillarSlug, business));
-  const track = exact ?? pickTrack(mood, seed);
+  // automática: do clima pedido, sem repetir as últimas trilhas usadas no perfil
+  const track = exact ?? pickAutoTrack(mood, seed, recents, business);
   return { ...base, music: { trackId: track.id, mood, volume } };
 }
 
@@ -126,7 +143,8 @@ export async function buildServerPlan(db: SupabaseClient, job: RenderJobRow): Pr
   const business = tone?.kind === "empresa";
   const direction = parsed.draft.direcao ?? null;
   const ownTrack = await ownMusicFor(db, job.workspace_id, content.data.structured_payload, direction);
-  const choices = editChoices(content.data.structured_payload, content.data.pillar_slug ?? "", business, job.content_item_id, direction, ownTrack);
+  const recents = await recentMusicIds(db, job.workspace_id, job.content_item_id);
+  const choices = editChoices(content.data.structured_payload, content.data.pillar_slug ?? "", business, job.content_item_id, direction, ownTrack, recents);
   const variant = jobVariant(job);
   const freeSpeech = script.data?.model === "fala-livre";
   const prompt = freeSpeech ? "" : parsed.draft.script.slice(0, 600);
@@ -169,6 +187,14 @@ export async function buildServerPlan(db: SupabaseClient, job: RenderJobRow): Pr
 }
 
 /** Cenas de apoio (B-roll) do mesmo dia do conteúdo, mais recentes primeiro. */
+/** Faixas que entraram nos últimos vídeos do perfil (outros conteúdos), mais recente primeiro. */
+async function recentMusicIds(db: SupabaseClient, workspaceId: string, contentId: string): Promise<string[]> {
+  const { data } = await db.from("render_jobs").select("content_item_id, result").eq("workspace_id", workspaceId).eq("status", "done").order("created_at", { ascending: false }).limit(12);
+  const ids = ((data ?? []) as { content_item_id: string; result: { music_id?: string | null } | null }[])
+    .filter((r) => r.content_item_id !== contentId).map((r) => r.result?.music_id).filter((x): x is string => Boolean(x));
+  return [...new Set(ids)];
+}
+
 /** A música própria pedida (escolha do app ou da direção), só se for DESTE perfil. */
 async function ownMusicFor(db: SupabaseClient, workspaceId: string, payload: Record<string, unknown> | null, direction: Direction | null): Promise<OwnMusic | null> {
   const edit = (payload?.edit ?? {}) as { music?: unknown };
@@ -217,7 +243,7 @@ export async function editFromSpeech(sp: Pick<ServerPlan, "plan" | "choices" | "
       clips.push({ ...clip, captions: cuesFromWords(words, plan.captionStyle, clip.durationMs) });
       continue;
     }
-    const c = planCuts(words, clip.durationMs);
+    const c = planCuts(words, clip.durationMs, choices.autocut);
     cuts.removedMs += c.removedMs;
     cuts.pauses += c.pauses;
     cuts.repeats += c.repeats;
@@ -340,12 +366,24 @@ export async function processJob(db: SupabaseClient, job: RenderJobRow, fontFile
       }
     }
 
-    const assFile = join(dir, "legendas.ass");
-    writeFileSync(assFile, buildAss(plan), "utf8");
+    // ritmo do tema do AutoCut (zoom, jump cut, transições) — por último, depois de cortes e cenas de apoio
+    plan = applyAutoCutToPlan(plan, sp.choices.autocut);
     const track = plan.music ? trackById(plan.music.trackId) : undefined;
     const ownKey = plan.music?.storageKey ?? null;
     const musicFile = ownKey ? await downloadOwnMusic(db, job.workspace_id, ownKey, dir) : track ? await fetchTrack(track, process.env.MUSIC_CACHE ?? join(tmpdir(), "postai-music")) : null;
     if ((track || ownKey) && !musicFile) warnings.push("A música não pôde ser baixada agora: o vídeo saiu sem música. Toque em REFAZER para tentar de novo.");
+    // trecho automático: sem trecho escolhido, os temas com batida usam a parte mais forte da faixa (refrão)
+    if (plan.music && musicFile && !plan.music.narration && plan.music.seekMs === undefined && sp.choices.autocut.beatSync) {
+      const startS = await loudestWindowStartS(musicFile, plan.totalMs / 1000);
+      if (startS > 0) plan = { ...plan, music: { ...plan.music, seekMs: Math.round(startS * 1000) } };
+    }
+    // pulsos na batida: só com BPM e fase medidos (biblioteca); a cada 2 batidas
+    if (plan.music && musicFile && sp.choices.autocut.beatSync && track?.bpm && track.beatS !== null) {
+      const t0S = (plan.music.startMs ?? 0) / 1000 - (plan.music.seekMs ?? 0) / 1000 + track.beatS;
+      plan = { ...plan, beat: { periodS: (2 * 60) / track.bpm, t0S } };
+    }
+    const assFile = join(dir, "legendas.ass");
+    writeFileSync(assFile, buildAss(plan), "utf8");
 
     const output = join(dir, "final.mp4");
     const probed = await render({ plan: musicFile ? plan : { ...plan, music: null }, inputs, fontFile, output, assFile, fontsDir: process.env.FONTS_DIR ?? null, musicFile, brollFiles, denoiseModel: process.env.RNNOISE_MODEL ?? null });
@@ -387,7 +425,8 @@ export async function processJob(db: SupabaseClient, job: RenderJobRow, fontFile
 
     const result: RenderResult = {
       variant: sp.variant, warnings, transcript: edited.transcript, cover_key: coverKey, cuts: edited.cuts,
-      broll: Object.keys(brollFiles).length, music: musicFile ? (track ? `${track.title} — ${track.artist}` : plan.music?.title ? `${plan.music.title} (sua)` : null) : null, spokenCaptions: edited.spoken,
+      broll: Object.keys(brollFiles).length, music: musicFile ? (track ? `${track.title} — ${track.artist}` : plan.music?.title ? `${plan.music.title} (sua)` : null) : null,
+      music_id: musicFile ? (plan.music?.trackId ?? null) : null, spokenCaptions: edited.spoken,
     };
     const row = { status: "done", output_key: `${base}.mp4`, output_size: bytes.length, error: null, updated_at: new Date().toISOString() };
     let done = await db.from("render_jobs").update({ ...row, result }).eq("id", job.id);

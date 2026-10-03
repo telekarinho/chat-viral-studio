@@ -1,7 +1,9 @@
+import { useState } from "react";
 import { Text, View } from "react-native";
-import { DEFAULT_EDIT_CHOICES, MOOD_LABEL, moodForPillar, type CaptionStyle, type EditChoices, type MusicMood, type Retouch } from "@postai/domain";
-import { Chip, s } from "../ui";
-import { OwnMusicSection } from "./OwnMusicSection";
+import { DEFAULT_EDIT_CHOICES, type CaptionStyle, type Direction, type EditChoices, type Retouch } from "@postai/domain";
+import { Button, Chip, s } from "../ui";
+import { AutoCutThemes } from "./AutoCutThemes";
+import { MusicDrawer } from "./MusicDrawer";
 
 const RETOUCH_LABEL: Record<Retouch, string> = { forte: "✨ Forte (tipo câmera do iPhone)", leve: "Natural", off: "Desligado" };
 
@@ -16,54 +18,54 @@ const CAPTION_LABEL: Record<CaptionStyle, string> = {
   manuscrito: "✍️ Manuscrito (creme, pincel)", destaque: "🔆 Destaque (palavra acende)", limpo: "Limpo", nenhuma: "Sem legenda",
 };
 
-/** Legenda e música da montagem final. "Automática" escolhe o clima pelo pilar do vídeo. */
-export function FinishOptions({ value, onChange, pillarSlug, business, workspaceId }: {
+/**
+ * Opções da montagem, do mais usado ao menos: estilo do AutoCut, música (gaveta estilo TikTok) e, recolhidas,
+ * legenda, embelezamento e os automáticos. Tudo fica salvo no vídeo (não se perde ao sair da tela).
+ */
+export function FinishOptions({ value, onChange, pillarSlug, business, workspaceId, voiceUri }: {
   value: EditChoices | null | undefined; onChange: (v: EditChoices) => void; pillarSlug: string; business: boolean;
-  /** perfil na nuvem: mostra "Minhas músicas" (enviar e escolher) */
   workspaceId?: string;
+  contentId?: string;
+  direction?: Direction | null;
+  /** 1ª parte gravada: para ouvir a música com a voz */
+  voiceUri?: string | null;
 }) {
+  const [more, setMore] = useState(false);
   const v = value ?? { ...DEFAULT_EDIT_CHOICES, retouch: business ? "leve" : "forte" };
   const retouch = v.retouch ?? (business ? "leve" : "forte");
-  const auto = moodForPillar(pillarSlug, business);
   const set = (patch: Partial<EditChoices>) => onChange({ ...v, ...patch });
+
   return (
-    <View style={{ gap: 8 }} testID="finish-options">
-      <Text style={s.label}>Embelezamento do rosto (só na pele — olhos, barba e boca ficam naturais)</Text>
-      <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8 }}>
-        {(Object.keys(RETOUCH_LABEL) as Retouch[]).map((k) => (
-          <Chip key={k} label={RETOUCH_LABEL[k]} selected={retouch === k} onPress={() => set({ retouch: k })} testID={`retouch-${k}`} />
-        ))}
-        <Chip label={v.stabilize === false ? "Tirar tremido: não" : "✓ Tirar tremido (gravei andando)"} selected={v.stabilize !== false} onPress={() => set({ stabilize: v.stabilize === false })} testID="stabilize" />
-      </View>
-      <Text style={s.label}>Edição automática (tudo ligado — desligue o que não quiser)</Text>
-      <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8 }}>
-        {AUTO.map((o) => (
-          <Chip key={o.key} label={`${v[o.key] === false ? "○" : "✓"} ${o.label}`} selected={v[o.key] !== false} onPress={() => set({ [o.key]: v[o.key] === false })} testID={`auto-${o.key}`} />
-        ))}
-      </View>
-      <Text style={s.label}>Legenda (sincronizada com a sua fala)</Text>
-      <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8 }}>
-        {(Object.keys(CAPTION_LABEL) as CaptionStyle[]).map((k) => (
-          <Chip key={k} label={CAPTION_LABEL[k]} selected={v.captionStyle === k} onPress={() => set({ captionStyle: k })} testID={`caption-${k}`} />
-        ))}
-      </View>
-      <Text style={s.label}>Música de fundo (abaixa sozinha quando você fala)</Text>
-      <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8 }}>
-        <Chip label={`🎵 Automática: ${MOOD_LABEL[auto]}`} selected={v.music === "auto"} onPress={() => set({ music: "auto" })} testID="music-auto" />
-        {(Object.keys(MOOD_LABEL) as MusicMood[]).filter((m) => m !== auto).map((m) => (
-          <Chip key={m} label={MOOD_LABEL[m]} selected={v.music === m} onPress={() => set({ music: m })} testID={`music-${m}`} />
-        ))}
-        <Chip label="Sem música" selected={v.music === "none"} onPress={() => set({ music: "none" })} testID="music-none" />
-      </View>
-      {workspaceId ? <OwnMusicSection workspaceId={workspaceId} business={business} selected={v.music} onSelect={(music) => set({ music })} /> : null}
-      {v.music !== "none" ? (
-        <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8 }}>
-          {([["Baixinha", 0.12], ["Normal", 0.22], ["Mais alta", 0.35]] as const).map(([l, vol]) => (
-            <Chip key={l} label={`Volume: ${l}`} selected={Math.abs((v.musicVolume ?? 0.22) - vol) < 0.01} onPress={() => set({ musicVolume: vol })} />
-          ))}
+    <View style={{ gap: 12 }} testID="finish-options">
+      <AutoCutThemes value={v} onChange={onChange} />
+      <MusicDrawer value={v} onChange={onChange} workspaceId={workspaceId} business={business} voiceUri={voiceUri} pillarSlug={pillarSlug} />
+      <Button compact variant="ghost" label={more ? "▲ Menos opções" : `▼ Mais opções (legenda: ${CAPTION_SHORT[v.captionStyle]}, pele: ${RETOUCH_SHORT[retouch]})`} onPress={() => setMore(!more)} testID="more-options" />
+      {more ? (
+        <View style={{ gap: 10 }}>
+          <Text style={s.label}>Legenda (sincronizada com a sua fala)</Text>
+          <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8 }}>
+            {(Object.keys(CAPTION_LABEL) as CaptionStyle[]).map((k) => (
+              <Chip key={k} label={CAPTION_LABEL[k]} selected={v.captionStyle === k} onPress={() => set({ captionStyle: k })} testID={`caption-${k}`} />
+            ))}
+          </View>
+          <Text style={s.label}>Embelezamento do rosto (só na pele — olhos, barba e boca ficam naturais)</Text>
+          <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8 }}>
+            {(Object.keys(RETOUCH_LABEL) as Retouch[]).map((k) => (
+              <Chip key={k} label={RETOUCH_LABEL[k]} selected={retouch === k} onPress={() => set({ retouch: k })} testID={`retouch-${k}`} />
+            ))}
+            <Chip label={v.stabilize === false ? "Tirar tremido: não" : "✓ Tirar tremido (gravei andando)"} selected={v.stabilize !== false} onPress={() => set({ stabilize: v.stabilize === false })} testID="stabilize" />
+          </View>
+          <Text style={s.label}>Automáticos (tudo ligado — desligue o que não quiser)</Text>
+          <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8 }}>
+            {AUTO.map((o) => (
+              <Chip key={o.key} label={`${v[o.key] === false ? "○" : "✓"} ${o.label}`} selected={v[o.key] !== false} onPress={() => set({ [o.key]: v[o.key] === false })} testID={`auto-${o.key}`} />
+            ))}
+          </View>
         </View>
       ) : null}
-      <Text style={s.muted}>As músicas da lista têm licença para vídeo nas redes (Mixkit). Quer um áudio em alta do TikTok/Instagram? Escolha “Sem música” e adicione o áudio no app da rede ao postar — lá ele é licenciado.</Text>
     </View>
   );
 }
+
+const CAPTION_SHORT: Record<CaptionStyle, string> = { manuscrito: "manuscrito", destaque: "destaque", limpo: "limpo", nenhuma: "sem" };
+const RETOUCH_SHORT: Record<Retouch, string> = { forte: "forte", leve: "natural", off: "sem" };

@@ -445,6 +445,31 @@ export async function listRecentContent(limit = 60): Promise<ContentItem[]> {
   return (await db.getAllAsync<ContentRow>("SELECT * FROM content_items WHERE workspace_id = ? ORDER BY date DESC, scheduled_for DESC LIMIT ?", await activeId(), limit)).map(toContent);
 }
 
+/**
+ * Músicas usadas nos últimos vídeos do perfil (escolha salva de cada vídeo, mais recente primeiro) e em quantos
+ * vídeos cada uma entrou. Só escolhas concretas (faixa ou música própria) — "automática"/"sem música" não contam.
+ */
+export async function musicUsage(limit = 40): Promise<{ recents: string[]; count: Record<string, number> }> {
+  const db = await getDb();
+  const rows = await db.getAllAsync<{ edit: string | null }>(
+    "SELECT edit FROM content_items WHERE workspace_id = ? AND edit IS NOT NULL ORDER BY updated_at DESC LIMIT ?", await activeId(), limit,
+  );
+  const recents: string[] = [];
+  const count: Record<string, number> = {};
+  for (const r of rows) {
+    let music: unknown;
+    try {
+      music = (JSON.parse(r.edit ?? "{}") as { music?: unknown }).music;
+    } catch {
+      continue;
+    }
+    if (typeof music !== "string" || !(music.startsWith("mixkit-") || music.startsWith("own:"))) continue;
+    count[music] = (count[music] ?? 0) + 1;
+    if (!recents.includes(music)) recents.push(music);
+  }
+  return { recents, count };
+}
+
 export async function getContent(id: string): Promise<ContentItem | null> {
   const db = await getDb();
   const r = await db.getFirstAsync<ContentRow>("SELECT * FROM content_items WHERE id = ?", id);

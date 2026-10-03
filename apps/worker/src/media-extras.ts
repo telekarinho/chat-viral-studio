@@ -77,3 +77,30 @@ export async function detectFaceBottom(file: string, startMs: number, endMs: num
     return null;
   }
 }
+
+/**
+ * Início (s) da janela de `lengthS` segundos mais forte da faixa (o refrão costuma ser a parte mais alta).
+ * Mede o volume (RMS) de cada segundo com o FFmpeg; sem medida, 0 (começo da faixa).
+ */
+export async function loudestWindowStartS(file: string, lengthS: number, ffmpeg = "ffmpeg"): Promise<number> {
+  try {
+    const { stderr } = await run(ffmpeg, ["-hide_banner", "-nostats", "-i", file, "-af", "aresample=8000,asetnsamples=n=8000,astats=metadata=1:reset=1,ametadata=print:key=lavfi.astats.Overall.RMS_level", "-f", "null", "-"], { maxBuffer: 32 * 1024 * 1024 });
+    const rms = [...stderr.matchAll(/RMS_level=(-?[\d.]+|-inf)/g)].map((m) => (m[1] === "-inf" ? -120 : Number(m[1])));
+    return bestWindow(rms, Math.ceil(lengthS));
+  } catch {
+    return 0;
+  }
+}
+
+/** Índice (segundo) onde começa a janela de `len` segundos com maior volume médio. */
+export function bestWindow(rmsPerSecond: readonly number[], len: number): number {
+  if (rmsPerSecond.length <= len) return 0;
+  let sum = rmsPerSecond.slice(0, len).reduce((a, v) => a + v, 0);
+  let best = sum;
+  let at = 0;
+  for (let i = len; i < rmsPerSecond.length; i++) {
+    sum += rmsPerSecond[i]! - rmsPerSecond[i - len]!;
+    if (sum > best) { best = sum; at = i - len + 1; }
+  }
+  return at;
+}

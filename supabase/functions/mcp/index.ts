@@ -272,34 +272,35 @@ var MOOD_LABEL = {
   empresa: "Vendas / produto",
   calmo: "Calmo"
 };
-var mk = (id, mood, title, artist, sha256, durationSec, bpm) => (
+var mk = (id, mood, title, artist, sha256, durationSec, bpm, beatS) => (
   // licença Mixkit Free: inclui uso comercial
-  { id: `mixkit-${id}`, mood, title, artist, url: `https://assets.mixkit.co/music/${id}/${id}.mp3`, sha256, durationSec, license: "comercial", bpm, trending: null }
+  { id: `mixkit-${id}`, mood, title, artist, url: `https://assets.mixkit.co/music/${id}/${id}.mp3`, sha256, durationSec, license: "comercial", bpm, beatS, trending: null }
 );
 var MUSIC_LIBRARY = [
-  mk(22, "reflexao", "Piano Reflections", "Ahjay Stelino", "7d58c4255d91f58e29e61520b6011cabd5a54b3e89b54646cebac9d37295bbec", 199, 120),
-  mk(601, "reflexao", "Skyline", "Eugenio Mininni", "2fcb36e7e58c4b6bc1505b7980237fdad86696589572a958bb6ee2084c592cc5", 206, null),
-  mk(599, "reflexao", "Possible Dreams", "Eugenio Mininni", "ee6d055c20cccda716b6b63a154ef0dc825195b7061dc439abb8a623973f4798", 159, null),
-  mk(32, "motivacional", "Driving Ambition", "Ahjay Stelino", "e3c88488e65b8c87a6f06120983ce2cb12ea3aeba99f8cadb7ee5d6d284ef2c6", 102, 100),
-  mk(31, "motivacional", "Dreaming Big", "Ahjay Stelino", "8c89819547b42a80750fb25f37a960a1f45f6fd66bc8d784ac817b98b002897c", 110, null),
-  mk(34, "motivacional", "Raising Me Higher", "Ahjay Stelino", "619b82cea299230cca5beac36d049291a1cb2be8ce0afdafda3e06fb30d06525", 98, 110),
-  mk(1183, "treino", "Karma", "Michael Ramir C.", "56f331c37552486a1a31c65a443f1669ed37f7fb3bd99d9078d23ec55caa052f", 135, 128),
-  mk(470, "treino", "Golden Storm", "Diego Nava", "32e5a363ce84f0b633579d0b10cf3c758ae3c02f5121147a321e2483e3384e26", 95, 127),
-  mk(1e3, "treino", "I Can Hear Your Heartbeat", "Michael Ramir C.", "a23c959605dc4a53f7e3b8c8949fcc0d082c29989b944bb2a7f8d9601ddca0d1", 110, 125),
-  mk(839, "familia", "Tears of Joy", "Michael Ramir C.", "30717c4e8d2a954a6163477b831e5b8981b406d2c34d72820fce4d40a8686ddc", 140, 124),
-  mk(963, "familia", "Just Keep Walking", "Michael Ramir C.", "fa93f4808cecc643eee8d74647bd8b823991f2155672b7d37f3db79f9beb7e16", 125, 96),
-  mk(801, "familia", "Happy Home", "Michael Ramir C.", "76b82159ba1d6821a5ac9465e8ff19007446c1b657dfe53b5917fc8896b3bf21", 110, 140),
-  mk(2, "humor", "Comical", "Ahjay Stelino", "2f5ed23f2c51b5aa28b237563ee1249d12094fefce7afdaddee4f5a330e010cb", 114, 140),
-  mk(466, "humor", "Games Worldbeat", "Bernardo R.", "a1c70e5719bdfbe5dd8ec064939b27e3baed8c2b7f9375ae5b361e6ba71d4922", 107, null),
-  mk(474, "empresa", "What About Action?", "Diego Nava", "4bcd99a13f3d71c6d356c2459f6f585f0d3f91ca8912aeef81ac626b8c8e3133", 117, 121),
-  mk(729, "empresa", "Pop Track 03", "Lily J", "0bb90793c71a07e6d698afdd434b32ffb4fe93dbbdb0577d3e71a4de80b0337b", 97, 109),
-  mk(1167, "empresa", "Close Up", "Michael Ramir C.", "a7f05a29d07a84d38072ccd2b35204bca812db86e75b2a837e71cc144d3e739b", 95, 105),
-  mk(441, "calmo", "Meditation", "Arulo", "6ffb81be8ab2447eb7b9357d6ae3d1b58eb8bc85376a724fafa5fe4d1acf562a", 118, null),
-  mk(175, "calmo", "Digital Clouds", "Alejandro Maga\xF1a (A. M.)", "71cd4ea39edcc7532672bd97311abadfd318d00e7a828310a88b4f57fad9cd48", 101, 129)
+  mk(22, "reflexao", "Piano Reflections", "Ahjay Stelino", "7d58c4255d91f58e29e61520b6011cabd5a54b3e89b54646cebac9d37295bbec", 199, 120, 0.255),
+  mk(601, "reflexao", "Skyline", "Eugenio Mininni", "2fcb36e7e58c4b6bc1505b7980237fdad86696589572a958bb6ee2084c592cc5", 206, null, null),
+  mk(599, "reflexao", "Possible Dreams", "Eugenio Mininni", "ee6d055c20cccda716b6b63a154ef0dc825195b7061dc439abb8a623973f4798", 159, null, null),
+  mk(32, "motivacional", "Driving Ambition", "Ahjay Stelino", "e3c88488e65b8c87a6f06120983ce2cb12ea3aeba99f8cadb7ee5d6d284ef2c6", 102, 100, 0.032),
+  mk(31, "motivacional", "Dreaming Big", "Ahjay Stelino", "8c89819547b42a80750fb25f37a960a1f45f6fd66bc8d784ac817b98b002897c", 110, null, null),
+  mk(34, "motivacional", "Raising Me Higher", "Ahjay Stelino", "619b82cea299230cca5beac36d049291a1cb2be8ce0afdafda3e06fb30d06525", 98, 110, 0.545),
+  mk(1183, "treino", "Karma", "Michael Ramir C.", "56f331c37552486a1a31c65a443f1669ed37f7fb3bd99d9078d23ec55caa052f", 135, 128, 6e-3),
+  mk(470, "treino", "Golden Storm", "Diego Nava", "32e5a363ce84f0b633579d0b10cf3c758ae3c02f5121147a321e2483e3384e26", 95, 127, 0.22),
+  mk(1e3, "treino", "I Can Hear Your Heartbeat", "Michael Ramir C.", "a23c959605dc4a53f7e3b8c8949fcc0d082c29989b944bb2a7f8d9601ddca0d1", 110, 125, 0.261),
+  mk(839, "familia", "Tears of Joy", "Michael Ramir C.", "30717c4e8d2a954a6163477b831e5b8981b406d2c34d72820fce4d40a8686ddc", 140, 124, 0.249),
+  mk(963, "familia", "Just Keep Walking", "Michael Ramir C.", "fa93f4808cecc643eee8d74647bd8b823991f2155672b7d37f3db79f9beb7e16", 125, 96, 0.025),
+  mk(801, "familia", "Happy Home", "Michael Ramir C.", "76b82159ba1d6821a5ac9465e8ff19007446c1b657dfe53b5917fc8896b3bf21", 110, 140, 0.417),
+  mk(2, "humor", "Comical", "Ahjay Stelino", "2f5ed23f2c51b5aa28b237563ee1249d12094fefce7afdaddee4f5a330e010cb", 114, 140, 0.174),
+  mk(466, "humor", "Games Worldbeat", "Bernardo R.", "a1c70e5719bdfbe5dd8ec064939b27e3baed8c2b7f9375ae5b361e6ba71d4922", 107, null, null),
+  mk(474, "empresa", "What About Action?", "Diego Nava", "4bcd99a13f3d71c6d356c2459f6f585f0d3f91ca8912aeef81ac626b8c8e3133", 117, 121, 0.22),
+  mk(729, "empresa", "Pop Track 03", "Lily J", "0bb90793c71a07e6d698afdd434b32ffb4fe93dbbdb0577d3e71a4de80b0337b", 97, 109, 0.098),
+  mk(1167, "empresa", "Close Up", "Michael Ramir C.", "a7f05a29d07a84d38072ccd2b35204bca812db86e75b2a837e71cc144d3e739b", 95, 105, 0.133),
+  mk(441, "calmo", "Meditation", "Arulo", "6ffb81be8ab2447eb7b9357d6ae3d1b58eb8bc85376a724fafa5fe4d1acf562a", 118, null, null),
+  mk(175, "calmo", "Digital Clouds", "Alejandro Maga\xF1a (A. M.)", "71cd4ea39edcc7532672bd97311abadfd318d00e7a828310a88b4f57fad9cd48", 101, 129, 0.185)
 ];
-var trackById = (id) => MUSIC_LIBRARY.find((t) => t.id === id);
+var trackById = (id) => MUSIC_LIBRARY.find((t2) => t2.id === id);
 var OWN_MUSIC_PREFIX = "own:";
 var ownMusicId = (uuid) => `${OWN_MUSIC_PREFIX}${uuid}`;
+var ownMusicUuid = (id) => id.startsWith(OWN_MUSIC_PREFIX) && /^[0-9a-f-]{36}$/i.test(id.slice(OWN_MUSIC_PREFIX.length)) ? id.slice(OWN_MUSIC_PREFIX.length) : null;
 
 // ../../packages/domain/src/ai/direction.ts
 var MOODS = Object.keys(MOOD_LABEL);
@@ -368,19 +369,19 @@ function quotedFragments(s2) {
 }
 function directionIssues(d, opts) {
   const out2 = [];
-  const orders = d.takes.map((t) => t.ordem);
+  const orders = d.takes.map((t2) => t2.ordem);
   if (new Set(orders).size !== orders.length) out2.push("direcao.takes: cada take precisa de uma ordem diferente.");
-  if (opts.spoken && !d.takes.some((t) => t.fala_exata.trim())) out2.push("direcao.takes: nenhum take tem fala_exata \u2014 o app grava a fala por take.");
-  for (const [i, t] of d.takes.entries()) {
-    if (!t.fala_exata.trim()) continue;
-    const fala = plainText(t.fala_exata);
+  if (opts.spoken && !d.takes.some((t2) => t2.fala_exata.trim())) out2.push("direcao.takes: nenhum take tem fala_exata \u2014 o app grava a fala por take.");
+  for (const [i, t2] of d.takes.entries()) {
+    if (!t2.fala_exata.trim()) continue;
+    const fala = plainText(t2.fala_exata);
     for (const field of QUOTE_FIELDS) {
-      for (const q of quotedFragments(t[field])) {
-        if (!fala.includes(plainText(q))) out2.push(`direcao.takes[${i}].${field}: cita "${q}", que n\xE3o est\xE1 na fala_exata deste take ("${t.fala_exata.slice(0, 80)}").`);
+      for (const q of quotedFragments(t2[field])) {
+        if (!fala.includes(plainText(q))) out2.push(`direcao.takes[${i}].${field}: cita "${q}", que n\xE3o est\xE1 na fala_exata deste take ("${t2.fala_exata.slice(0, 80)}").`);
       }
     }
   }
-  const total = d.takes.reduce((a, t) => a + t.duracao_segundos, 0);
+  const total = d.takes.reduce((a, t2) => a + t2.duracao_segundos, 0);
   if (total > opts.durationSeconds * 1.6 + 5) out2.push(`direcao.takes: somam ${Math.round(total)}s, bem mais que os ${opts.durationSeconds}s do v\xEDdeo.`);
   for (const [i, l] of d.legendas_na_tela.entries()) {
     if (l.fim <= l.inicio) out2.push(`direcao.legendas_na_tela[${i}]: fim precisa ser depois do in\xEDcio.`);
@@ -400,28 +401,28 @@ function directionIssues(d, opts) {
   return out2;
 }
 function spokenTakes(d) {
-  return (d?.takes ?? []).filter((t) => t.fala_exata.trim()).sort((a, b) => a.ordem - b.ordem);
+  return (d?.takes ?? []).filter((t2) => t2.fala_exata.trim()).sort((a, b) => a.ordem - b.ordem);
 }
-function takeInstructions(t) {
+function takeInstructions(t2) {
   const rows = [
-    ["Ritmo", t.ritmo],
-    ["Enquadramento", t.enquadramento],
-    ["C\xE2mera", t.movimento_camera],
-    ["Local", t.local],
-    ["Luz", t.luz],
-    ["Olhar", t.olhar],
-    ["Emo\xE7\xE3o", t.emocao],
-    ["B-roll", t.broll],
-    ["Cuidado", t.erro_comum]
+    ["Ritmo", t2.ritmo],
+    ["Enquadramento", t2.enquadramento],
+    ["C\xE2mera", t2.movimento_camera],
+    ["Local", t2.local],
+    ["Luz", t2.luz],
+    ["Olhar", t2.olhar],
+    ["Emo\xE7\xE3o", t2.emocao],
+    ["B-roll", t2.broll],
+    ["Cuidado", t2.erro_comum]
   ];
   return rows.filter(([, v]) => v.trim()).map(([label, value]) => ({ label, value }));
 }
 function directionReport(d) {
   const spoken = spokenTakes(d);
-  const silent = d.takes.filter((t) => !t.fala_exata.trim());
+  const silent = d.takes.filter((t2) => !t2.fala_exata.trim());
   const out2 = [
-    { campo: "takes (fala_exata)", aplicado: spoken.length > 0, como: spoken.length ? `${spoken.length} parte(s) gravada(s) na ordem, com teleprompter da fala_exata: ${spoken.map((t) => t.nome).join(" \u2192 ")}` : "nenhum take com fala \u2014 o app grava o roteiro (script) por partes" },
-    { campo: "takes (instru\xE7\xF5es)", aplicado: spoken.some((t) => takeInstructions(t).length > 0), como: "enquadramento, c\xE2mera, local, luz, olhar, emo\xE7\xE3o, B-roll e erro comum aparecem na tela de grava\xE7\xE3o de cada take" }
+    { campo: "takes (fala_exata)", aplicado: spoken.length > 0, como: spoken.length ? `${spoken.length} parte(s) gravada(s) na ordem, com teleprompter da fala_exata: ${spoken.map((t2) => t2.nome).join(" \u2192 ")}` : "nenhum take com fala \u2014 o app grava o roteiro (script) por partes" },
+    { campo: "takes (instru\xE7\xF5es)", aplicado: spoken.some((t2) => takeInstructions(t2).length > 0), como: "enquadramento, c\xE2mera, local, luz, olhar, emo\xE7\xE3o, B-roll e erro comum aparecem na tela de grava\xE7\xE3o de cada take" }
   ];
   if (silent.length) out2.push({ campo: "takes sem fala", aplicado: false, como: `${silent.length} take(s) sem fala aparecem como instru\xE7\xE3o no conte\xFAdo, mas n\xE3o viram parte do v\xEDdeo \u2014 grave como cena de apoio (B-roll) do dia para a montagem usar` });
   if (d.legendas_na_tela.length) {
@@ -492,16 +493,16 @@ function contractLimits() {
     const alt = n.anyOf?.find((x) => x.type !== "null");
     const nullable = Boolean(n.anyOf?.some((x) => x.type === "null"));
     const node = alt ? { ...alt, default: n.default ?? alt.default } : n;
-    const t = Array.isArray(node.type) ? node.type.join("|") : node.type ?? "?";
+    const t2 = Array.isArray(node.type) ? node.type.join("|") : node.type ?? "?";
     const lim = [];
     if (node.minLength !== void 0 || node.maxLength !== void 0) lim.push(`${node.minLength ?? 0}\u2013${node.maxLength ?? "\u221E"} caracteres`);
     if (node.minItems !== void 0 || node.maxItems !== void 0) lim.push(`${node.minItems ?? 0}\u2013${node.maxItems ?? "\u221E"} itens`);
     if (node.minimum !== void 0 || node.maximum !== void 0) lim.push(`${node.minimum ?? "-\u221E"} a ${node.maximum ?? "\u221E"}`);
     if (node.enum) lim.push(`um de: ${node.enum.join(" | ")}`);
     if (node.pattern) lim.push(`formato ${node.pattern}`);
-    if (path && (t !== "object" || !node.properties)) {
+    if (path && (t2 !== "object" || !node.properties)) {
       const flags = [required ? "obrigat\xF3rio" : "opcional", nullable ? "pode ser null" : "", node.default !== void 0 ? `padr\xE3o ${JSON.stringify(node.default)}` : ""].filter(Boolean).join(", ");
-      out2.push(`${path}: ${t}${lim.length ? ` (${lim.join("; ")})` : ""} \u2014 ${flags}`);
+      out2.push(`${path}: ${t2}${lim.length ? ` (${lim.join("; ")})` : ""} \u2014 ${flags}`);
     } else if (path) out2.push(`${path}: objeto \u2014 ${required ? "obrigat\xF3rio" : "opcional"}${nullable ? ", pode ser null" : ""}`);
     if (node.properties) for (const [k, v] of Object.entries(node.properties)) walk(v, path ? `${path}.${k}` : k, node.required?.includes(k) ?? false);
     if (node.items) walk(node.items, `${path}[]`, true);
@@ -786,7 +787,7 @@ var PROFILE_TEMPLATES = [
 var PRICE = /R\$\s*\d|\b\d+(?:[.,]\d+)?\s*reais\b|\bpre[çc]os?\b|\bparcela(?:s|do|mento)?\b|\bs[óo] \d|\b\d+\s*%\s*(?:off|de desconto)|\bdesconto de \d|\bcusta(?:m)? (?:s[óo] |apenas |a partir de )?\d/i;
 function mentionsPrice(d) {
   const texts = [d.script, d.cta, d.screen_text, ...d.hook_options, ...Object.values(d.caption), ...d.versions.map((v) => v.script)];
-  return texts.some((t) => PRICE.test(t));
+  return texts.some((t2) => PRICE.test(t2));
 }
 
 // ../../packages/domain/src/ai/manual.ts
@@ -842,6 +843,77 @@ function directorIssues(draft) {
   return out2;
 }
 
+// ../../packages/domain/src/autocut.ts
+var AUTOCUT_THEME_IDS = ["viral", "longa", "psicologica", "engracada", "suspense", "dramatica", "tiktok", "calma", "jovem"];
+var t = (id, label, description, params, choices) => ({ id, label, description, params, choices });
+var base = { stabilize: true, autoCut: true, voiceClean: true };
+var AUTOCUT_THEMES = [
+  t(
+    "viral",
+    "\u{1F525} Viral",
+    "Cortes secos sem sil\xEAncio, jump cut a cada pausa, palavra acesa e pulsos na batida.",
+    { pauseMaxMs: 300, pauseKeepMs: 110, removeFillers: true, removeRepeats: true, jumpPunch: 0.1, zoom: 1.15, transition: "auto", transitionMs: 220, beatSync: true },
+    { ...base, captionStyle: "destaque", music: "auto", musicVolume: 0.26, retouch: "forte", broll: true, hook: true }
+  ),
+  t(
+    "longa",
+    "\u{1F3AC} Longa",
+    "Para hist\xF3rias maiores: guarda o respiro, zoom bem suave, transi\xE7\xF5es lentas.",
+    { pauseMaxMs: 750, pauseKeepMs: 280, removeFillers: true, removeRepeats: true, jumpPunch: 0, zoom: 0.5, transition: "suave", transitionMs: 420, beatSync: false },
+    { ...base, captionStyle: "limpo", music: "reflexao", musicVolume: 0.16, retouch: "leve", broll: true, hook: true }
+  ),
+  t(
+    "psicologica",
+    "\u{1F9E0} Psicol\xF3gica",
+    "C\xE2mera no rosto: sil\xEAncios curtos que pesam, aproxima\xE7\xE3o lenta, sem cenas de apoio.",
+    { pauseMaxMs: 500, pauseKeepMs: 240, removeFillers: true, removeRepeats: true, jumpPunch: 0.05, zoom: 0.9, transition: "suave", transitionMs: 320, beatSync: false },
+    { ...base, captionStyle: "manuscrito", music: "reflexao", musicVolume: 0.18, retouch: "leve", broll: false, hook: true }
+  ),
+  t(
+    "engracada",
+    "\u{1F602} Engra\xE7ada",
+    "Timing de com\xE9dia: corte bem seco, zoom forte na piada, sem transi\xE7\xE3o.",
+    { pauseMaxMs: 240, pauseKeepMs: 70, removeFillers: true, removeRepeats: true, jumpPunch: 0.14, zoom: 1.2, transition: "corte_seco", transitionMs: 0, beatSync: false },
+    { ...base, captionStyle: "destaque", music: "humor", musicVolume: 0.24, retouch: "leve", broll: true, hook: true }
+  ),
+  t(
+    "suspense",
+    "\u{1F440} Suspense",
+    "Segura a revela\xE7\xE3o: pausas longas, aproxima\xE7\xE3o lenta, m\xFAsica baixa.",
+    { pauseMaxMs: 650, pauseKeepMs: 320, removeFillers: true, removeRepeats: true, jumpPunch: 0.03, zoom: 1, transition: "suave", transitionMs: 450, beatSync: false },
+    { ...base, captionStyle: "manuscrito", music: "reflexao", musicVolume: 0.12, retouch: "leve", broll: false, hook: true }
+  ),
+  t(
+    "dramatica",
+    "\u{1F3AD} Dram\xE1tica",
+    "Emo\xE7\xE3o: respira entre as frases, quase sem zoom, m\xFAsica presente.",
+    { pauseMaxMs: 600, pauseKeepMs: 280, removeFillers: true, removeRepeats: true, jumpPunch: 0, zoom: 0.7, transition: "suave", transitionMs: 400, beatSync: false },
+    { ...base, captionStyle: "manuscrito", music: "familia", musicVolume: 0.2, retouch: "leve", broll: true, hook: true }
+  ),
+  t(
+    "tiktok",
+    "\u26A1 Acelerada TikTok",
+    "O mais r\xE1pido: zero sil\xEAncio, jump cut forte, zoom em tudo, pulsos na batida.",
+    { pauseMaxMs: 200, pauseKeepMs: 50, removeFillers: true, removeRepeats: true, jumpPunch: 0.12, zoom: 1.3, transition: "auto", transitionMs: 180, beatSync: true },
+    { ...base, captionStyle: "destaque", music: "treino", musicVolume: 0.3, retouch: "forte", broll: true, hook: true }
+  ),
+  t(
+    "calma",
+    "\u{1F33F} Calma",
+    "Pouco est\xEDmulo: pausas naturais, enquadramento quase fixo, sem gancho piscando.",
+    { pauseMaxMs: 850, pauseKeepMs: 320, removeFillers: true, removeRepeats: true, jumpPunch: 0, zoom: 0.3, transition: "suave", transitionMs: 500, beatSync: false },
+    { ...base, captionStyle: "limpo", music: "calmo", musicVolume: 0.12, retouch: "leve", broll: false, hook: false }
+  ),
+  t(
+    "jovem",
+    "\u2728 Jovem",
+    "Vivo e leve: cortes r\xE1pidos, zoom m\xE9dio, pulsos na batida, m\xFAsica motivacional.",
+    { pauseMaxMs: 320, pauseKeepMs: 120, removeFillers: true, removeRepeats: true, jumpPunch: 0.08, zoom: 1.1, transition: "auto", transitionMs: 250, beatSync: true },
+    { ...base, captionStyle: "destaque", music: "motivacional", musicVolume: 0.24, retouch: "forte", broll: true, hook: true }
+  )
+];
+var autoCutTheme = (id) => AUTOCUT_THEMES.find((x) => x.id === id);
+
 // ../../packages/domain/src/segments.ts
 var SEGMENT_LABEL = {
   hook: "Gancho",
@@ -860,12 +932,12 @@ function buildSegments(draft, opts) {
   let parts;
   const takes = opts.userEdited ? [] : spokenTakes(draft.direcao);
   if (takes.length) {
-    const hasClosing = closing && takes.some((t) => t.fala_exata.toLowerCase().includes(closing.toLowerCase()));
-    parts = takes.map((t, i) => ({
+    const hasClosing = closing && takes.some((t2) => t2.fala_exata.toLowerCase().includes(closing.toLowerCase()));
+    parts = takes.map((t2, i) => ({
       role: i === 0 ? "hook" : i === takes.length - 1 && takes.length > 2 && !hasClosing ? "cta" : "free",
-      text: t.fala_exata,
-      label: `Take ${t.ordem} \u2014 ${t.nome}`,
-      direction: takeInstructions(t)
+      text: t2.fala_exata,
+      label: `Take ${t2.ordem} \u2014 ${t2.nome}`,
+      direction: takeInstructions(t2)
     }));
     if (closing && !hasClosing) parts.push({ role: "closing", text: closing });
   } else if (draft.format === "thought") {
@@ -988,16 +1060,16 @@ var PRODUCTION_MODES = {
   }
 };
 function pendingClaimsIn(text3, pendingClaims) {
-  const t = norm(text3);
+  const t2 = norm(text3);
   const hits = pendingClaims.filter((c) => {
     const all = norm(c).split(" ");
     const words2 = all.filter((w) => w.length > 3 || /\d/.test(w));
     const numbered = all.flatMap((w, i) => /\d/.test(w) && all[i + 1] ? [{ n: w.replace(/\./g, ""), unit: all[i + 1].slice(0, 5) }] : []);
     if (numbered.length) {
-      const flat = t.replace(/(\d)\.(\d)/g, "$1$2");
+      const flat = t2.replace(/(\d)\.(\d)/g, "$1$2");
       return numbered.some(({ n, unit }) => new RegExp(`(^| )${n} (de )?${unit}`).test(flat));
     }
-    const found = words2.filter((w) => t.includes(w)).length;
+    const found = words2.filter((w) => t2.includes(w)).length;
     return found >= 2 && found / words2.length >= 0.5;
   });
   return hits;
@@ -1049,6 +1121,89 @@ function engagementRate(m) {
 }
 function sharesPer1k(m) {
   return m.views > 0 ? m.shares / m.views * 1e3 : 0;
+}
+
+// ../../packages/domain/src/editProposal.ts
+var MUSIC_VOLUME_MIN = 0.05;
+var MUSIC_VOLUME_MAX = 0.45;
+var OWN_MAX_START_S = 600;
+var MIN_TAIL_S = 5;
+function parseEditProposal(input, ctx) {
+  const errors = [];
+  const edit = {};
+  if (input.autocut !== void 0) {
+    if (typeof input.autocut === "string" && AUTOCUT_THEME_IDS.includes(input.autocut)) edit.autocut = input.autocut;
+    else errors.push(`autocut: use um destes: ${AUTOCUT_THEME_IDS.join(", ")}.`);
+  }
+  let trackDuration = null;
+  if (input.musica !== void 0) {
+    const m = typeof input.musica === "string" ? input.musica.trim() : "";
+    const track = trackById(m);
+    const ownId = ownMusicUuid(m);
+    const own = ownId ? ctx.own.find((o) => o.id === ownId) : void 0;
+    if (m === "auto" || m === "none" || m in MOOD_LABEL) edit.music = m;
+    else if (track) {
+      if (ctx.business && track.license !== "comercial") errors.push(`musica: "${track.title}" n\xE3o tem licen\xE7a comercial (perfil de empresa).`);
+      else {
+        edit.music = m;
+        trackDuration = track.durationSec;
+      }
+    } else if (own) {
+      if (ctx.business && !own.comercial) errors.push(`musica: "${own.titulo}" foi enviada sem licen\xE7a comercial declarada (perfil de empresa).`);
+      else {
+        edit.music = m;
+        trackDuration = OWN_MAX_START_S + MIN_TAIL_S;
+      }
+    } else errors.push(`musica: "${m}" n\xE3o existe. Use um id de listar_musicas, "auto", "none" ou um clima (${Object.keys(MOOD_LABEL).join(", ")}).`);
+  }
+  if (input.volume !== void 0) {
+    const v = input.volume;
+    if (typeof v === "number" && v >= MUSIC_VOLUME_MIN && v <= MUSIC_VOLUME_MAX) edit.musicVolume = Math.round(v * 100) / 100;
+    else errors.push(`volume: entre ${MUSIC_VOLUME_MIN} e ${MUSIC_VOLUME_MAX} (relativo \xE0 voz; acima disso a m\xFAsica cobre a fala).`);
+  }
+  if (input.inicio_musica_s !== void 0) {
+    const s2 = input.inicio_musica_s;
+    if (trackDuration === null) errors.push("inicio_musica_s: s\xF3 vale junto de uma faixa espec\xEDfica em musica (id de listar_musicas).");
+    else if (typeof s2 !== "number" || s2 < 0 || s2 > trackDuration - MIN_TAIL_S) errors.push(`inicio_musica_s: de 0 a ${trackDuration - MIN_TAIL_S} segundos.`);
+    else edit.musicStartS = Math.round(s2);
+  }
+  if (!errors.length && !Object.keys(edit).length) errors.push("Proponha pelo menos um item: autocut, musica, volume ou inicio_musica_s.");
+  return errors.length ? { ok: false, errors } : { ok: true, edit };
+}
+function describeEditProposal(p, own = []) {
+  const bits = [];
+  if (p.autocut) bits.push(`AutoCut ${autoCutTheme(p.autocut).label.replace(/^\S+\s/, "")}`);
+  if (p.music) {
+    const ownId = ownMusicUuid(p.music);
+    const name = p.music === "auto" ? "autom\xE1tica" : p.music === "none" ? "sem m\xFAsica" : p.music in MOOD_LABEL ? `clima ${MOOD_LABEL[p.music]}` : trackById(p.music)?.title ?? own.find((o) => o.id === ownId)?.titulo ?? "m\xFAsica pr\xF3pria";
+    const start = p.musicStartS ? ` a partir de ${Math.floor(p.musicStartS / 60)}:${String(p.musicStartS % 60).padStart(2, "0")}` : "";
+    bits.push(`m\xFAsica ${name}${start}`);
+  }
+  if (p.musicVolume !== void 0) bits.push(`volume ${Math.round(p.musicVolume * 100)}%`);
+  return bits.join(" \xB7 ");
+}
+
+// ../../packages/domain/src/takeQuality.ts
+var WORDS_PER_S = 2.5;
+var MIN_SHORT_DIM = 720;
+var TOO_SHORT = 0.5;
+var TOO_LONG = 2.5;
+var LONG_SLACK_S = 3;
+function takeTechNotes(t2, text3) {
+  const notes = [];
+  if (!t2.synced) notes.push("ainda n\xE3o subiu para a nuvem");
+  const words2 = text3.split(/\s+/).filter(Boolean).length;
+  if (t2.durationMs !== null && words2) {
+    const expected = words2 / WORDS_PER_S;
+    const got = t2.durationMs / 1e3;
+    if (got < expected * TOO_SHORT) notes.push(`curto demais (${got.toFixed(1)}s para ~${expected.toFixed(0)}s de texto): pode ter cortado a fala`);
+    else if (got > expected * TOO_LONG + LONG_SLACK_S) notes.push(`bem mais longo que o texto (${got.toFixed(0)}s para ~${expected.toFixed(0)}s): muitas pausas ou erros (o AutoCut corta pausas)`);
+  }
+  if (t2.width && t2.height) {
+    if (Math.min(t2.width, t2.height) < MIN_SHORT_DIM) notes.push(`resolu\xE7\xE3o baixa (${t2.width}x${t2.height})`);
+    if (t2.width > t2.height) notes.push("gravado na horizontal: o v\xEDdeo final \xE9 vertical e corta as laterais");
+  }
+  return notes;
 }
 
 // src/mcp-profiles.ts
@@ -1222,7 +1377,7 @@ var PROFILE_INTERVIEW = [
   "9. Metas (seguidores, leads, vendas) e redes onde posta; tipo de conta (pessoal, criador, comercial).",
   "Depois: criar_perfil com tudo. Casos de cliente v\xE3o em cadastrar_caso_real (s\xF3 com autoriza\xE7\xE3o)."
 ].join("\n");
-var out = (t, isError = false) => ({ content: [{ type: "text", text: t }], ...isError ? { isError: true } : {} });
+var out = (t2, isError = false) => ({ content: [{ type: "text", text: t2 }], ...isError ? { isError: true } : {} });
 var zodErrors = (e) => e.issues.map((i) => `${i.path.join(".") || "(raiz)"}: ${i.message}`);
 var PROFILE_ARG = { profile_id: { type: "string", description: "id do perfil (listar_perfis). Sem ele: o perfil em que o link foi criado." } };
 var RO = { readOnlyHint: true };
@@ -1236,7 +1391,7 @@ var PROFILE_TOOLS = [
   { name: "listar_casos_reais", title: "Casos reais e provas", description: "Casos reais cadastrados (com e sem autoriza\xE7\xE3o) e as provas film\xE1veis com status (j\xE1 filmada / falta filmar).", inputSchema: anyObj("", { ...PROFILE_ARG }), annotations: RO },
   { name: "atualizar_prova", title: "Status de prova film\xE1vel", description: "Marca uma prova film\xE1vel como 'filmada' ou 'falta_filmar' (cria se n\xE3o existir).", inputSchema: anyObj("", { ...PROFILE_ARG, descricao: { type: "string" }, status: { type: "string", enum: ["falta_filmar", "filmada"] } }, ["descricao", "status"]), annotations: WRITE }
 ];
-var PROFILE_TOOL_NAMES = new Set(PROFILE_TOOLS.map((t) => t.name));
+var PROFILE_TOOL_NAMES = new Set(PROFILE_TOOLS.map((t2) => t2.name));
 async function callAccountTool(name, args, createProfile, newId) {
   if (name === "entrevista_de_perfil") return out(PROFILE_INTERVIEW);
   if (name !== "criar_perfil") return null;
@@ -1300,6 +1455,7 @@ var MAX_PLAN_DAYS = 14;
 var PILLAR_WINDOW_DAYS = 30;
 var TOPIC_WINDOW_DAYS = 14;
 var MIN_POSTS_FOR_CONCLUSIONS = 5;
+var AUTOCUT_IDS = AUTOCUT_THEMES.map((t2) => t2.id);
 var BPM_TOLERANCE = 10;
 var WEEKDAY = ["dom", "seg", "ter", "qua", "qui", "sex", "s\xE1b"];
 var DIRECTION_GUIDE = [
@@ -1327,12 +1483,14 @@ var MCP_TOOLS = [
   { name: "salvar_cenas", title: "Salvar cenas de apoio", description: "Para conte\xFAdo de cena de apoio (B-roll / prova visual): a lista de takes com instru\xE7\xE3o de filmagem. O app mostra cada take para gravar.", inputSchema: obj({ content_id: { type: "string" }, takes: { type: "array", description: "takes {ordem, nome, duracao_segundos, enquadramento, movimento_camera, local, luz, olhar, emocao, broll, erro_comum, fala_exata (opcional)}", items: { type: "object" } }, provas: { type: "array", items: { type: "string" }, description: "provas film\xE1veis do perfil que esta cena filma (ficam 'filmada' quando a cena for gravada)" } }, ["content_id", "takes"]), annotations: WRITE2 },
   { name: "registrar_metricas", title: "Registrar n\xFAmeros do post", description: "Salva os n\xFAmeros REAIS de um post (ex.: lidos no Metricool ou no painel da rede) para o app e o ranking. Nunca invente n\xFAmeros.", inputSchema: obj({ content_id: { type: "string" }, visualizacoes: { type: "number" }, curtidas: { type: "number" }, comentarios: { type: "number" }, compartilhamentos: { type: "number" }, salvamentos: { type: "number" }, retencao: { type: "number", description: "% de conclus\xE3o/reten\xE7\xE3o m\xE9dia (0\u2013100)" }, tempo_medio_segundos: { type: "number" }, seguidores_ganhos: { type: "number" }, fonte: { type: "string", description: "ex.: Metricool, Instagram" } }, ["content_id", "visualizacoes"]), annotations: WRITE2 },
   { name: "listar_musicas", title: "M\xFAsicas licenciadas", description: "Faixas da biblioteca licenciada (id, clima, dura\xE7\xE3o, licen\xE7a). Use o id em direcao.musica.id. Conta de empresa s\xF3 v\xEA faixas com licen\xE7a comercial.", inputSchema: obj({ clima: { type: "string", description: `opcional: ${Object.keys(MOOD_LABEL).join(", ")}` }, bpm: { type: "number", description: "opcional (as faixas ainda n\xE3o t\xEAm BPM medido)" } }), annotations: RO2 },
+  { name: "propor_edicao", title: "Propor a edi\xE7\xE3o", description: "Depois de ver o que foi gravado (ler_status_gravacao), prop\xF5e a montagem: estilo AutoCut, m\xFAsica, volume e trecho, com o motivo. O criador v\xEA no app e escolhe MONTAR ASSIM (monta) ou AJUSTAR. Nada \xE9 montado nem publicado sem ele.", inputSchema: obj({ content_id: { type: "string" }, autocut: { type: "string", enum: [...AUTOCUT_IDS], description: `estilo da montagem (cortes, zoom, transi\xE7\xE3o, ritmo): ${AUTOCUT_THEMES.map((t2) => `${t2.id} = ${t2.label.replace(/^\S+\s/, "")}`).join("; ")}` }, musica: { type: "string", description: 'id de listar_musicas, "auto", "none" ou um clima' }, volume: { type: "number", description: "0.05 a 0.45, relativo \xE0 voz (0.22 padr\xE3o)" }, inicio_musica_s: { type: "number", description: "segundo da faixa onde a trilha come\xE7a (s\xF3 com faixa espec\xEDfica)" }, motivo: { type: "string", description: "por que esta edi\xE7\xE3o, em 1\u20132 frases simples" } }, ["content_id", "motivo"]), annotations: WRITE2 },
+  { name: "listar_takes", title: "Takes gravados", description: "Cada take gravado do conte\xFAdo, por parte do roteiro: n\xFAmero do take, dura\xE7\xE3o, resolu\xE7\xE3o, c\xE2mera, se subiu, se foi descartado e uma checagem t\xE9cnica (dura\xE7\xE3o \xD7 texto, resolu\xE7\xE3o, orienta\xE7\xE3o). N\xE3o \xE9 nota de viralidade. A montagem usa o take mais recente n\xE3o descartado de cada parte.", inputSchema: obj({ content_id: { type: "string" } }, ["content_id"]), annotations: RO2 },
   { name: "ler_status_gravacao", title: "Status da grava\xE7\xE3o", description: "O que j\xE1 foi gravado (por take/parte), o que falta, se j\xE1 subiu e como est\xE1 a montagem do v\xEDdeo.", inputSchema: obj({ content_id: { type: "string" } }, ["content_id"]), annotations: RO2 },
   { name: "registrar_melhoria", title: "Registrar melhoria", description: "Manda uma sugest\xE3o de melhoria do app/conector para o backlog do desenvolvedor, com contexto e crit\xE9rio de aceite. Use para toda recomenda\xE7\xE3o de mudan\xE7a no sistema.", inputSchema: obj({ titulo: { type: "string" }, descricao: { type: "string", description: "o problema, a proposta e o crit\xE9rio de aceite" }, prioridade: { type: "string", enum: ["baixa", "media", "alta"] } }, ["titulo", "descricao"]), annotations: WRITE2 },
   { name: "listar_melhorias", title: "Melhorias pedidas", description: "Melhorias j\xE1 registradas e o andamento (nova, no backlog, feita, recusada).", inputSchema: obj({}), annotations: RO2 },
   ...PROFILE_TOOLS
 ];
-var text2 = (t, isError = false) => ({ content: [{ type: "text", text: t }], ...isError ? { isError: true } : {} });
+var text2 = (t2, isError = false) => ({ content: [{ type: "text", text: t2 }], ...isError ? { isError: true } : {} });
 function todayBrasilia(now = /* @__PURE__ */ new Date()) {
   return new Date(now.getTime() - 3 * 60 * 60 * 1e3).toISOString().slice(0, 10);
 }
@@ -1440,7 +1598,7 @@ async function blockedTopics(store) {
     const k = topic.trim().toLowerCase();
     if (k) counts.set(k, (counts.get(k) ?? 0) + 1);
   }
-  const list2 = [...counts.entries()].sort((a, b) => b[1] - a[1]).map(([t, n]) => `- ${t}${n > 1 ? ` (${n}x)` : ""}`);
+  const list2 = [...counts.entries()].sort((a, b) => b[1] - a[1]).map(([t2, n]) => `- ${t2}${n > 1 ? ` (${n}x)` : ""}`);
   return `Assuntos BLOQUEADOS (usados nos \xFAltimos ${TOPIC_WINDOW_DAYS} dias \u2014 escolha outro):
 ${list2.join("\n")}`;
 }
@@ -1505,11 +1663,13 @@ ${lines.join("\n")}`);
     const business = (await store.profile()).kind === "empresa";
     const mood = typeof args.clima === "string" ? normalizeMood(args.clima) || null : null;
     const bpm = typeof args.bpm === "number" ? args.bpm : null;
-    const list2 = MUSIC_LIBRARY.filter((t) => (!business || t.license === "comercial") && (!mood || t.mood === mood) && (bpm === null || t.bpm !== null && Math.abs(t.bpm - bpm) <= BPM_TOLERANCE));
+    const favs = new Set(await store.musicFavorites());
+    const fav = (id2) => favs.has(id2) ? " \xB7 \u2665 favorita do criador" : "";
+    const list2 = MUSIC_LIBRARY.filter((t2) => (!business || t2.license === "comercial") && (!mood || t2.mood === mood) && (bpm === null || t2.bpm !== null && Math.abs(t2.bpm - bpm) <= BPM_TOLERANCE));
     const own = (await store.ownMusic()).filter((m) => !business || m.comercial);
-    const ownRows = mood || bpm !== null ? [] : own.map((m) => `- id ${ownMusicId(m.id)} \xB7 "${m.titulo}" \xB7 m\xFAsica pr\xF3pria do criador \xB7 licen\xE7a ${m.comercial ? "comercial (declarada)" : "pessoal (declarada)"}`);
+    const ownRows = mood || bpm !== null ? [] : own.map((m) => `- id ${ownMusicId(m.id)} \xB7 "${m.titulo}" \xB7 m\xFAsica pr\xF3pria do criador \xB7 licen\xE7a ${m.comercial ? "comercial (declarada)" : "pessoal (declarada)"}${fav(ownMusicId(m.id))}`);
     if (!list2.length && !ownRows.length) return text2(`Nenhuma faixa com esse filtro${bpm !== null ? ` (BPM ${bpm} \xB1 ${BPM_TOLERANCE})` : ""}.`);
-    const rows = list2.map((t) => `- id ${t.id} \xB7 "${t.title}" \u2014 ${t.artist} \xB7 clima ${t.mood} (${MOOD_LABEL[t.mood]}) \xB7 ${t.bpm ? `${t.bpm} BPM` : "sem batida definida"} \xB7 ${t.durationSec}s \xB7 licen\xE7a ${t.license}`);
+    const rows = [...list2].sort((a, b) => Number(favs.has(b.id)) - Number(favs.has(a.id))).map((t2) => `- id ${t2.id} \xB7 "${t2.title}" \u2014 ${t2.artist} \xB7 clima ${t2.mood} (${MOOD_LABEL[t2.mood]}) \xB7 ${t2.bpm ? `${t2.bpm} BPM` : "sem batida definida"} \xB7 ${t2.durationSec}s \xB7 licen\xE7a ${t2.license}${fav(t2.id)}`);
     const note = `Use o valor de "clima" (ex.: ${list2[0]?.mood ?? "reflexao"}) em direcao.musica.clima. BPM medido no \xE1udio. Tend\xEAncia ("em alta"): ainda sem fonte de dados \u2014 n\xE3o informada.`;
     return text2([...ownRows, ...rows, note].join("\n"));
   }
@@ -1552,8 +1712,8 @@ ${lines.join("\n")}`);
     if (draft) {
       const segs = buildSegments(draft, { selectedHook: 0, userEdited: false, closingPhrase: profile.closingPhrase, business: profile.kind === "empresa" });
       for (const sg of segs) {
-        const t = rec.takes.filter((x) => x.segmentIndex === sg.index);
-        lines.push(`- ${sg.index + 1}. ${sg.label}: ${!t.length ? "falta gravar" : t.some((x) => x.synced) ? "gravado e enviado" : "gravado, ainda subindo"}`);
+        const t2 = rec.takes.filter((x) => x.segmentIndex === sg.index);
+        lines.push(`- ${sg.index + 1}. ${sg.label}: ${!t2.length ? "falta gravar" : t2.some((x) => x.synced) ? "gravado e enviado" : "gravado, ainda subindo"}`);
       }
     } else lines.push("- ainda sem roteiro");
     const whole = rec.takes.filter((x) => x.segmentIndex === null);
@@ -1566,6 +1726,30 @@ Postado em ${brt(script.postedAt)}` : "";
 ${lines.join("\n")}
 Montagem: ${render}${posted}`);
   }
+  if (name === "listar_takes") {
+    const [takes, script, profile] = await Promise.all([store.takes(content.id), store.readScript(content.id), store.profile()]);
+    if (!takes.length) return text2(`Nenhum take gravado ainda em "${content.title}".`);
+    const draft = script.draft ?? script.pending?.draft ?? null;
+    const segs = draft ? buildSegments(draft, { selectedHook: 0, userEdited: false, closingPhrase: profile.closingPhrase, business: profile.kind === "empresa" }) : [];
+    const groups = /* @__PURE__ */ new Map();
+    for (const t2 of takes) groups.set(t2.segmentIndex, [...groups.get(t2.segmentIndex) ?? [], t2]);
+    const blocks = [...groups.entries()].sort(([a], [b]) => (a ?? -1) - (b ?? -1)).map(([idx, list2]) => {
+      const seg = idx === null ? null : segs[idx];
+      const title = idx === null ? "V\xEDdeo inteiro de uma vez" : `Parte ${idx + 1}${seg ? ` \u2014 ${seg.label}` : ""}`;
+      const used = [...list2].reverse().find((t2) => !t2.discarded)?.id;
+      const rows = list2.map((t2, i) => {
+        const facts = [t2.durationMs !== null ? `${(t2.durationMs / 1e3).toFixed(1)}s` : "dura\xE7\xE3o ?", t2.width && t2.height ? `${t2.width}x${t2.height}` : "", t2.camera === "front" ? "c\xE2mera frontal" : t2.camera === "back" ? "c\xE2mera traseira" : "", t2.favorite ? "\u2665" : ""].filter(Boolean).join(" \xB7 ");
+        const status = t2.discarded ? "DESCARTADO" : t2.id === used ? "USADO NA MONTAGEM" : "reserva";
+        const notes = t2.discarded ? [] : takeTechNotes(t2, seg?.text ?? "");
+        return `  - take ${i + 1} (id ${t2.id}) \xB7 ${status} \xB7 ${facts}${notes.length ? `
+    aten\xE7\xE3o: ${notes.join("; ")}` : ""}`;
+      });
+      return `${title}:
+${rows.join("\n")}`;
+    });
+    return text2(`Takes de "${content.title}" (checagem t\xE9cnica, n\xE3o mede qualidade da fala nem viralidade):
+${blocks.join("\n")}`);
+  }
   if (name === "salvar_cenas") {
     if (content.format !== "broll") return text2("salvar_cenas \xE9 s\xF3 para cena de apoio (B-roll). Para v\xEDdeo com fala use salvar_roteiro (com direcao.takes).", true);
     const parsed = ScenesSchema.safeParse(args.takes);
@@ -1573,13 +1757,24 @@ Montagem: ${render}${posted}`);
 - ${parsed.error.issues.map((i) => `${i.path.join(".")}: ${i.message}`).join("\n- ")}`, true);
     const profile = await store.profile();
     const biz = profile.kind === "empresa" ? profile.business : void 0;
-    const unproven = biz ? pendingClaimsIn(parsed.data.map((t) => `${t.fala_exata} ${t.broll}`).join(" "), biz.pendingClaims ?? []) : [];
+    const unproven = biz ? pendingClaimsIn(parsed.data.map((t2) => `${t2.fala_exata} ${t2.broll}`).join(" "), biz.pendingClaims ?? []) : [];
     if (unproven.length) return text2(`A cena afirma algo ainda sem prova: ${unproven.join("; ")}.`, true);
     await store.saveScenes(content.id, parsed.data);
     const provas = Array.isArray(args.provas) ? args.provas.filter((x) => typeof x === "string" && x.trim().length >= 3).map((x) => x.trim().slice(0, 300)) : [];
     const current = new Map((await store.proofs()).map((p) => [p.descricao.toLowerCase(), p.status]));
     for (const d of provas) await store.saveProof({ descricao: d, status: current.get(d.toLowerCase()) ?? "falta_filmar", contentItemId: content.id });
     return text2(`${parsed.data.length} take(s) de "${content.title}" enviados para o Post.ai. Aparecem no app ao abrir esta cena.${provas.length ? ` Provas ligadas: ${provas.join("; ")}.` : ""}`);
+  }
+  if (name === "propor_edicao") {
+    if (content.format !== "thought" && content.format !== "main_video") return text2("propor_edicao \xE9 para v\xEDdeo com fala (Pensamento do Dia ou V\xEDdeo principal).", true);
+    const motivo = typeof args.motivo === "string" ? args.motivo.trim().slice(0, 600) : "";
+    if (motivo.length < 3) return text2("Explique o motivo em 1\u20132 frases simples (o criador l\xEA no app antes de aceitar).", true);
+    const [profile, own] = await Promise.all([store.profile(), store.ownMusic()]);
+    const parsed = parseEditProposal(args, { business: profile.kind === "empresa", own });
+    if (!parsed.ok) return text2(`Ajuste e mande de novo:
+- ${parsed.errors.join("\n- ")}`, true);
+    await store.saveEditProposal(content.id, parsed.edit, motivo);
+    return text2(`Proposta enviada para "${content.title}": ${describeEditProposal(parsed.edit, own)}. O criador v\xEA ao finalizar o v\xEDdeo no app e escolhe MONTAR ASSIM ou AJUSTAR \u2014 nada \xE9 montado sem ele. Acompanhe com ler_status_gravacao.`);
   }
   if (content.format === "broll") return text2("Cena de apoio (B-roll, sem roteiro falado): use salvar_cenas com a lista de takes (nome, duracao_segundos, enquadramento, movimento_camera, local, luz, broll, erro_comum).", true);
   if (content.format !== "thought" && content.format !== "main_video") return text2("Este conte\xFAdo n\xE3o usa roteiro falado (\xE9 story).", true);
@@ -1615,7 +1810,7 @@ ${contractLimits().join("\n")}`;
       problems.push("hist\xF3rias de cliente: este perfil n\xE3o tem caso real autorizado \u2014 cadastre com cadastrar_caso_real (com autoriza\xE7\xE3o) antes.");
     }
     const [fps, topics] = await Promise.all([store.recentFingerprints(), store.recentTopics(TOPIC_WINDOW_DAYS)]);
-    const recent = [...fps, ...topics.map((t) => ({ type: "topic", value: normalizeText(t.topic), contentItemId: t.contentItemId }))].filter((f) => f.contentItemId !== content.id);
+    const recent = [...fps, ...topics.map((t2) => ({ type: "topic", value: normalizeText(t2.topic), contentItemId: t2.contentItemId }))].filter((f) => f.contentItemId !== content.id);
     const report = checkRepetition(fingerprintsFor(draft), recent);
     if (report.repeated) {
       const ids = [...new Set(report.hits.map((h) => h.previousContentId).filter((x) => Boolean(x)))];
@@ -1787,11 +1982,11 @@ function supabaseMcpStore(db, workspaceId, userId) {
     const { data, error } = await db.from("recording_tasks").select("id, title, scheduled_for").eq("workspace_id", workspaceId).eq("kind", "broll").eq("optional", false).is("content_item_id", null).gte("scheduled_for", from).lt("scheduled_for", to);
     if (error) throw new Error(error.message);
     const slug = pillars.find((p) => p.slug === "demonstracao")?.slug ?? pillars[0]?.slug ?? "";
-    for (const t of data ?? []) {
+    for (const t2 of data ?? []) {
       const id = crypto.randomUUID();
-      const ci = await db.from("content_items").insert({ id, workspace_id: workspaceId, pillar_slug: slug, plan_date: date, scheduled_for: t.scheduled_for, format: "broll", title: t.title, status: "planned", structured_payload: {} });
+      const ci = await db.from("content_items").insert({ id, workspace_id: workspaceId, pillar_slug: slug, plan_date: date, scheduled_for: t2.scheduled_for, format: "broll", title: t2.title, status: "planned", structured_payload: {} });
       if (ci.error) throw new Error(ci.error.message);
-      const up = await db.from("recording_tasks").update({ content_item_id: id, updated_at: (/* @__PURE__ */ new Date()).toISOString() }).eq("id", t.id);
+      const up = await db.from("recording_tasks").update({ content_item_id: id, updated_at: (/* @__PURE__ */ new Date()).toISOString() }).eq("id", t2.id);
       if (up.error) throw new Error(up.error.message);
     }
     return data?.length ?? 0;
@@ -1829,7 +2024,7 @@ function supabaseMcpStore(db, workspaceId, userId) {
       const err = takes.error ?? renders.error;
       if (err) throw new Error(err.message);
       return {
-        takes: (takes.data ?? []).filter((t) => !(t.tags ?? []).includes("descartado")).map((t) => ({ segmentIndex: t.segment_index, synced: t.media_files?.state === "uploaded_original" })),
+        takes: (takes.data ?? []).filter((t2) => !(t2.tags ?? []).includes("descartado")).map((t2) => ({ segmentIndex: t2.segment_index, synced: t2.media_files?.state === "uploaded_original" })),
         renders: (renders.data ?? []).map((r) => ({
           status: r.status,
           error: r.error ?? null,
@@ -1839,10 +2034,36 @@ function supabaseMcpStore(db, workspaceId, userId) {
         }))
       };
     },
+    async takes(contentId) {
+      const { data, error } = await db.from("takes").select("id, segment_index, created_at, tags, favorite, camera, media_files(state, duration_ms, width, height)").eq("workspace_id", workspaceId).eq("content_item_id", contentId).is("deleted_at", null).order("created_at").limit(100);
+      if (error) throw new Error(error.message);
+      return (data ?? []).map((t2) => ({
+        id: t2.id,
+        segmentIndex: t2.segment_index,
+        createdAt: t2.created_at,
+        discarded: (t2.tags ?? []).includes("descartado"),
+        synced: t2.media_files?.state === "uploaded_original",
+        favorite: t2.favorite,
+        camera: t2.camera,
+        durationMs: t2.media_files?.duration_ms ?? null,
+        width: t2.media_files?.width ?? null,
+        height: t2.media_files?.height ?? null
+      }));
+    },
     async ownMusic() {
       const { data, error } = await db.from("musicas_proprias").select("id, titulo, comercial, storage_key").eq("workspace_id", workspaceId).order("created_at", { ascending: false }).limit(50);
       if (error) throw new Error(error.message);
       return (data ?? []).map((m) => ({ id: m.id, titulo: m.titulo, comercial: Boolean(m.comercial), storageKey: m.storage_key }));
+    },
+    async musicFavorites() {
+      const { data, error } = await db.from("musicas_favoritas").select("track_id").eq("workspace_id", workspaceId).limit(200);
+      if (error?.code === "42P01") return [];
+      if (error) throw new Error(error.message);
+      return [...new Set((data ?? []).map((r) => r.track_id))];
+    },
+    async saveEditProposal(contentId, edit, motivo) {
+      const { error } = await db.from("propostas_edicao").insert({ workspace_id: workspaceId, content_item_id: contentId, edit, motivo });
+      if (error) throw new Error(error.message);
     },
     async readScript(contentId) {
       const [script, content, pending] = await Promise.all([
@@ -1913,18 +2134,18 @@ function supabaseMcpStore(db, workspaceId, userId) {
           if (ci.error) throw new Error(ci.error.message);
         }
         if (plan.tasks.length) {
-          const rt = await db.from("recording_tasks").insert(plan.tasks.map((t) => ({
-            id: t.id,
+          const rt = await db.from("recording_tasks").insert(plan.tasks.map((t2) => ({
+            id: t2.id,
             workspace_id: workspaceId,
-            content_item_id: t.contentItemId,
-            scheduled_for: t.scheduledFor,
-            title: t.title,
-            kind: t.kind,
-            hint: t.hint,
-            suggested_duration_seconds: t.suggestedDurationSeconds,
-            optional: t.optional,
-            status: t.status,
-            updated_at: t.updatedAt
+            content_item_id: t2.contentItemId,
+            scheduled_for: t2.scheduledFor,
+            title: t2.title,
+            kind: t2.kind,
+            hint: t2.hint,
+            suggested_duration_seconds: t2.suggestedDurationSeconds,
+            optional: t2.optional,
+            status: t2.status,
+            updated_at: t2.updatedAt
           })));
           if (rt.error) throw new Error(rt.error.message);
         }
@@ -2081,8 +2302,8 @@ function supabaseMcpStore(db, workspaceId, userId) {
       if (linked.length) {
         const takes = await db.from("takes").select("content_item_id, tags, media_files(state)").eq("workspace_id", workspaceId).in("content_item_id", linked);
         if (takes.error) throw new Error(takes.error.message);
-        for (const t of takes.data ?? []) {
-          if (!(t.tags ?? []).includes("descartado") && t.media_files?.state === "uploaded_original") shot.add(t.content_item_id);
+        for (const t2 of takes.data ?? []) {
+          if (!(t2.tags ?? []).includes("descartado") && t2.media_files?.state === "uploaded_original") shot.add(t2.content_item_id);
         }
       }
       return rows.map((r) => ({ descricao: r.descricao, status: r.status === "filmada" || r.content_item_id && shot.has(r.content_item_id) ? "filmada" : "falta_filmar", contentItemId: r.content_item_id }));

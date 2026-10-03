@@ -1,60 +1,92 @@
-import { useCallback, useEffect, useState } from "react";
-import { Alert, Text, View } from "react-native";
+import { useState } from "react";
+import { Alert, Linking, Text, TextInput, View } from "react-native";
 import { ownMusicId, type OwnMusic } from "@postai/domain";
-import { listOwnMusic, uploadOwnMusic } from "../ownMusic";
+import { deleteOwnMusic, renameOwnMusic, uploadOwnMusic, type OwnMusicOrigin } from "../ownMusic";
 import { reportError } from "../telemetry";
-import { Button, Chip, colors, s } from "../ui";
+import { Button, colors, s } from "../ui";
+
+const ORIGINS: { origem: OwnMusicOrigin; label: string; business: string }[] = [
+  { origem: "minha", label: "É MINHA", business: "É MINHA" },
+  { origem: "licenciada", label: "TENHO LICENÇA", business: "TENHO LICENÇA COMERCIAL" },
+  { origem: "youtube_audio_library", label: "BIBLIOTECA DE ÁUDIO DO YOUTUBE", business: "BIBLIOTECA DE ÁUDIO DO YOUTUBE" },
+];
 
 /**
- * Músicas próprias do perfil: escolher uma já enviada ou enviar outra (o criador declara a licença).
- * Empresa: só aparece/usa faixa com licença comercial declarada.
+ * Gerenciar as músicas próprias do perfil: enviar (MP3, M4A, AAC, WAV) dizendo de onde veio, renomear, tirar da
+ * biblioteca. A origem/licença é a DECLARAÇÃO do criador (não é comprovação jurídica). Para YouTube, só arquivo
+ * obtido na Biblioteca de Áudio do YouTube — o app nunca baixa nem separa áudio de vídeo do YouTube.
  */
-export function OwnMusicSection({ workspaceId, business, selected, onSelect }: {
-  workspaceId: string; business: boolean; selected: string; onSelect: (musicId: string) => void;
+export function OwnMusicSection({ workspaceId, business, list, usage, onListChange, onSelect }: {
+  workspaceId: string; business: boolean; list: OwnMusic[]; usage: Record<string, number>;
+  onListChange: (l: OwnMusic[]) => void; onSelect: (musicId: string) => void;
 }) {
-  const [list, setList] = useState<OwnMusic[]>([]);
+  const [picking, setPicking] = useState(false);
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
-  const load = useCallback(() => void listOwnMusic(workspaceId).then(setList).catch(() => undefined), [workspaceId]);
-  useEffect(load, [load]);
+  const [editing, setEditing] = useState<{ id: string; name: string } | null>(null);
 
-  const send = (origem: "minha" | "licenciada", comercial: boolean) => {
+  const send = (origem: OwnMusicOrigin) => {
+    setPicking(false);
     setBusy(true);
     setMsg(null);
-    uploadOwnMusic(workspaceId, { origem, comercial })
+    // empresa: só pode enviar declarando uso comercial; pessoal: licença declarada vale para o perfil pessoal
+    uploadOwnMusic(workspaceId, { origem, comercial: true })
       .then((m) => {
         if (!m) return;
-        setList((l) => [m, ...l]);
+        onListChange([m, ...list]);
         onSelect(ownMusicId(m.id));
-        setMsg(`“${m.titulo}” enviada e escolhida para este vídeo.`);
+        setMsg(`“${m.titulo}” salva em Minhas músicas e escolhida para este vídeo.`);
       })
       .catch((e: unknown) => { reportError(e, "own music"); setMsg(e instanceof Error ? e.message : String(e)); })
       .finally(() => setBusy(false));
   };
 
-  // a licença é do criador: o app só registra a declaração (e empresa precisa de licença comercial)
-  const ask = () => Alert.alert(
-    "Essa música é sua ou você tem licença?",
-    business
-      ? "Perfil de empresa: só envie música sua ou com licença de uso COMERCIAL (ex.: Biblioteca de Áudio do YouTube, faixas compradas). Música de artista sem licença derruba o vídeo."
-      : "Envie música sua ou com licença de uso (ex.: Biblioteca de Áudio do YouTube). Música de artista sem licença faz a rede tirar o som ou o vídeo.",
-    [
-      { text: "Cancelar", style: "cancel" },
-      { text: "É minha", onPress: () => send("minha", true) },
-      { text: business ? "Tenho licença comercial" : "Tenho licença", onPress: () => send("licenciada", true) },
-    ],
-  );
+  const saveName = () => {
+    if (!editing) return;
+    const { id, name } = editing;
+    renameOwnMusic(workspaceId, id, name)
+      .then(() => { onListChange(list.map((m) => (m.id === id ? { ...m, titulo: name.trim().slice(0, 120) } : m))); setEditing(null); })
+      .catch((e: unknown) => setMsg(e instanceof Error ? e.message : String(e)));
+  };
+
+  const remove = (m: OwnMusic) => Alert.alert(`Tirar “${m.titulo}” da biblioteca?`, "Vídeos já prontos não mudam. Vídeo ainda não montado que usa esta música passa a usar a automática.", [
+    { text: "Cancelar", style: "cancel" },
+    { text: "Tirar", style: "destructive", onPress: () => void deleteOwnMusic(workspaceId, m).then(() => onListChange(list.filter((x) => x.id !== m.id))).catch((e: unknown) => setMsg(e instanceof Error ? e.message : String(e))) },
+  ]);
 
   const usable = list.filter((m) => !business || m.comercial);
   return (
     <View style={{ gap: 8 }} testID="own-music">
-      <Text style={s.label}>Minhas músicas</Text>
-      {usable.length ? (
-        <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8 }}>
-          {usable.map((m) => <Chip key={m.id} label={`🎤 ${m.titulo}`} selected={selected === ownMusicId(m.id)} onPress={() => onSelect(ownMusicId(m.id))} testID={`own-${m.id}`} />)}
+      {usable.map((m) => (
+        <View key={m.id} style={[s.row, { alignItems: "center", gap: 6, flexWrap: "wrap" }]} testID={`own-manage-${m.id}`}>
+          {editing?.id === m.id ? (
+            <>
+              <TextInput value={editing.name} onChangeText={(name) => setEditing({ id: m.id, name })} style={[s.input, { flex: 1, minWidth: 140 }]} autoFocus testID={`own-name-${m.id}`} accessibilityLabel="Nome da música" />
+              <Button compact label="SALVAR" onPress={saveName} testID={`own-save-${m.id}`} />
+            </>
+          ) : (
+            <>
+              <Text style={[s.body, { flex: 1 }]} numberOfLines={1}>{`🎤 ${m.titulo}${usage[ownMusicId(m.id)] ? ` · em ${usage[ownMusicId(m.id)]} vídeo(s)` : ""}`}</Text>
+              <Button compact variant="ghost" label="RENOMEAR" onPress={() => setEditing({ id: m.id, name: m.titulo })} testID={`own-rename-${m.id}`} />
+              <Button compact variant="ghost" label="TIRAR" onPress={() => remove(m)} testID={`own-delete-${m.id}`} />
+            </>
+          )}
         </View>
-      ) : null}
-      <Button compact variant="secondary" label="＋ ENVIAR MINHA MÚSICA" loading={busy} onPress={ask} testID="upload-own-music" />
+      ))}
+      {picking ? (
+        <View style={{ gap: 6 }} testID="own-origin">
+          <Text style={s.label}>De onde veio essa música?</Text>
+          <Text style={s.muted}>{business ? "Perfil de empresa: só música sua ou com licença de uso COMERCIAL." : "Música de artista sem licença faz a rede tirar o som ou o vídeo."}</Text>
+          {ORIGINS.map((o) => <Button key={o.origem} compact variant="secondary" label={business ? o.business : o.label} onPress={() => send(o.origem)} testID={`own-origin-${o.origem}`} />)}
+          <Button compact variant="ghost" label="CANCELAR" onPress={() => setPicking(false)} />
+        </View>
+      ) : (
+        <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8 }}>
+          <Button compact variant="secondary" label="＋ ENVIAR MINHA MÚSICA" loading={busy} onPress={() => setPicking(true)} testID="upload-own-music" />
+          <Button compact variant="ghost" label="♫ ABRIR BIBLIOTECA DE ÁUDIO DO YOUTUBE" onPress={() => void Linking.openURL("https://www.youtube.com/audiolibrary")} testID="youtube-audio-library" />
+        </View>
+      )}
+      <Text style={s.muted}>MP3, M4A, AAC ou WAV (até 20 MB). Da Biblioteca de Áudio do YouTube: baixe lá e envie aqui. O app não baixa nem separa áudio de vídeos do YouTube.</Text>
       {msg ? <Text style={{ color: colors.info, fontWeight: "700" }}>{msg}</Text> : null}
     </View>
   );

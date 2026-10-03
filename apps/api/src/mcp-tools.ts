@@ -1,7 +1,7 @@
 import {
-  MOOD_LABEL, MUSIC_LIBRARY, buildManualPrompt, contractLimits, directionReport, normalizeMood, buildSegments, checkRepetition, describeRepetition, directionIssues, directorIssues, engagementRate, finalizeDraft, fingerprintsFor, mentionsPrice, parseDraft,
+  AUTOCUT_THEMES, MOOD_LABEL, MUSIC_LIBRARY, buildManualPrompt, contractLimits, directionReport, normalizeMood, buildSegments, checkRepetition, describeRepetition, directionIssues, directorIssues, engagementRate, finalizeDraft, fingerprintsFor, mentionsPrice, parseDraft,
   normalizeText, pendingClaimsIn, projectBrief, rankBy, sharesPer1k, type RankRow, type RankedPost,
-  ScenesSchema, ownMusicId, type ContentDraft, type CreatorProfile, type OwnMusic, type Scenes, type EditChoices, type Fingerprint, type PostMetrics, type ProjectInfo,
+  ScenesSchema, describeEditProposal, takeTechNotes, ownMusicId, parseEditProposal, type EditProposal, type ContentDraft, type CreatorProfile, type OwnMusic, type Scenes, type EditChoices, type Fingerprint, type PostMetrics, type ProjectInfo,
 } from "@postai/domain";
 import {
   PROFILE_TOOLS, authorized, callAccountTool, callProfileDataTool, describeCases, describeProofs, type NewProfile, type ProfileDataStore,
@@ -32,6 +32,10 @@ export interface McpScript {
 }
 export interface McpImprovement { id: string; titulo: string; prioridade: string; status: string; issueNumber: number | null; createdAt: string }
 export interface McpProfile { id: string; name: string; kind: "pessoal" | "empresa"; signature: string }
+export interface McpTake {
+  id: string; segmentIndex: number | null; createdAt: string; discarded: boolean; synced: boolean; favorite: boolean;
+  camera: string | null; durationMs: number | null; width: number | null; height: number | null;
+}
 export interface McpRecording {
   /** takes válidos (não descartados): parte gravada (null = vídeo inteiro de uma vez) e se já subiu */
   takes: { segmentIndex: number | null; synced: boolean }[];
@@ -57,8 +61,14 @@ export interface McpStore extends ProfileDataStore {
   saveMetrics(contentId: string, metrics: PostMetrics): Promise<void>;
   readScript(contentId: string): Promise<McpScript>;
   recordingStatus(contentId: string): Promise<McpRecording>;
+  /** todos os takes do conteúdo (inclusive descartados), mais antigos primeiro */
+  takes(contentId: string): Promise<McpTake[]>;
   /** músicas próprias que o criador enviou no app (com a licença declarada) */
   ownMusic(): Promise<OwnMusic[]>;
+  /** faixas favoritadas no app por quem é do perfil (ids da biblioteca ou own:<id>) */
+  musicFavorites(): Promise<string[]>;
+  /** proposta de edição do diretor: o app mostra MONTAR ASSIM / AJUSTAR; nada monta sem o criador */
+  saveEditProposal(contentId: string, edit: EditProposal, motivo: string): Promise<void>;
   /** cria o plano dos dias que ainda não têm (o app usa o mesmo plano ao abrir o dia) */
   planDays(startDate: string, days: number): Promise<{ date: string; created: boolean; items: McpContent[] }[]>;
   /** pilares com roteiro nos últimos N dias (contagem por slug) */
@@ -85,6 +95,7 @@ const MAX_PLAN_DAYS = 14;
 const PILLAR_WINDOW_DAYS = 30;
 const TOPIC_WINDOW_DAYS = 14;
 const MIN_POSTS_FOR_CONCLUSIONS = 5;
+const AUTOCUT_IDS = AUTOCUT_THEMES.map((t) => t.id);
 const BPM_TOLERANCE = 10;
 const WEEKDAY = ["dom", "seg", "ter", "qua", "qui", "sex", "sáb"];
 
@@ -116,6 +127,8 @@ export const MCP_TOOLS = [
   { name: "salvar_cenas", title: "Salvar cenas de apoio", description: "Para conteúdo de cena de apoio (B-roll / prova visual): a lista de takes com instrução de filmagem. O app mostra cada take para gravar.", inputSchema: obj({ content_id: { type: "string" }, takes: { type: "array", description: "takes {ordem, nome, duracao_segundos, enquadramento, movimento_camera, local, luz, olhar, emocao, broll, erro_comum, fala_exata (opcional)}", items: { type: "object" } }, provas: { type: "array", items: { type: "string" }, description: "provas filmáveis do perfil que esta cena filma (ficam 'filmada' quando a cena for gravada)" } }, ["content_id", "takes"]), annotations: WRITE },
   { name: "registrar_metricas", title: "Registrar números do post", description: "Salva os números REAIS de um post (ex.: lidos no Metricool ou no painel da rede) para o app e o ranking. Nunca invente números.", inputSchema: obj({ content_id: { type: "string" }, visualizacoes: { type: "number" }, curtidas: { type: "number" }, comentarios: { type: "number" }, compartilhamentos: { type: "number" }, salvamentos: { type: "number" }, retencao: { type: "number", description: "% de conclusão/retenção média (0–100)" }, tempo_medio_segundos: { type: "number" }, seguidores_ganhos: { type: "number" }, fonte: { type: "string", description: "ex.: Metricool, Instagram" } }, ["content_id", "visualizacoes"]), annotations: WRITE },
   { name: "listar_musicas", title: "Músicas licenciadas", description: "Faixas da biblioteca licenciada (id, clima, duração, licença). Use o id em direcao.musica.id. Conta de empresa só vê faixas com licença comercial.", inputSchema: obj({ clima: { type: "string", description: `opcional: ${Object.keys(MOOD_LABEL).join(", ")}` }, bpm: { type: "number", description: "opcional (as faixas ainda não têm BPM medido)" } }), annotations: RO },
+  { name: "propor_edicao", title: "Propor a edição", description: "Depois de ver o que foi gravado (ler_status_gravacao), propõe a montagem: estilo AutoCut, música, volume e trecho, com o motivo. O criador vê no app e escolhe MONTAR ASSIM (monta) ou AJUSTAR. Nada é montado nem publicado sem ele.", inputSchema: obj({ content_id: { type: "string" }, autocut: { type: "string", enum: [...AUTOCUT_IDS], description: `estilo da montagem (cortes, zoom, transição, ritmo): ${AUTOCUT_THEMES.map((t) => `${t.id} = ${t.label.replace(/^\S+\s/, "")}`).join("; ")}` }, musica: { type: "string", description: "id de listar_musicas, \"auto\", \"none\" ou um clima" }, volume: { type: "number", description: "0.05 a 0.45, relativo à voz (0.22 padrão)" }, inicio_musica_s: { type: "number", description: "segundo da faixa onde a trilha começa (só com faixa específica)" }, motivo: { type: "string", description: "por que esta edição, em 1–2 frases simples" } }, ["content_id", "motivo"]), annotations: WRITE },
+  { name: "listar_takes", title: "Takes gravados", description: "Cada take gravado do conteúdo, por parte do roteiro: número do take, duração, resolução, câmera, se subiu, se foi descartado e uma checagem técnica (duração × texto, resolução, orientação). Não é nota de viralidade. A montagem usa o take mais recente não descartado de cada parte.", inputSchema: obj({ content_id: { type: "string" } }, ["content_id"]), annotations: RO },
   { name: "ler_status_gravacao", title: "Status da gravação", description: "O que já foi gravado (por take/parte), o que falta, se já subiu e como está a montagem do vídeo.", inputSchema: obj({ content_id: { type: "string" } }, ["content_id"]), annotations: RO },
   { name: "registrar_melhoria", title: "Registrar melhoria", description: "Manda uma sugestão de melhoria do app/conector para o backlog do desenvolvedor, com contexto e critério de aceite. Use para toda recomendação de mudança no sistema.", inputSchema: obj({ titulo: { type: "string" }, descricao: { type: "string", description: "o problema, a proposta e o critério de aceite" }, prioridade: { type: "string", enum: ["baixa", "media", "alta"] } }, ["titulo", "descricao"]), annotations: WRITE },
   { name: "listar_melhorias", title: "Melhorias pedidas", description: "Melhorias já registradas e o andamento (nova, no backlog, feita, recusada).", inputSchema: obj({}), annotations: RO },
@@ -293,12 +306,16 @@ export async function callProfileTool(store: McpStore, name: string, args: Json,
     const business = (await store.profile()).kind === "empresa";
     const mood = typeof args.clima === "string" ? normalizeMood(args.clima) || null : null;
     const bpm = typeof args.bpm === "number" ? args.bpm : null;
+    const favs = new Set(await store.musicFavorites());
+    const fav = (id: string) => (favs.has(id) ? " · ♥ favorita do criador" : "");
     const list = MUSIC_LIBRARY.filter((t) => (!business || t.license === "comercial") && (!mood || t.mood === mood) && (bpm === null || (t.bpm !== null && Math.abs(t.bpm - bpm) <= BPM_TOLERANCE)));
     // músicas próprias do criador (sem clima/BPM medidos); empresa só vê as com licença comercial declarada
     const own = (await store.ownMusic()).filter((m) => !business || m.comercial);
-    const ownRows = mood || bpm !== null ? [] : own.map((m) => `- id ${ownMusicId(m.id)} · "${m.titulo}" · música própria do criador · licença ${m.comercial ? "comercial (declarada)" : "pessoal (declarada)"}`);
+    const ownRows = mood || bpm !== null ? [] : own.map((m) => `- id ${ownMusicId(m.id)} · "${m.titulo}" · música própria do criador · licença ${m.comercial ? "comercial (declarada)" : "pessoal (declarada)"}${fav(ownMusicId(m.id))}`);
     if (!list.length && !ownRows.length) return text(`Nenhuma faixa com esse filtro${bpm !== null ? ` (BPM ${bpm} ± ${BPM_TOLERANCE})` : ""}.`);
-    const rows = list.map((t) => `- id ${t.id} · "${t.title}" — ${t.artist} · clima ${t.mood} (${MOOD_LABEL[t.mood]}) · ${t.bpm ? `${t.bpm} BPM` : "sem batida definida"} · ${t.durationSec}s · licença ${t.license}`);
+    // favoritas primeiro (o criador já gostou delas)
+    const rows = [...list].sort((a, b) => Number(favs.has(b.id)) - Number(favs.has(a.id)))
+      .map((t) => `- id ${t.id} · "${t.title}" — ${t.artist} · clima ${t.mood} (${MOOD_LABEL[t.mood]}) · ${t.bpm ? `${t.bpm} BPM` : "sem batida definida"} · ${t.durationSec}s · licença ${t.license}${fav(t.id)}`);
     const note = `Use o valor de "clima" (ex.: ${list[0]?.mood ?? "reflexao"}) em direcao.musica.clima. BPM medido no áudio. Tendência ("em alta"): ainda sem fonte de dados — não informada.`;
     return text([...ownRows, ...rows, note].join("\n"));
   }
@@ -350,6 +367,27 @@ export async function callProfileTool(store: McpStore, name: string, args: Json,
     const posted = script.postedAt ? `\nPostado em ${brt(script.postedAt)}` : "";
     return text(`Gravação de "${content.title}" (${content.date}):\n${lines.join("\n")}\nMontagem: ${render}${posted}`);
   }
+  if (name === "listar_takes") {
+    const [takes, script, profile] = await Promise.all([store.takes(content.id), store.readScript(content.id), store.profile()]);
+    if (!takes.length) return text(`Nenhum take gravado ainda em "${content.title}".`);
+    const draft = script.draft ?? script.pending?.draft ?? null;
+    const segs = draft ? buildSegments(draft, { selectedHook: 0, userEdited: false, closingPhrase: profile.closingPhrase, business: profile.kind === "empresa" }) : [];
+    const groups = new Map<number | null, McpTake[]>();
+    for (const t of takes) groups.set(t.segmentIndex, [...(groups.get(t.segmentIndex) ?? []), t]);
+    const blocks = [...groups.entries()].sort(([a], [b]) => (a ?? -1) - (b ?? -1)).map(([idx, list]) => {
+      const seg = idx === null ? null : segs[idx];
+      const title = idx === null ? "Vídeo inteiro de uma vez" : `Parte ${idx + 1}${seg ? ` — ${seg.label}` : ""}`;
+      const used = [...list].reverse().find((t) => !t.discarded)?.id;
+      const rows = list.map((t, i) => {
+        const facts = [t.durationMs !== null ? `${(t.durationMs / 1000).toFixed(1)}s` : "duração ?", t.width && t.height ? `${t.width}x${t.height}` : "", t.camera === "front" ? "câmera frontal" : t.camera === "back" ? "câmera traseira" : "", t.favorite ? "♥" : ""].filter(Boolean).join(" · ");
+        const status = t.discarded ? "DESCARTADO" : t.id === used ? "USADO NA MONTAGEM" : "reserva";
+        const notes = t.discarded ? [] : takeTechNotes(t, seg?.text ?? "");
+        return `  - take ${i + 1} (id ${t.id}) · ${status} · ${facts}${notes.length ? `\n    atenção: ${notes.join("; ")}` : ""}`;
+      });
+      return `${title}:\n${rows.join("\n")}`;
+    });
+    return text(`Takes de "${content.title}" (checagem técnica, não mede qualidade da fala nem viralidade):\n${blocks.join("\n")}`);
+  }
   if (name === "salvar_cenas") {
     if (content.format !== "broll") return text("salvar_cenas é só para cena de apoio (B-roll). Para vídeo com fala use salvar_roteiro (com direcao.takes).", true);
     const parsed = ScenesSchema.safeParse(args.takes);
@@ -364,6 +402,16 @@ export async function callProfileTool(store: McpStore, name: string, args: Json,
     const current = new Map((await store.proofs()).map((p) => [p.descricao.toLowerCase(), p.status]));
     for (const d of provas) await store.saveProof({ descricao: d, status: current.get(d.toLowerCase()) ?? "falta_filmar", contentItemId: content.id });
     return text(`${parsed.data.length} take(s) de "${content.title}" enviados para o Post.ai. Aparecem no app ao abrir esta cena.${provas.length ? ` Provas ligadas: ${provas.join("; ")}.` : ""}`);
+  }
+  if (name === "propor_edicao") {
+    if (content.format !== "thought" && content.format !== "main_video") return text("propor_edicao é para vídeo com fala (Pensamento do Dia ou Vídeo principal).", true);
+    const motivo = typeof args.motivo === "string" ? args.motivo.trim().slice(0, 600) : "";
+    if (motivo.length < 3) return text("Explique o motivo em 1–2 frases simples (o criador lê no app antes de aceitar).", true);
+    const [profile, own] = await Promise.all([store.profile(), store.ownMusic()]);
+    const parsed = parseEditProposal(args, { business: profile.kind === "empresa", own });
+    if (!parsed.ok) return text(`Ajuste e mande de novo:\n- ${parsed.errors.join("\n- ")}`, true);
+    await store.saveEditProposal(content.id, parsed.edit, motivo);
+    return text(`Proposta enviada para "${content.title}": ${describeEditProposal(parsed.edit, own)}. O criador vê ao finalizar o vídeo no app e escolhe MONTAR ASSIM ou AJUSTAR — nada é montado sem ele. Acompanhe com ler_status_gravacao.`);
   }
   if (content.format === "broll") return text("Cena de apoio (B-roll, sem roteiro falado): use salvar_cenas com a lista de takes (nome, duracao_segundos, enquadramento, movimento_camera, local, luz, broll, erro_comum).", true);
   if (content.format !== "thought" && content.format !== "main_video") return text("Este conteúdo não usa roteiro falado (é story).", true);

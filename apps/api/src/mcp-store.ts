@@ -1,7 +1,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { BRASILIA_OFFSET_MIN, buildDayPlan, fingerprintsFor, parseDraft, summarizeForMemory, trackById, type Scenes, type ContentDraft, type ContentFormat, type EditChoices, type Pillar, type PostMetrics, type ProjectInfo, type RoutineBlock } from "@postai/domain";
 import { supabaseMemory } from "./adapters";
-import type { McpContent, McpContext, McpPost, McpProfile, McpRecording, McpScript, McpStore } from "./mcp-tools";
+import type { McpContent, McpContext, McpTake, McpPost, McpProfile, McpRecording, McpScript, McpStore } from "./mcp-tools";
 import type { FilmableProof, NewProfile, RealCase } from "./mcp-profiles";
 
 type ContentRow = { id: string; format: string; pillar_slug: string | null; title: string; plan_date: string | null; structured_payload: Record<string, unknown> | null };
@@ -99,10 +99,31 @@ export function supabaseMcpStore(db: SupabaseClient, workspaceId: string, userId
         })),
       };
     },
+    async takes(contentId): Promise<McpTake[]> {
+      const { data, error } = await db.from("takes").select("id, segment_index, created_at, tags, favorite, camera, media_files(state, duration_ms, width, height)")
+        .eq("workspace_id", workspaceId).eq("content_item_id", contentId).is("deleted_at", null).order("created_at").limit(100);
+      if (error) throw new Error(error.message);
+      type T = { id: string; segment_index: number | null; created_at: string; tags: string[] | null; favorite: boolean; camera: string | null; media_files: { state: string; duration_ms: number | null; width: number | null; height: number | null } | null };
+      return ((data ?? []) as unknown as T[]).map((t) => ({
+        id: t.id, segmentIndex: t.segment_index, createdAt: t.created_at, discarded: (t.tags ?? []).includes("descartado"), synced: t.media_files?.state === "uploaded_original",
+        favorite: t.favorite, camera: t.camera, durationMs: t.media_files?.duration_ms ?? null, width: t.media_files?.width ?? null, height: t.media_files?.height ?? null,
+      }));
+    },
     async ownMusic() {
       const { data, error } = await db.from("musicas_proprias").select("id, titulo, comercial, storage_key").eq("workspace_id", workspaceId).order("created_at", { ascending: false }).limit(50);
       if (error) throw new Error(error.message);
       return (data ?? []).map((m) => ({ id: m.id as string, titulo: m.titulo as string, comercial: Boolean(m.comercial), storageKey: m.storage_key as string }));
+    },
+    async musicFavorites() {
+      const { data, error } = await db.from("musicas_favoritas").select("track_id").eq("workspace_id", workspaceId).limit(200);
+      // 42P01 = tabela ainda não criada (migration pendente): segue sem favoritas
+      if (error?.code === "42P01") return [];
+      if (error) throw new Error(error.message);
+      return [...new Set((data ?? []).map((r) => r.track_id as string))];
+    },
+    async saveEditProposal(contentId, edit, motivo) {
+      const { error } = await db.from("propostas_edicao").insert({ workspace_id: workspaceId, content_item_id: contentId, edit, motivo });
+      if (error) throw new Error(error.message);
     },
     async readScript(contentId): Promise<McpScript> {
       const [script, content, pending] = await Promise.all([

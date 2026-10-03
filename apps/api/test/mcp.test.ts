@@ -20,6 +20,7 @@ function fakeStore(opts: { profile?: typeof RODRIGO_PROFILE; recent?: ContentDra
   const scenes: { contentId: string; takes: unknown[] }[] = [];
   const metrics: { contentId: string; m: PostMetrics }[] = [];
   const improvements: { titulo: string }[] = [];
+  const proposals: { contentId: string; edit: unknown; motivo: string }[] = [];
   const own = opts.content === undefined ? thought : opts.content;
   const state = { profile: opts.profile ?? RODRIGO_PROFILE, pillars: null as Pillar[] | null, cases: [] as RealCase[], proofs: [] as FilmableProof[] };
   const store: McpStore = {
@@ -40,6 +41,13 @@ function fakeStore(opts: { profile?: typeof RODRIGO_PROFILE; recent?: ContentDra
     readScript: async () => (opts.pending
       ? { draft: null, edit: null, metrics: null, postedAt: null, pendingFromAssistant: true, pending: { sentAt: "2026-10-02T12:00:00Z", draft: opts.pending, scenes: null } }
       : { draft: raw, edit: null, metrics: null, postedAt: null, pendingFromAssistant: true }),
+    musicFavorites: async () => ["mixkit-963"],
+    takes: async () => [
+      { id: "t1", segmentIndex: 0, createdAt: "a", discarded: false, synced: true, favorite: false, camera: "front", durationMs: 600, width: 1080, height: 1920 },
+      { id: "t2", segmentIndex: 0, createdAt: "b", discarded: true, synced: true, favorite: false, camera: "front", durationMs: 4000, width: 1080, height: 1920 },
+      { id: "t3", segmentIndex: 1, createdAt: "c", discarded: false, synced: false, favorite: true, camera: "back", durationMs: null, width: 1920, height: 1080 },
+    ],
+    saveEditProposal: async (contentId, edit, motivo) => void proposals.push({ contentId, edit, motivo }),
     ownMusic: async () => [{ id: "77777777-7777-4777-8777-777777777777", titulo: "Trilha do Loucura de Amor", comercial: false, storageKey: "ws/music/a.mp3" }],
     recordingStatus: async () => ({ takes: [{ segmentIndex: 0, synced: true }, { segmentIndex: 1, synced: false }], renders: [{ status: "failed", error: "parte 3 faltando", createdAt: "x", variant: "completo", warnings: [] }] }),
     planDays: async (start, days) => Array.from({ length: days }, (_, i) => ({ date: i === 0 ? start : `dia+${i}`, created: i > 0, items: i === 0 && own ? [own] : [] })),
@@ -56,7 +64,7 @@ function fakeStore(opts: { profile?: typeof RODRIGO_PROFILE; recent?: ContentDra
     proofs: async () => state.proofs,
     saveProof: async (pf) => { state.proofs = [...state.proofs.filter((x) => x.descricao !== pf.descricao), pf]; },
   };
-  return { store, saved, improvements, state, scenes, metrics };
+  return { store, saved, improvements, state, scenes, metrics, proposals };
 }
 
 /** link do perfil pessoal; o mesmo dono também tem a empresa */
@@ -241,6 +249,30 @@ describe("conector MCP do Post.ai (diretor de gravações)", () => {
     const direcao = { takes: [{ ordem: 1, nome: "A", fala_exata: draft.script, duracao_segundos: draft.duration_seconds }], musica: { id: "own:77777777-7777-4777-8777-777777777777", volume: 0.3 } };
     expect(textOf(await call(ctx, "salvar_roteiro", { content_id: ID, roteiro: { ...draft, direcao } }))).toContain("enviado para o Post.ai");
     expect(textOf(await call(ctx, "listar_musicas", { profile_id: EMPRESA }))).not.toContain("Loucura de Amor");
+  });
+
+  it("propor_edicao: valida, guarda a proposta (sem montar) e listar_musicas mostra as favoritas primeiro", async () => {
+    const { ctx, pessoal } = fakeCtx();
+    const fam = textOf(await call(ctx, "listar_musicas", { clima: "familia" }));
+    expect(fam.split("\n")[0]).toContain("mixkit-963");
+    expect(fam).toContain("♥ favorita do criador");
+    const bad = await call(ctx, "propor_edicao", { content_id: ID, autocut: "rapido", volume: 1, motivo: "teste" });
+    expect(isError(bad)).toBe(true);
+    expect(textOf(bad)).toContain("autocut:");
+    expect(textOf(bad)).toContain("volume:");
+    expect(pessoal.proposals).toHaveLength(0);
+    const ok = textOf(await call(ctx, "propor_edicao", { content_id: ID, autocut: "tiktok", musica: "mixkit-963", volume: 0.3, inicio_musica_s: 10, motivo: "Fala curta e animada: ritmo rápido na batida." }));
+    expect(ok).toContain("MONTAR ASSIM");
+    expect(pessoal.proposals[0]).toMatchObject({ contentId: ID, edit: { autocut: "tiktok", music: "mixkit-963", musicVolume: 0.3, musicStartS: 10 } });
+  });
+
+  it("listar_takes: por parte, qual a montagem usa, descartados e checagem técnica", async () => {
+    const { ctx } = fakeCtx();
+    const t = textOf(await call(ctx, "listar_takes", { content_id: ID }));
+    expect(t).toMatch(/Parte 1 — [^:]+:\n {2}- take 1 \(id t1\) · USADO NA MONTAGEM · 0\.6s · 1080x1920 · câmera frontal\n {4}atenção: curto demais/);
+    expect(t).toContain("take 2 (id t2) · DESCARTADO");
+    expect(t).toMatch(/take 1 \(id t3\) · USADO NA MONTAGEM · duração \? · 1920x1080 · câmera traseira · ♥\n {4}atenção: ainda não subiu para a nuvem; gravado na horizontal/);
+    expect(t).toContain("não mede qualidade da fala nem viralidade");
   });
 
   it("métricas: o assistente registra números reais (sem inventar) e o desempenho mostra o top 3", async () => {

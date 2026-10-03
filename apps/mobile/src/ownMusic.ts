@@ -8,6 +8,8 @@ import { supabase } from "./supabase";
 const MAX_BYTES = 20 * 1024 * 1024;
 const EXT: Record<string, string> = { "audio/mpeg": "mp3", "audio/mp3": "mp3", "audio/mp4": "m4a", "audio/x-m4a": "m4a", "audio/aac": "aac", "audio/wav": "wav", "audio/x-wav": "wav" };
 
+export type OwnMusicOrigin = "minha" | "licenciada" | "youtube_audio_library";
+
 export async function listOwnMusic(workspaceId: string): Promise<OwnMusic[]> {
   if (!supabase) return [];
   const { data, error } = await supabase.from("musicas_proprias").select("id, titulo, comercial, storage_key").eq("workspace_id", workspaceId).order("created_at", { ascending: false });
@@ -17,15 +19,18 @@ export async function listOwnMusic(workspaceId: string): Promise<OwnMusic[]> {
 
 /**
  * Escolhe um áudio do celular, envia para o armazenamento do perfil e registra com a licença declarada.
+ * `youtube_audio_library` significa arquivo baixado legitimamente da Biblioteca de Áudio do YouTube —
+ * nunca áudio extraído de vídeo comum do YouTube.
  * null = o criador cancelou a escolha do arquivo.
  */
-export async function uploadOwnMusic(workspaceId: string, decl: { origem: "minha" | "licenciada"; comercial: boolean }): Promise<OwnMusic | null> {
+export async function uploadOwnMusic(workspaceId: string, decl: { origem: OwnMusicOrigin; comercial: boolean }): Promise<OwnMusic | null> {
   if (!supabase) throw new Error("Enviar música precisa da nuvem configurada.");
   const picked = await DocumentPicker.getDocumentAsync({ type: "audio/*", copyToCacheDirectory: true, multiple: false });
   if (picked.canceled || !picked.assets?.[0]) return null;
   const a = picked.assets[0];
   if ((a.size ?? 0) > MAX_BYTES) throw new Error("Arquivo grande demais (máximo 20 MB). Use um MP3.");
   const ext = EXT[a.mimeType ?? ""] ?? (a.name.split(".").pop() ?? "mp3").toLowerCase().slice(0, 4);
+  if (!Object.values(EXT).includes(ext)) throw new Error("Formato não aceito. Use MP3, M4A, AAC ou WAV.");
   const id = newId();
   const key = `${workspaceId}/music/${id}.${ext}`;
   const signed = await supabase.storage.from("takes").createSignedUploadUrl(key);
@@ -45,4 +50,25 @@ export async function ownMusicUrl(storageKey: string): Promise<string | null> {
   if (!supabase) return null;
   const { data } = await supabase.storage.from("takes").createSignedUrl(storageKey, 600);
   return data?.signedUrl ?? null;
+}
+
+/** Novo nome para a música própria (o arquivo continua o mesmo). */
+export async function renameOwnMusic(workspaceId: string, id: string, titulo: string): Promise<void> {
+  if (!supabase) throw new Error("Precisa da nuvem configurada.");
+  const name = titulo.trim().slice(0, 120);
+  if (!name) throw new Error("Dê um nome para a música.");
+  const { error } = await supabase.from("musicas_proprias").update({ titulo: name }).eq("workspace_id", workspaceId).eq("id", id);
+  if (error) throw new Error(error.message);
+}
+
+/**
+ * Tira a música da biblioteca do perfil (registro e arquivo). Vídeos já montados não mudam; vídeo ainda não
+ * montado que a escolheu passa a usar a música automática.
+ */
+export async function deleteOwnMusic(workspaceId: string, m: OwnMusic): Promise<void> {
+  if (!supabase) throw new Error("Precisa da nuvem configurada.");
+  const { error } = await supabase.from("musicas_proprias").delete().eq("workspace_id", workspaceId).eq("id", m.id);
+  if (error) throw new Error(error.message);
+  // o arquivo é do perfil; só o dono apaga do armazenamento (se não der, fica só o registro removido)
+  await supabase.storage.from("takes").remove([m.storageKey]).catch(() => undefined);
 }

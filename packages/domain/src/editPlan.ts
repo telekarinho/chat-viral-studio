@@ -1,4 +1,5 @@
 import type { MusicMood } from "./music";
+import type { AutoCutThemeId } from "./autocut";
 import type { ScriptSegment, SegmentRole } from "./segments";
 import type { WatermarkCorner } from "./watermark";
 
@@ -36,6 +37,8 @@ export interface EditClip {
   captions: CaptionCue[]; // relative to clip start (after trim)
   /** onde termina o rosto (queixo/barba) neste trecho, fração da altura do vídeo final; null = não achou */
   faceBottom?: number | null;
+  /** zoom extra do jump cut nesta parte (tema do AutoCut); ausente = padrão */
+  punch?: number;
   /** onde fica o alto da cabeça neste trecho (fração da altura); null = não achou — o texto na tela fica acima disso */
   faceTop?: number | null;
   /** trechos do ORIGINAL que entram (corte automático de pausas/erros); ausente = trim simples */
@@ -76,6 +79,8 @@ export interface PlanMusic {
   title?: string;
   /** narração com a música no fone: a faixa começou junto com a gravação — pula o mesmo trecho cortado do início do take */
   narration?: boolean;
+  /** trecho escolhido: a faixa começa deste ponto (ms) */
+  seekMs?: number;
 }
 
 /** Texto na tela escrito pelo diretor (tempos na linha do tempo final). */
@@ -87,6 +92,8 @@ export interface PlanOverlay {
 }
 
 export interface EditPlan {
+  /** pulsos na batida (tema do AutoCut com batida + música com BPM medido): a cada periodS, a partir de t0S */
+  beat?: { periodS: number; t0S: number } | null;
   version: "edit-v1";
   width: 1080;
   height: 1920;
@@ -263,6 +270,10 @@ export interface EditChoices {
   hook?: boolean;
   /** gravado narrando com a música no fone: a mesma faixa entra do começo, no tempo da gravação (sem corte de pausas) */
   narracao?: boolean;
+  /** tema do AutoCut escolhido (o servidor usa os parâmetros de montagem dele); ausente = montagem padrão */
+  autocut?: AutoCutThemeId;
+  /** trecho da música: segundo da faixa onde a trilha começa (ausente = automático) */
+  musicStartS?: number;
 }
 
 export const DEFAULT_EDIT_CHOICES: EditChoices = {
