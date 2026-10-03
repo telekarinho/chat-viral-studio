@@ -62,3 +62,18 @@ export async function downloadOwnMusic(db: SupabaseClient, workspaceId: string, 
     return null;
   }
 }
+
+/** Onde termina o rosto no trecho [startMs, endMs] do arquivo (fração da altura do quadro); null sem modelo/rosto. */
+export async function detectFaceBottom(file: string, startMs: number, endMs: number): Promise<{ width: number; height: number; faceBottom: number; faceTop: number } | null> {
+  const py = process.env.WHISPER_PYTHON;
+  if (!py || !process.env.FACE_MODEL) return null;
+  try {
+    const script = fileURLToPath(new URL("../scripts/face.py", import.meta.url));
+    const { stdout } = await run(py, [script, file, (startMs / 1000).toFixed(2), (endMs / 1000).toFixed(2)], { timeout: 60_000 });
+    const r = JSON.parse(stdout.trim().split("\n").pop() ?? "{}") as { width?: number; height?: number; faceBottom?: number | null; faceTop?: number | null };
+    return r.faceBottom != null && r.faceTop != null && r.width && r.height ? { width: r.width, height: r.height, faceBottom: r.faceBottom, faceTop: r.faceTop } : null;
+  } catch (e) {
+    process.stdout.write(JSON.stringify({ level: "warn", msg: "face.failed", error: e instanceof Error ? e.message.slice(0, 200) : String(e) }) + "\n");
+    return null;
+  }
+}

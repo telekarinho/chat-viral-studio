@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { MUSIC_LIBRARY, assColor, buildAss, cuesFromWords, moodForPillar, pickTrack, type EditClip, type SpokenWord } from "../src";
+import { MUSIC_LIBRARY, assColor, buildAss, captionSpot, cuesFromWords, moodForPillar, pickTrack, type EditClip, type SpokenWord } from "../src";
 
 const words = (s: string, startMs = 0, stepMs = 300, pauseAfter: Record<number, number> = {}): SpokenWord[] => {
   let t = startMs;
@@ -43,8 +43,13 @@ describe("arquivo ASS", () => {
     const ass = buildAss({ clips: [clip(c1, 3000), clip(c2, 2000)], captionStyle: "manuscrito", width: 1080, height: 1920 });
     expect(ass).toContain("Style: manuscrito,Covered By Your Grace,118,&H00CFE6F3");
     expect(ass).toContain("PlayResY: 1920");
-    // entra com "pop" (92% → 100%), em caixa alta
-    expect(ass).toMatch(/Dialogue: 0,0:00:00\.20,[^,]+,manuscrito,,0,0,0,,\{\\fad\(70,50\)\\fscx92\\fscy92\\t\(0,140,\\fscx100\\fscy100\)\}PORQUE EU SOU CONTIGO/);
+    // entra com "pop" (92% → 100%), em caixa alta; sem rosto detectado: terço de baixo (66% da altura)
+    expect(ass).toMatch(/Dialogue: 0,0:00:00\.20,[^,]+,manuscrito,,0,0,0,,\{\\an8\\pos\(540,1373\)\\fad\(70,50\)\\fscx92\\fscy92\\t\(0,140,\\fscx100\\fscy100\)\}PORQUE EU SOU CONTIGO/);
+    // rosto até 80% da altura: legenda logo abaixo do queixo e menor para caber antes da assinatura
+    const face = buildAss({ clips: [{ ...clip(c1, 3000), faceBottom: 0.8 }], captionStyle: "manuscrito", width: 1080, height: 1920 });
+    expect(captionSpot(0.8, "manuscrito")).toEqual({ top: 0.771, scale: 0.6 });
+    expect(face).toContain("{\\an8\\pos(540,1480)\\fad(70,50)\\fscx55\\fscy55\\t(0,140,\\fscx60\\fscy60)}");
+    expect(captionSpot(0.55, "manuscrito")).toEqual({ top: 0.56, scale: 1 });
     // 2ª parte começa em 3.000s + 0.100s
     expect(ass).toMatch(/Dialogue: 0,0:00:03\.10,/);
     // com transição de 300ms, a 2ª parte entra 0.3s antes — a legenda acompanha

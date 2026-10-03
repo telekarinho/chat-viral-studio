@@ -92,7 +92,7 @@ describe("B-roll, gancho na tela e recálculo do plano", () => {
 
   it("gancho aparece nos 3 primeiros segundos, mesmo sem legenda", () => {
     const ass = buildAss({ ...plan, captionStyle: "nenhuma" });
-    expect(ass).toMatch(/Dialogue: 1,0:00:00\.00,0:00:03\.00,gancho,,0,0,0,,\{\\fad\(120,200\)\}UMA COISA HOJE/);
+    expect(ass).toMatch(/Dialogue: 1,0:00:00\.00,0:00:03\.00,gancho,,0,0,0,,\{\\an8\\pos\(540,250\)\\fscx100\\fscy100\\fad\(120,200\)\}UMA COISA HOJE/);
     expect(buildAss({ ...plan, hookText: null, captionStyle: "nenhuma", signature: "" })).not.toContain("Dialogue");
   });
 

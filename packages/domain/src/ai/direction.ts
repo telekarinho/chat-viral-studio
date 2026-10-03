@@ -147,7 +147,7 @@ export function directionReport(d: Direction): { campo: string; aplicado: boolea
   ];
   if (silent.length) out.push({ campo: "takes sem fala", aplicado: false, como: `${silent.length} take(s) sem fala aparecem como instrução no conteúdo, mas não viram parte do vídeo — grave como cena de apoio (B-roll) do dia para a montagem usar` });
   if (d.legendas_na_tela.length) {
-    out.push({ campo: "legendas_na_tela", aplicado: true, como: `${d.legendas_na_tela.length} texto(s) na tela nos tempos e posições pedidos (substituem o gancho automático)` });
+    out.push({ campo: "legendas_na_tela", aplicado: true, como: `${d.legendas_na_tela.length} texto(s) na tela nos tempos pedidos, sempre acima da cabeça — a posição pedida é ignorada para não cobrir o rosto nem a legenda (substituem o gancho automático)` });
     if (d.legendas_na_tela.some((l) => l.estilo.trim())) out.push({ campo: "legendas_na_tela[].estilo", aplicado: false, como: "o estilo é sempre a letra manuscrita do perfil; o texto de estilo fica só como referência" });
   }
   if (d.musica) {
