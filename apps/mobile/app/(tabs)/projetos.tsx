@@ -12,10 +12,10 @@ const CATEGORY_LABEL = (key: string) => CATEGORIES.find((c) => c.key === key)?.l
 const dayLabel = (dateKey: string) => dateKey.split("-").reverse().join("/");
 
 const CATEGORIES: { key: string | null; label: string }[] = [
-  { key: null, label: "Todos" },
+  { key: null, label: "Tudo" },
   { key: "broll", label: "B-roll" },
-  { key: "thought", label: "Pensamento" },
-  { key: "main_video", label: "Vídeo principal" },
+  { key: "thought", label: "Pensamentos" },
+  { key: "main_video", label: "Vídeos" },
   { key: "livre", label: "Livres" },
 ];
 
@@ -30,16 +30,18 @@ export default function Projetos() {
     void listRecentContent(30).then((c) => setContents(c.filter((x) => x.draft)));
   }, [cat]);
   useFocusEffect(load);
-  // upload states change in the background: refresh the list live
   useEffect(() => subscribeSync((st) => { if (!st.running) load(); }), [load]);
 
   return (
     <Screen testID="projetos-screen">
-      <Eyebrow>Banco de takes e roteiros</Eyebrow>
-      <H1>Projetos</H1>
+      <Eyebrow>Seu acervo de criação</Eyebrow>
+      <H1>Biblioteca</H1>
+      <Text style={s.muted}>Tudo que você já gravou fica aqui para reutilizar em novos vídeos. O Diretor pode aproveitar esse material sem mandar você gravar de novo.</Text>
+
       <View style={s.row}>{CATEGORIES.map((c) => <Chip key={c.label} label={c.label} selected={cat === c.key} onPress={() => setCat(c.key)} />)}</View>
-      <Section>Takes ({takes.length})</Section>
-      {takes.length === 0 ? <Empty title="Nenhum take ainda" body="Grave na aba Gravar ou numa missão de Hoje." /> : null}
+
+      <Section>{`Takes e cenas (${takes.length})`}</Section>
+      {takes.length === 0 ? <Empty title="Sua biblioteca ainda está vazia" body="Grave pela aba Gravar ou cumpra uma missão de Hoje." /> : null}
       {takes.map((t) => (
         <Pressable key={t.id} onPress={() => router.push(`/take/${t.id}`)} accessibilityRole="button" testID="take-row">
           <Card>
@@ -51,12 +53,17 @@ export default function Projetos() {
           </Card>
         </Pressable>
       ))}
-      <Section>Histórico de roteiros</Section>
+
+      <Section>Vídeos e roteiros</Section>
+      {contents.length === 0 ? <Empty title="Nenhum vídeo criado ainda" body="Quando o Diretor preparar ou você gravar um conteúdo, ele aparece aqui." /> : null}
       {contents.map((c) => (
         <Pressable key={c.id} onPress={() => router.push(`/content/${c.id}`)} accessibilityRole="button">
           <Card>
-            <Text style={{ fontWeight: "800", color: colors.ink }}>{c.draft!.title}</Text>
-            <Text style={s.muted}>{dayLabel(c.date)} · {FORMAT_LABEL[c.format]} · {pillarName(c.pillarSlug)} · {STATUS_LABEL[c.status] ?? c.status}</Text>
+            <View style={[s.row, { justifyContent: "space-between" }]}>
+              <Text style={{ flex: 1, fontWeight: "800", color: colors.ink }}>{c.draft!.title}</Text>
+              <Text style={{ fontSize: 11, fontWeight: "900", color: c.status === "published" || c.status === "done" ? colors.good : colors.muted }}>{(STATUS_LABEL[c.status] ?? c.status).toUpperCase()}</Text>
+            </View>
+            <Text style={s.muted}>{dayLabel(c.date)} · {FORMAT_LABEL[c.format]} · {pillarName(c.pillarSlug)}</Text>
           </Card>
         </Pressable>
       ))}
