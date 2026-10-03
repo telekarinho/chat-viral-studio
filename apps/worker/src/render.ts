@@ -1,4 +1,4 @@
-import type { EditClip, EditPlan } from "@postai/domain";
+import { clipStartsMs, type EditClip, type EditPlan } from "@postai/domain";
 
 export interface RenderInput {
   plan: EditPlan;
@@ -76,11 +76,31 @@ export function beautyGraph(inLabel: string, outLabel: string, mode: EditPlan["r
 }
 
 /** zoompan expression: moves from→to over moveMs (0 = whole clip), then holds. */
-export function zoomExpr(clip: EditClip, fps: number): string {
+export function zoomExpr(clip: EditClip, fps: number, pulse?: { periodS: number; offsetS: number } | null): string {
   const { fromScale: a, toScale: b, moveMs } = clip.effect;
   const frames = Math.max(1, Math.round(((moveMs > 0 ? Math.min(moveMs, clip.durationMs) : clip.durationMs) / 1000) * fps));
   const base = a === b ? a.toFixed(4) : `${a.toFixed(4)}+(${(b - a).toFixed(4)})*min(on/${frames}\\,1)`;
-  return base + jumpCutPunch(clip, fps);
+  return base + jumpCutPunch(clip, fps) + beatPulse(fps, pulse);
+}
+
+const PULSE = 0.025;
+const PULSE_S = 0.15;
+
+/**
+ * Pulso leve na batida (temas Viral/TikTok/Jovem): o quadro "respira" 2,5% e volta em 0,15 s a cada 2 batidas.
+ * offsetS = quanto tempo depois de uma batida esta parte começa (já positivo); on = quadro desta parte.
+ */
+export function beatPulse(fps: number, pulse?: { periodS: number; offsetS: number } | null): string {
+  if (!pulse || pulse.periodS <= 0) return "";
+  return `+${PULSE}*max(0\\,1-mod(on/${fps}+${pulse.offsetS.toFixed(3)}\\,${pulse.periodS.toFixed(4)})/${PULSE_S})`;
+}
+
+/** Pulso da parte i: período de 2 batidas e o deslocamento desta parte em relação à grade de batidas. */
+export function clipPulse(plan: Pick<EditPlan, "beat" | "clips" | "transitions">, i: number): { periodS: number; offsetS: number } | null {
+  if (!plan.beat) return null;
+  const start = clipStartsMs(plan)[i]! / 1000;
+  const p = plan.beat.periodS;
+  return { periodS: p, offsetS: (((start - plan.beat.t0S) % p) + p) % p };
 }
 
 const PUNCH = 0.1;
@@ -89,7 +109,7 @@ const PUNCH = 0.1;
  * Jump cut de editor: a cada corte dentro da parte (pausa/erro removido) o quadro alterna entre normal e mais
  * perto — esconde o "pulo" e dá ritmo. Usa o número do quadro já colado (on), então casa com os cortes.
  */
-export function jumpCutPunch(clip: Pick<EditClip, "keep">, fps: number): string {
+export function jumpCutPunch(clip: Pick<EditClip, "keep" | "punch">, fps: number): string {
   const keep = clip.keep ?? [];
   if (keep.length < 2) return "";
   const terms: string[] = [];
@@ -99,7 +119,8 @@ export function jumpCutPunch(clip: Pick<EditClip, "keep">, fps: number): string 
     if (i % 2 === 1 && len > 0) terms.push(`between(on\\,${at}\\,${at + len - 1})`);
     at += len;
   });
-  return terms.length ? `+${PUNCH}*(${terms.join("+")})` : "";
+  const punch = clip.punch ?? PUNCH;
+  return terms.length && punch > 0 ? `+${punch}*(${terms.join("+")})` : "";
 }
 
 /** Builds the full ffmpeg argv for one final 9:16 export. Deterministic: same plan + inputs = same command. */
@@ -134,7 +155,7 @@ export function ffmpegArgs(r: RenderInput): string[] {
     parts.push(`[${i}:v]${pre.join(",")}[p${i}]`);
     parts.push(...beautyGraph(`p${i}`, `b${i}`, plan.retouch));
     const broll = clip.broll && r.brollFiles?.[clip.broll.takeId] ? clip.broll : null;
-    parts.push(`[b${i}]zoompan=z='${zoomExpr(clip, plan.fps)}':x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':d=1:s=${W}x${H}:fps=${plan.fps},setsar=1,format=yuv420p[${broll ? `z${i}` : `v${i}`}]`);
+    parts.push(`[b${i}]zoompan=z='${zoomExpr(clip, plan.fps, clipPulse(plan, i))}':x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':d=1:s=${W}x${H}:fps=${plan.fps},setsar=1,format=yuv420p[${broll ? `z${i}` : `v${i}`}]`);
     if (broll) {
       // cena de apoio por cima da imagem; a voz da parte continua
       const at = sec(broll.atMs);
@@ -190,7 +211,8 @@ export function ffmpegArgs(r: RenderInput): string[] {
     const vol = Math.min(0.6, Math.max(0.05, plan.music!.volume));
     // janela da direção (entra aos X s, sai aos Y s); sem ela, o vídeo todo
     // narração: a música começou junto com a gravação; o vídeo pula o começo do take, então a música pula igual
-    const seekS = plan.music!.narration ? (plan.clips[0]?.trimStartMs ?? 0) / 1000 : 0;
+    // trecho escolhido: a faixa começa do ponto pedido
+    const seekS = plan.music!.narration ? (plan.clips[0]?.trimStartMs ?? 0) / 1000 : (plan.music!.seekMs ?? 0) / 1000;
     const startS = Math.min(T, Math.max(0, (plan.music!.startMs ?? 0) / 1000));
     const endS = Math.min(T, Math.max(startS, plan.music!.endMs == null ? T : plan.music!.endMs / 1000));
     const D = endS - startS;

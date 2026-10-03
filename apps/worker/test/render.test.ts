@@ -6,7 +6,8 @@ import { promisify } from "node:util";
 import { describe, expect, it } from "vitest";
 import { RODRIGO_PROFILE, assignBroll, buildAss, buildEditPlan, buildSegments, generateLocal, withClips, type SpokenWord } from "@postai/domain";
 import { writeFileSync } from "node:fs";
-import { escapeDrawtext, ffmpegArgs, filterPath, jumpCutPunch, zoomExpr } from "../src/render";
+import { beatPulse, clipPulse, escapeDrawtext, ffmpegArgs, filterPath, jumpCutPunch, zoomExpr } from "../src/render";
+import { bestWindow } from "../src/media-extras";
 import { coverSource, coverTextLayout, editChoices, faceBottomOnOutput, editFromSpeech, jobVariant } from "../src/job";
 import { probe, render } from "../src/ffmpeg";
 
@@ -199,7 +200,8 @@ describe.skipIf(!hasFfmpeg || !FONT)("renderizador (FFmpeg real)", () => {
       music: { trackId: "mixkit-32", mood: "motivacional", volume: 0.22, startMs: 1000, endMs: 4000 }, overlays: [{ text: "Vida real", startMs: 500, endMs: 2500, position: "centro" }] });
     // parte 1 com corte no meio; parte 3 com cena de apoio (horizontal, vira 9:16)
     const cut = base.clips.map((c, i) => (i === 0 ? { ...c, durationMs: 1600, keep: [{ startMs: 300, endMs: 1100 }, { startMs: 1700, endMs: 2500 }] } : i === 2 ? { ...c, broll: { takeId: "b", atMs: 600, durationMs: 1200 } } : c));
-    const plan = withClips(base, cut);
+    // tema com batida: pulsos no zoom (expressão precisa ser aceita pelo FFmpeg)
+    const plan = { ...withClips(base, cut), beat: { periodS: 0.97, t0S: 0.2 } };
     expect(assignBroll(base.clips, [{ takeId: "b", durationMs: 3000 }]).filter((c) => c.broll)).toHaveLength(0); // partes de 3s são curtas demais para b-roll automático
     const assFile = join(dir, "legendas.ass");
     writeFileSync(assFile, buildAss(plan), "utf8");
@@ -252,5 +254,53 @@ describe("legenda abaixo do queixo", () => {
     // zoom de 1.14 + "punch" de corte (0.1): o queixo desce para 0.5 + 0.2 × 1.24
     const zoom = { effect: { kind: "punch_in", fromScale: 1, toScale: 1.14, moveMs: 450 }, keep: [{ startMs: 0, endMs: 1 }, { startMs: 2, endMs: 3 }] } as unknown as Parameters<typeof faceBottomOnOutput>[3];
     expect(faceBottomOnOutput(0.7, 1080, 1920, zoom)).toBeCloseTo(0.748);
+  });
+});
+
+describe.skipIf(!hasFfmpeg || !FONT)("ducking (FFmpeg real)", () => {
+  it("a música abaixa quando há voz e volta na pausa, sem bombear", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "postai-duck-"));
+    // "voz" 1 kHz por 3 s, depois 3 s sem som (segunda parte sem áudio), música 300 Hz constante
+    const parts = [join(dir, "voz.mp4"), join(dir, "pausa.mp4")];
+    await run("ffmpeg", ["-y", "-loglevel", "error", "-f", "lavfi", "-i", "testsrc2=size=720x1280:rate=30:duration=3", "-f", "lavfi", "-i", "sine=frequency=2500:duration=3", "-c:v", "libx264", "-pix_fmt", "yuv420p", "-c:a", "aac", "-shortest", parts[0]!]);
+    await run("ffmpeg", ["-y", "-loglevel", "error", "-f", "lavfi", "-i", "testsrc2=size=720x1280:rate=30:duration=3", "-c:v", "libx264", "-pix_fmt", "yuv420p", parts[1]!]);
+    const music = join(dir, "m.mp3");
+    await run("ffmpeg", ["-y", "-loglevel", "error", "-f", "lavfi", "-i", "sine=frequency=150:duration=8", "-c:a", "libmp3lame", music]);
+    const segments = [{ index: 0, role: "hook" as const, label: "a", text: "voz" }, { index: 1, role: "cta" as const, label: "b", text: "pausa" }];
+    const base = buildEditPlan({ segments, takes: [{ segmentIndex: 0, takeId: "a", durationMs: 3000 }, { segmentIndex: 1, takeId: "b", durationMs: 3000 }], signature: "", captionStyle: "nenhuma", music: { trackId: "mixkit-839", mood: "familia", volume: 0.3 } });
+    const plan = { ...base, transitions: [] };
+    const out = join(dir, "o.mp4");
+    await render({ plan, inputs: parts, fontFile: FONT, output: out, musicFile: music });
+    // nível só da música (150 Hz; a "voz" é 2,5 kHz) com voz e na pausa (antes do fade-out final)
+    const level = async (ss: number) => {
+      const { stderr } = await run("ffmpeg", ["-hide_banner", "-ss", String(ss), "-t", "0.8", "-i", out, "-af", "lowpass=f=250,lowpass=f=250,lowpass=f=250,lowpass=f=250,volumedetect", "-f", "null", "-"]);
+      return Number(/mean_volume: (-?[\d.]+) dB/.exec(stderr)![1]);
+    };
+    const withVoice = await level(1.0);
+    const inPause = await level(3.4);
+    expect(inPause - withVoice).toBeGreaterThan(6); // abaixa de verdade com voz
+    expect(inPause - withVoice).toBeLessThan(30); // não some (a trilha continua por baixo)
+  }, 120_000);
+});
+
+describe("AutoCut no servidor", () => {
+  it("o tema escolhido chega na montagem; tema inválido = padrão; trecho da música vira seek", () => {
+    expect(editChoices({ edit: { autocut: "tiktok" } }, "academia", false, "c").autocut).toMatchObject({ pauseMaxMs: 200, jumpPunch: 0.12, beatSync: true });
+    expect(editChoices({ edit: { autocut: "<x>" } }, "academia", false, "c").autocut).toMatchObject({ pauseMaxMs: 450, beatSync: false });
+    expect(editChoices({ edit: { music: "mixkit-839", musicStartS: 42.5 } }, "academia", false, "c").music).toMatchObject({ trackId: "mixkit-839", seekMs: 42500 });
+    // narração: o ponto da música é o começo da gravação, o trecho escolhido não vale
+    expect(editChoices({ edit: { music: "mixkit-839", narracao: true, musicStartS: 30 } }, "academia", false, "c").music?.seekMs).toBeUndefined();
+  });
+  it("pulso na batida: expressão do zoom e fase de cada parte", () => {
+    const plan = buildEditPlan({ segments, signature: "", takes: segments.map((s) => ({ segmentIndex: s.index, takeId: `t${s.index}`, durationMs: 3000 })) });
+    expect(beatPulse(30, null)).toBe("");
+    expect(beatPulse(30, { periodS: 0.96, offsetS: 0.2 })).toBe(String.raw`+0.025*max(0\,1-mod(on/30+0.200\,0.9600)/0.15)`);
+    const p = { ...plan, beat: { periodS: 1, t0S: 0.3 } };
+    expect(clipPulse(p, 0)).toEqual({ periodS: 1, offsetS: 0.7 });
+    expect(clipPulse({ ...plan, beat: null }, 0)).toBeNull();
+  });
+  it("trecho automático: a janela mais forte da faixa", () => {
+    expect(bestWindow([-30, -30, -10, -9, -11, -30, -30], 3)).toBe(2);
+    expect(bestWindow([-20, -20], 5)).toBe(0);
   });
 });

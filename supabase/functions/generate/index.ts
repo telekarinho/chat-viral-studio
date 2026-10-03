@@ -139,7 +139,7 @@ var TYPE_LABEL = {
 };
 function describeAvoidance(report) {
   const types = [...new Set(report.hits.map((h) => h.type))];
-  return types.map((t) => `Evitei repetir ${TYPE_LABEL[t]} usado recentemente.`);
+  return types.map((t2) => `Evitei repetir ${TYPE_LABEL[t2]} usado recentemente.`);
 }
 function avoidanceInstructions(report) {
   if (!report.repeated) return "";
@@ -170,30 +170,30 @@ var MOOD_LABEL = {
   empresa: "Vendas / produto",
   calmo: "Calmo"
 };
-var mk = (id, mood, title, artist, sha256, durationSec, bpm) => (
+var mk = (id, mood, title, artist, sha256, durationSec, bpm, beatS) => (
   // licença Mixkit Free: inclui uso comercial
-  { id: `mixkit-${id}`, mood, title, artist, url: `https://assets.mixkit.co/music/${id}/${id}.mp3`, sha256, durationSec, license: "comercial", bpm, trending: null }
+  { id: `mixkit-${id}`, mood, title, artist, url: `https://assets.mixkit.co/music/${id}/${id}.mp3`, sha256, durationSec, license: "comercial", bpm, beatS, trending: null }
 );
 var MUSIC_LIBRARY = [
-  mk(22, "reflexao", "Piano Reflections", "Ahjay Stelino", "7d58c4255d91f58e29e61520b6011cabd5a54b3e89b54646cebac9d37295bbec", 199, 120),
-  mk(601, "reflexao", "Skyline", "Eugenio Mininni", "2fcb36e7e58c4b6bc1505b7980237fdad86696589572a958bb6ee2084c592cc5", 206, null),
-  mk(599, "reflexao", "Possible Dreams", "Eugenio Mininni", "ee6d055c20cccda716b6b63a154ef0dc825195b7061dc439abb8a623973f4798", 159, null),
-  mk(32, "motivacional", "Driving Ambition", "Ahjay Stelino", "e3c88488e65b8c87a6f06120983ce2cb12ea3aeba99f8cadb7ee5d6d284ef2c6", 102, 100),
-  mk(31, "motivacional", "Dreaming Big", "Ahjay Stelino", "8c89819547b42a80750fb25f37a960a1f45f6fd66bc8d784ac817b98b002897c", 110, null),
-  mk(34, "motivacional", "Raising Me Higher", "Ahjay Stelino", "619b82cea299230cca5beac36d049291a1cb2be8ce0afdafda3e06fb30d06525", 98, 110),
-  mk(1183, "treino", "Karma", "Michael Ramir C.", "56f331c37552486a1a31c65a443f1669ed37f7fb3bd99d9078d23ec55caa052f", 135, 128),
-  mk(470, "treino", "Golden Storm", "Diego Nava", "32e5a363ce84f0b633579d0b10cf3c758ae3c02f5121147a321e2483e3384e26", 95, 127),
-  mk(1e3, "treino", "I Can Hear Your Heartbeat", "Michael Ramir C.", "a23c959605dc4a53f7e3b8c8949fcc0d082c29989b944bb2a7f8d9601ddca0d1", 110, 125),
-  mk(839, "familia", "Tears of Joy", "Michael Ramir C.", "30717c4e8d2a954a6163477b831e5b8981b406d2c34d72820fce4d40a8686ddc", 140, 124),
-  mk(963, "familia", "Just Keep Walking", "Michael Ramir C.", "fa93f4808cecc643eee8d74647bd8b823991f2155672b7d37f3db79f9beb7e16", 125, 96),
-  mk(801, "familia", "Happy Home", "Michael Ramir C.", "76b82159ba1d6821a5ac9465e8ff19007446c1b657dfe53b5917fc8896b3bf21", 110, 140),
-  mk(2, "humor", "Comical", "Ahjay Stelino", "2f5ed23f2c51b5aa28b237563ee1249d12094fefce7afdaddee4f5a330e010cb", 114, 140),
-  mk(466, "humor", "Games Worldbeat", "Bernardo R.", "a1c70e5719bdfbe5dd8ec064939b27e3baed8c2b7f9375ae5b361e6ba71d4922", 107, null),
-  mk(474, "empresa", "What About Action?", "Diego Nava", "4bcd99a13f3d71c6d356c2459f6f585f0d3f91ca8912aeef81ac626b8c8e3133", 117, 121),
-  mk(729, "empresa", "Pop Track 03", "Lily J", "0bb90793c71a07e6d698afdd434b32ffb4fe93dbbdb0577d3e71a4de80b0337b", 97, 109),
-  mk(1167, "empresa", "Close Up", "Michael Ramir C.", "a7f05a29d07a84d38072ccd2b35204bca812db86e75b2a837e71cc144d3e739b", 95, 105),
-  mk(441, "calmo", "Meditation", "Arulo", "6ffb81be8ab2447eb7b9357d6ae3d1b58eb8bc85376a724fafa5fe4d1acf562a", 118, null),
-  mk(175, "calmo", "Digital Clouds", "Alejandro Maga\xF1a (A. M.)", "71cd4ea39edcc7532672bd97311abadfd318d00e7a828310a88b4f57fad9cd48", 101, 129)
+  mk(22, "reflexao", "Piano Reflections", "Ahjay Stelino", "7d58c4255d91f58e29e61520b6011cabd5a54b3e89b54646cebac9d37295bbec", 199, 120, 0.255),
+  mk(601, "reflexao", "Skyline", "Eugenio Mininni", "2fcb36e7e58c4b6bc1505b7980237fdad86696589572a958bb6ee2084c592cc5", 206, null, null),
+  mk(599, "reflexao", "Possible Dreams", "Eugenio Mininni", "ee6d055c20cccda716b6b63a154ef0dc825195b7061dc439abb8a623973f4798", 159, null, null),
+  mk(32, "motivacional", "Driving Ambition", "Ahjay Stelino", "e3c88488e65b8c87a6f06120983ce2cb12ea3aeba99f8cadb7ee5d6d284ef2c6", 102, 100, 0.032),
+  mk(31, "motivacional", "Dreaming Big", "Ahjay Stelino", "8c89819547b42a80750fb25f37a960a1f45f6fd66bc8d784ac817b98b002897c", 110, null, null),
+  mk(34, "motivacional", "Raising Me Higher", "Ahjay Stelino", "619b82cea299230cca5beac36d049291a1cb2be8ce0afdafda3e06fb30d06525", 98, 110, 0.545),
+  mk(1183, "treino", "Karma", "Michael Ramir C.", "56f331c37552486a1a31c65a443f1669ed37f7fb3bd99d9078d23ec55caa052f", 135, 128, 6e-3),
+  mk(470, "treino", "Golden Storm", "Diego Nava", "32e5a363ce84f0b633579d0b10cf3c758ae3c02f5121147a321e2483e3384e26", 95, 127, 0.22),
+  mk(1e3, "treino", "I Can Hear Your Heartbeat", "Michael Ramir C.", "a23c959605dc4a53f7e3b8c8949fcc0d082c29989b944bb2a7f8d9601ddca0d1", 110, 125, 0.261),
+  mk(839, "familia", "Tears of Joy", "Michael Ramir C.", "30717c4e8d2a954a6163477b831e5b8981b406d2c34d72820fce4d40a8686ddc", 140, 124, 0.249),
+  mk(963, "familia", "Just Keep Walking", "Michael Ramir C.", "fa93f4808cecc643eee8d74647bd8b823991f2155672b7d37f3db79f9beb7e16", 125, 96, 0.025),
+  mk(801, "familia", "Happy Home", "Michael Ramir C.", "76b82159ba1d6821a5ac9465e8ff19007446c1b657dfe53b5917fc8896b3bf21", 110, 140, 0.417),
+  mk(2, "humor", "Comical", "Ahjay Stelino", "2f5ed23f2c51b5aa28b237563ee1249d12094fefce7afdaddee4f5a330e010cb", 114, 140, 0.174),
+  mk(466, "humor", "Games Worldbeat", "Bernardo R.", "a1c70e5719bdfbe5dd8ec064939b27e3baed8c2b7f9375ae5b361e6ba71d4922", 107, null, null),
+  mk(474, "empresa", "What About Action?", "Diego Nava", "4bcd99a13f3d71c6d356c2459f6f585f0d3f91ca8912aeef81ac626b8c8e3133", 117, 121, 0.22),
+  mk(729, "empresa", "Pop Track 03", "Lily J", "0bb90793c71a07e6d698afdd434b32ffb4fe93dbbdb0577d3e71a4de80b0337b", 97, 109, 0.098),
+  mk(1167, "empresa", "Close Up", "Michael Ramir C.", "a7f05a29d07a84d38072ccd2b35204bca812db86e75b2a837e71cc144d3e739b", 95, 105, 0.133),
+  mk(441, "calmo", "Meditation", "Arulo", "6ffb81be8ab2447eb7b9357d6ae3d1b58eb8bc85376a724fafa5fe4d1acf562a", 118, null, null),
+  mk(175, "calmo", "Digital Clouds", "Alejandro Maga\xF1a (A. M.)", "71cd4ea39edcc7532672bd97311abadfd318d00e7a828310a88b4f57fad9cd48", 101, 129, 0.185)
 ];
 
 // ../../packages/domain/src/ai/direction.ts
@@ -598,21 +598,90 @@ var PROFILE_TEMPLATES = [
 var PRICE = /R\$\s*\d|\b\d+(?:[.,]\d+)?\s*reais\b|\bpre[çc]os?\b|\bparcela(?:s|do|mento)?\b|\bs[óo] \d|\b\d+\s*%\s*(?:off|de desconto)|\bdesconto de \d|\bcusta(?:m)? (?:s[óo] |apenas |a partir de )?\d/i;
 function mentionsPrice(d) {
   const texts = [d.script, d.cta, d.screen_text, ...d.hook_options, ...Object.values(d.caption), ...d.versions.map((v) => v.script)];
-  return texts.some((t) => PRICE.test(t));
+  return texts.some((t2) => PRICE.test(t2));
 }
+
+// ../../packages/domain/src/autocut.ts
+var t = (id, label, description, params, choices) => ({ id, label, description, params, choices });
+var base = { stabilize: true, autoCut: true, voiceClean: true };
+var AUTOCUT_THEMES = [
+  t(
+    "viral",
+    "\u{1F525} Viral",
+    "Cortes secos sem sil\xEAncio, jump cut a cada pausa, palavra acesa e pulsos na batida.",
+    { pauseMaxMs: 300, pauseKeepMs: 110, removeFillers: true, removeRepeats: true, jumpPunch: 0.1, zoom: 1.15, transition: "auto", transitionMs: 220, beatSync: true },
+    { ...base, captionStyle: "destaque", music: "auto", musicVolume: 0.26, retouch: "forte", broll: true, hook: true }
+  ),
+  t(
+    "longa",
+    "\u{1F3AC} Longa",
+    "Para hist\xF3rias maiores: guarda o respiro, zoom bem suave, transi\xE7\xF5es lentas.",
+    { pauseMaxMs: 750, pauseKeepMs: 280, removeFillers: true, removeRepeats: true, jumpPunch: 0, zoom: 0.5, transition: "suave", transitionMs: 420, beatSync: false },
+    { ...base, captionStyle: "limpo", music: "reflexao", musicVolume: 0.16, retouch: "leve", broll: true, hook: true }
+  ),
+  t(
+    "psicologica",
+    "\u{1F9E0} Psicol\xF3gica",
+    "C\xE2mera no rosto: sil\xEAncios curtos que pesam, aproxima\xE7\xE3o lenta, sem cenas de apoio.",
+    { pauseMaxMs: 500, pauseKeepMs: 240, removeFillers: true, removeRepeats: true, jumpPunch: 0.05, zoom: 0.9, transition: "suave", transitionMs: 320, beatSync: false },
+    { ...base, captionStyle: "manuscrito", music: "reflexao", musicVolume: 0.18, retouch: "leve", broll: false, hook: true }
+  ),
+  t(
+    "engracada",
+    "\u{1F602} Engra\xE7ada",
+    "Timing de com\xE9dia: corte bem seco, zoom forte na piada, sem transi\xE7\xE3o.",
+    { pauseMaxMs: 240, pauseKeepMs: 70, removeFillers: true, removeRepeats: true, jumpPunch: 0.14, zoom: 1.2, transition: "corte_seco", transitionMs: 0, beatSync: false },
+    { ...base, captionStyle: "destaque", music: "humor", musicVolume: 0.24, retouch: "leve", broll: true, hook: true }
+  ),
+  t(
+    "suspense",
+    "\u{1F440} Suspense",
+    "Segura a revela\xE7\xE3o: pausas longas, aproxima\xE7\xE3o lenta, m\xFAsica baixa.",
+    { pauseMaxMs: 650, pauseKeepMs: 320, removeFillers: true, removeRepeats: true, jumpPunch: 0.03, zoom: 1, transition: "suave", transitionMs: 450, beatSync: false },
+    { ...base, captionStyle: "manuscrito", music: "reflexao", musicVolume: 0.12, retouch: "leve", broll: false, hook: true }
+  ),
+  t(
+    "dramatica",
+    "\u{1F3AD} Dram\xE1tica",
+    "Emo\xE7\xE3o: respira entre as frases, quase sem zoom, m\xFAsica presente.",
+    { pauseMaxMs: 600, pauseKeepMs: 280, removeFillers: true, removeRepeats: true, jumpPunch: 0, zoom: 0.7, transition: "suave", transitionMs: 400, beatSync: false },
+    { ...base, captionStyle: "manuscrito", music: "familia", musicVolume: 0.2, retouch: "leve", broll: true, hook: true }
+  ),
+  t(
+    "tiktok",
+    "\u26A1 Acelerada TikTok",
+    "O mais r\xE1pido: zero sil\xEAncio, jump cut forte, zoom em tudo, pulsos na batida.",
+    { pauseMaxMs: 200, pauseKeepMs: 50, removeFillers: true, removeRepeats: true, jumpPunch: 0.12, zoom: 1.3, transition: "auto", transitionMs: 180, beatSync: true },
+    { ...base, captionStyle: "destaque", music: "treino", musicVolume: 0.3, retouch: "forte", broll: true, hook: true }
+  ),
+  t(
+    "calma",
+    "\u{1F33F} Calma",
+    "Pouco est\xEDmulo: pausas naturais, enquadramento quase fixo, sem gancho piscando.",
+    { pauseMaxMs: 850, pauseKeepMs: 320, removeFillers: true, removeRepeats: true, jumpPunch: 0, zoom: 0.3, transition: "suave", transitionMs: 500, beatSync: false },
+    { ...base, captionStyle: "limpo", music: "calmo", musicVolume: 0.12, retouch: "leve", broll: false, hook: false }
+  ),
+  t(
+    "jovem",
+    "\u2728 Jovem",
+    "Vivo e leve: cortes r\xE1pidos, zoom m\xE9dio, pulsos na batida, m\xFAsica motivacional.",
+    { pauseMaxMs: 320, pauseKeepMs: 120, removeFillers: true, removeRepeats: true, jumpPunch: 0.08, zoom: 1.1, transition: "auto", transitionMs: 250, beatSync: true },
+    { ...base, captionStyle: "destaque", music: "motivacional", musicVolume: 0.24, retouch: "forte", broll: true, hook: true }
+  )
+];
 
 // ../../packages/domain/src/studio.ts
 function pendingClaimsIn(text2, pendingClaims) {
-  const t = norm(text2);
+  const t2 = norm(text2);
   const hits = pendingClaims.filter((c) => {
     const all = norm(c).split(" ");
     const words = all.filter((w) => w.length > 3 || /\d/.test(w));
     const numbered = all.flatMap((w, i) => /\d/.test(w) && all[i + 1] ? [{ n: w.replace(/\./g, ""), unit: all[i + 1].slice(0, 5) }] : []);
     if (numbered.length) {
-      const flat = t.replace(/(\d)\.(\d)/g, "$1$2");
+      const flat = t2.replace(/(\d)\.(\d)/g, "$1$2");
       return numbered.some(({ n, unit }) => new RegExp(`(^| )${n} (de )?${unit}`).test(flat));
     }
-    const found = words.filter((w) => t.includes(w)).length;
+    const found = words.filter((w) => t2.includes(w)).length;
     return found >= 2 && found / words.length >= 0.5;
   });
   return hits;
@@ -646,9 +715,9 @@ function geminiClient(apiKey, model, fetchImpl = fetch) {
     model,
     source: "gemini",
     async complete({ system, user, schema }) {
-      const base = { systemInstruction: { parts: [{ text: system }] }, contents: [{ role: "user", parts: [{ text: user }] }] };
-      let r = await call({ ...base, generationConfig: { temperature: 0.9, responseMimeType: "application/json", responseJsonSchema: schema } });
-      if (r.res.status === 400) r = await call({ ...base, generationConfig: { temperature: 0.9, responseMimeType: "application/json" } });
+      const base2 = { systemInstruction: { parts: [{ text: system }] }, contents: [{ role: "user", parts: [{ text: user }] }] };
+      let r = await call({ ...base2, generationConfig: { temperature: 0.9, responseMimeType: "application/json", responseJsonSchema: schema } });
+      if (r.res.status === 400) r = await call({ ...base2, generationConfig: { temperature: 0.9, responseMimeType: "application/json" } });
       if (!r.res.ok) throw new Error(`gemini HTTP ${r.res.status} ${r.json.error?.status ?? ""}: ${r.json.error?.message ?? ""}`.slice(0, 300));
       const text2 = r.json.candidates?.[0]?.content?.parts?.map((p) => p.text ?? "").join("") ?? "";
       if (!text2) throw new Error("empty gemini response");
@@ -745,33 +814,33 @@ async function generateContent(req2, llm, memory) {
     } catch (e) {
       throw new LlmUnavailableError(e instanceof Error ? e.message : "llm error");
     }
-    const base = { workspaceId: req2.workspace_id, contentItemId: req2.content_item_id, model: llm.model, promptVersion: prompt.promptVersion, request: { ...req2, attempt }, response: raw, latencyMs: Date.now() - started };
+    const base2 = { workspaceId: req2.workspace_id, contentItemId: req2.content_item_id, model: llm.model, promptVersion: prompt.promptVersion, request: { ...req2, attempt }, response: raw, latencyMs: Date.now() - started };
     const parsed = parseDraft(raw);
     if (!parsed.ok) {
-      await memory.saveRun({ ...base, accepted: false, rejectionReason: `schema: ${parsed.errors.slice(0, 5).join("; ")}`, repetition: null });
+      await memory.saveRun({ ...base2, accepted: false, rejectionReason: `schema: ${parsed.errors.slice(0, 5).join("; ")}`, repetition: null });
       continue;
     }
     const draft = finalizeDraft(parsed.draft, profile);
     if (profile.business?.noPrice && profile.kind === "empresa" && mentionsPrice(draft)) {
-      await memory.saveRun({ ...base, accepted: false, rejectionReason: "price", repetition: null });
+      await memory.saveRun({ ...base2, accepted: false, rejectionReason: "price", repetition: null });
       avoid = "A vers\xE3o anterior falou pre\xE7o/valor/parcela. PROIBIDO: reescreva sem nenhum pre\xE7o.";
       continue;
     }
     const unproven = profile.kind === "empresa" ? pendingClaimsIn([draft.script, draft.cta, ...draft.hook_options].join(" "), profile.business?.pendingClaims ?? []) : [];
     if (unproven.length) {
-      await memory.saveRun({ ...base, accepted: false, rejectionReason: "claim_sem_prova", repetition: null });
+      await memory.saveRun({ ...base2, accepted: false, rejectionReason: "claim_sem_prova", repetition: null });
       avoid = `A vers\xE3o anterior afirmou alega\xE7\xE3o SEM PROVA (${unproven.join("; ")}). Reescreva sem ela e sem n\xFAmeros n\xE3o comprovados.`;
       continue;
     }
     const report = checkRepetition(fingerprintsFor(draft), recent);
     if (report.repeated) {
-      await memory.saveRun({ ...base, accepted: false, rejectionReason: "repetition", repetition: report });
+      await memory.saveRun({ ...base2, accepted: false, rejectionReason: "repetition", repetition: report });
       avoided.push(...describeAvoidance(report));
       avoid = avoidanceInstructions(report);
       if (!fallback || report.hits.length < fallback.report.hits.length) fallback = { draft, report };
       continue;
     }
-    await memory.saveRun({ ...base, accepted: true, rejectionReason: null, repetition: report });
+    await memory.saveRun({ ...base2, accepted: true, rejectionReason: null, repetition: report });
     return respond(draft, llm, attempt, avoided, []);
   }
   if (fallback) {

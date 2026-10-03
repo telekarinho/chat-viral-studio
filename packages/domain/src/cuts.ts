@@ -52,13 +52,18 @@ export function repeatedStarts(words: readonly SpokenWord[]): Set<number> {
   return drop;
 }
 
-export function planCuts(words: readonly SpokenWord[], clipDurationMs: number): CutReport {
+/** Quanto cortar (tema do AutoCut). Sem opções = o padrão de sempre. */
+export interface CutOptions { pauseMaxMs?: number; pauseKeepMs?: number; removeFillers?: boolean; removeRepeats?: boolean }
+
+export function planCuts(words: readonly SpokenWord[], clipDurationMs: number, opts: CutOptions = {}): CutReport {
+  const maxPause = opts.pauseMaxMs ?? MAX_PAUSE_MS;
+  const pauseLeft = opts.pauseKeepMs ?? PAUSE_LEFT_MS;
   const clean = words.filter((w) => w.endMs > w.startMs && w.startMs < clipDurationMs).map((w) => ({ ...w, endMs: Math.min(w.endMs, clipDurationMs) }));
   if (clean.length === 0) return { keep: [{ startMs: 0, endMs: clipDurationMs }], words: [], removedMs: 0, pauses: 0, repeats: 0, fillers: 0 };
 
-  const repeats = repeatedStarts(clean);
+  const repeats = opts.removeRepeats === false ? new Set<number>() : repeatedStarts(clean);
   const fillerIdx = new Set<number>();
-  clean.forEach((w, i) => { if (FILLERS.has(norm(w.text))) fillerIdx.add(i); });
+  if (opts.removeFillers !== false) clean.forEach((w, i) => { if (FILLERS.has(norm(w.text))) fillerIdx.add(i); });
   const kept = clean.filter((_, i) => !repeats.has(i) && !fillerIdx.has(i));
   if (kept.length === 0) return { keep: [{ startMs: 0, endMs: clipDurationMs }], words: [...clean], removedMs: 0, pauses: 0, repeats: 0, fillers: 0 };
 
@@ -72,9 +77,9 @@ export function planCuts(words: readonly SpokenWord[], clipDurationMs: number): 
     const idx = clean.indexOf(w);
     const skipped = idx - prevIdx > 1; // havia palavra descartada no meio
     const gap = w.startMs - cur.endMs;
-    if (skipped || gap > MAX_PAUSE_MS) {
+    if (skipped || gap > maxPause) {
       if (!skipped) pauses++;
-      const half = Math.min(PAUSE_LEFT_MS / 2, Math.max(0, gap / 2));
+      const half = Math.min(pauseLeft / 2, Math.max(0, gap / 2));
       keep.push({ startMs: cur.startMs, endMs: cur.endMs + (skipped ? Math.min(80, Math.max(0, gap / 2)) : half) });
       cur = { startMs: Math.max(cur.endMs, w.startMs - (skipped ? 80 : half)), endMs: w.endMs };
     } else cur.endMs = w.endMs;

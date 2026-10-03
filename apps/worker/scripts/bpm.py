@@ -43,6 +43,20 @@ def tempo(x: np.ndarray) -> tuple[float, float]:
     return best, conf
 
 
+def beat_phase(x: np.ndarray, bpm: float) -> float:
+    """Segundo da 1ª batida (fase): o deslocamento em que as batidas caem nos picos do fluxo espectral."""
+    env = onset_env(x)
+    fps = SR / HOP
+    period = 60 * fps / bpm
+    best, best_score = 0.0, -1.0
+    for phi in np.arange(0, period, 0.5):
+        idx = (phi + period * np.arange(int((len(env) - phi) / period))).astype(int)
+        score = float(env[idx].sum())
+        if score > best_score:
+            best, best_score = phi, score
+    return best / fps
+
+
 def clicks(bpm: float, seconds: float = 30) -> np.ndarray:
     x = np.random.default_rng(0).normal(0, 0.02, int(SR * seconds)).astype(np.float32)
     period = 60 / bpm
@@ -57,12 +71,14 @@ def clicks(bpm: float, seconds: float = 30) -> np.ndarray:
 if __name__ == "__main__":
     if sys.argv[1] == "selftest":
         for b in (72, 90, 100, 120, 128, 140):
-            est, conf = tempo(clicks(b))
-            print(f"synthetic {b}: {est:.1f} (conf {conf:.2f})")
+            x = clicks(b)
+            est, conf = tempo(x)
+            print(f"synthetic {b}: {est:.1f} (conf {conf:.2f}) phase {beat_phase(x, est):.3f}s")
     else:
         out = {}
         for f in sorted(os.listdir(sys.argv[1])):
             if f.endswith(".mp3"):
-                est, conf = tempo(decode(os.path.join(sys.argv[1], f)))
-                out[f[:-4]] = {"bpm": round(est), "conf": round(conf, 2)}
+                x = decode(os.path.join(sys.argv[1], f))
+                est, conf = tempo(x)
+                out[f[:-4]] = {"bpm": round(est), "conf": round(conf, 2), "phase": round(beat_phase(x, est), 3)}
         print(json.dumps(out, indent=1))

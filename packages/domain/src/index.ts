@@ -11,6 +11,8 @@ export * from "./ai/localGenerator";
 export * from "./ai/manual";
 export * from "./ai/directorRules";
 export * from "./ai/direction";
+export * from "./autocut";
+export * from "./musicCatalog";
 export * from "./segments";
 export * from "./editPlan";
 export * from "./profiles";
