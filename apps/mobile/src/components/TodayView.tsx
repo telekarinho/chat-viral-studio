@@ -1,5 +1,5 @@
 import type { ReactNode } from "react";
-import { Text, View } from "react-native";
+import { Pressable, Text, View } from "react-native";
 import { FORMAT_LABEL, computeProgress, nextTask, type RecordingTask, type TaskAction } from "@postai/domain";
 import type { ContentItem } from "../db/repo";
 import { Button, Card, Empty, Eyebrow, Section, colors, s } from "../ui";
@@ -18,8 +18,12 @@ export interface TodayViewProps {
   onEvent: () => void;
   onFreeRecord: () => void;
   pillarNames?: Record<string, string>;
-  /** menu "+ CRIAR": fica abaixo da missão de agora, sem competir com ela */
+  /** menu "+ CRIAR": fica no fim, sem competir com a missão de agora */
   createSlot?: ReactNode;
+  /** vídeos montados esperando aprovação (vêm antes de tudo) e os que estão montando agora */
+  ready?: { id: string; title: string }[];
+  rendering?: { id: string; title: string }[];
+  onOpenReady?: (contentId: string) => void;
 }
 
 const CONTENT_STATUS: Record<ContentItem["status"], { label: string; color: string }> = {
@@ -71,6 +75,18 @@ export function TodayView(p: TodayViewProps) {
         {p.syncLabel ? <Text style={{ fontSize: 12, color: colors.muted, fontWeight: "700" }} testID="sync-badge">{p.syncLabel}</Text> : null}
       </View>
 
+      {p.ready?.length ? (
+        <Pressable onPress={() => p.onOpenReady?.(p.ready![0]!.id)} accessibilityRole="button" testID="ready-video"
+          style={{ backgroundColor: colors.good, borderRadius: 24, padding: 20, gap: 6 }}>
+          <Text style={{ color: "#FFFFFF", fontSize: 12, fontWeight: "900", letterSpacing: 1.2 }}>{p.ready.length > 1 ? `${p.ready.length} VÍDEOS PRONTOS` : "SEU VÍDEO FICOU PRONTO"}</Text>
+          <Text style={{ color: "#FFFFFF", fontSize: 20, fontWeight: "900" }} numberOfLines={2}>{p.ready[0]!.title}</Text>
+          <Text style={{ color: "#FFFFFF", fontSize: 17, fontWeight: "900" }}>▶ VER E APROVAR</Text>
+        </Pressable>
+      ) : null}
+      {p.rendering?.length ? (
+        <Text style={{ color: colors.info, fontWeight: "800" }} testID="rendering-now">{`🎬 Montando: ${p.rendering.map((r) => r.title).join(", ")} — pode gravar o próximo.`}</Text>
+      ) : null}
+
       {next ? (
         <View style={{ backgroundColor: colors.hero, borderRadius: 24, padding: 22, gap: 12 }} testID="hero-now">
           <Text style={{ color: colors.accent, fontSize: 12, fontWeight: "900", letterSpacing: 1.4 }}>AGORA · {hhmm(next.scheduledFor)}</Text>
@@ -79,7 +95,10 @@ export function TodayView(p: TodayViewProps) {
           {nextContent?.draft ? (
             <Text style={{ color: colors.heroText, fontSize: 17, lineHeight: 25 }} numberOfLines={4}>“{nextContent.draft.hook_options[nextContent.selectedHook ?? 0] ?? nextContent.draft.key_phrase}”</Text>
           ) : null}
-          <Button variant="light" label="● GRAVAR AGORA" onPress={() => p.onRecord(next)} testID="hero-record" />
+          <Pressable onPress={() => p.onRecord(next)} accessibilityRole="button" accessibilityLabel="Gravar agora" testID="hero-record"
+            style={{ backgroundColor: "#FE2C55", borderRadius: 40, minHeight: 72, alignItems: "center", justifyContent: "center" }}>
+            <Text style={{ color: "#FFFFFF", fontSize: 22, fontWeight: "900", letterSpacing: 1 }}>● GRAVAR</Text>
+          </Pressable>
           {nextContent ? scriptButton(nextContent, false, "ghost") : null}
         </View>
       ) : p.tasks.length > 0 ? (
@@ -107,9 +126,7 @@ export function TodayView(p: TodayViewProps) {
         </Card>
       ) : null}
 
-      {p.createSlot}
-
-      {rest.length || loose.length ? <Section>Resto do dia</Section> : null}
+      {rest.length || loose.length ? <Section>Depois</Section> : null}
       {rest.map((t) => {
         const c = t.contentItemId ? byId.get(t.contentItemId) : undefined;
         return (
@@ -125,6 +142,7 @@ export function TodayView(p: TodayViewProps) {
           {contentLine(c, 0)}
         </Card>
       ))}
+      {p.createSlot}
       <Button variant="ghost" label="ACONTECEU ALGO HOJE? VIRA CONTEÚDO" onPress={p.onEvent} testID="event-button" />
     </View>
   );

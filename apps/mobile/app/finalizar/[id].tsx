@@ -6,6 +6,7 @@ import { DEFAULT_EDIT_CHOICES, applyEditProposal, styleLabel, nextTask, ownMusic
 import { chosenTrack, nextTrack } from "../../src/musicChoice";
 import { getContent, getTake, listTakes, listTasks, setEditChoices, type ContentItem, type Take } from "../../src/db/repo";
 import { contentPlan, type ContentPlan } from "../../src/finalPlan";
+import { tryAutoMontage } from "../../src/autoMontage";
 import { downloadFinal, kickRenderWorker, latestRenderJob, requestFinalRender, type RenderJob } from "../../src/finalRender";
 import { MusicPreview } from "../../src/components/MusicPreview";
 import { FinishOptions } from "../../src/components/FinishOptions";
@@ -31,13 +32,15 @@ type Step = "confirmar" | "enviando" | "fila" | "montando" | "baixando" | "falho
 export default function FinalizarScreen() {
   useKeepAwake();
   // refazer=1: veio do vídeo pronto ("TROCAR MÚSICA E REFAZER") — monta de novo sem perguntar
-  const { id, refazer } = useLocalSearchParams<{ id: string; refazer?: string }>();
+  // auto=1: veio do fim da gravação (modo 1 botão) — o Diretor monta sozinho, sem tela de confirmar
+  const { id, refazer, auto } = useLocalSearchParams<{ id: string; refazer?: string; auto?: string }>();
+  const autoMode = useRef(auto === "1");
   const [c, setC] = useState<ContentItem | null>(null);
   const [cp, setCp] = useState<ContentPlan | null>(null);
   const { workspace } = useApp();
   const [takes, setTakes] = useState<Take[]>([]);
   const [job, setJob] = useState<RenderJob | null>(null);
-  const [confirmed, setConfirmed] = useState(refazer === "1");
+  const [confirmed, setConfirmed] = useState(refazer === "1" || auto === "1");
   const [waitMsg, setWaitMsg] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [showOptions, setShowOptions] = useState(false);
@@ -114,7 +117,14 @@ export default function FinalizarScreen() {
       const j = await latestRenderJob(c.id).catch(() => null);
       if (stop) return;
       // falhou: só pede de novo quando a pessoa toca em TENTAR DE NOVO (sem loop de pedidos)
-      if (!j || forceRequest.current || (j.status === "failed" && retryAsked.current)) {
+      if (!j && autoMode.current) {
+        // aplica a sugestão do Diretor (se houver) e pede a montagem; sem internet, fica marcado e sai sozinho depois
+        if (await tryAutoMontage(c.id)) {
+          autoMode.current = false;
+          setWaitMsg(null);
+          setJob(await latestRenderJob(c.id).catch(() => null));
+        } else setWaitMsg("Vou montar assim que os vídeos subirem e tiver internet — pode sair desta tela.");
+      } else if (!j || forceRequest.current || (j.status === "failed" && retryAsked.current)) {
         retryAsked.current = false;
         const r = await requestFinalRender(c.workspaceId, c.id, plan);
         if (r.ok) {

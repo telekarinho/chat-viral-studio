@@ -16,6 +16,7 @@ import { syncNow } from "../src/sync/engine";
 import { reportError } from "../src/telemetry";
 import { Teleprompter } from "../src/components/Teleprompter";
 import { TakeReview } from "../src/components/TakeReview";
+import { queueAutoMontage } from "../src/autoMontage";
 import { chosenTrack } from "../src/musicChoice";
 import { useNarrationMusic } from "../src/narration";
 import { listOwnMusic, ownMusicUrl } from "../src/ownMusic";
@@ -251,7 +252,11 @@ export default function RecordScreen() {
         void syncNow();
       }
       // gravou tudo de um conteúdo com roteiro: vai direto para "Seu vídeo vai sair assim" (só confirmar)
-      if (contentId && !project && !patrimonio) router.replace(`/finalizar/${contentId}`);
+      if (contentId && !project && !patrimonio) {
+        // modo 1 botão: o Diretor monta sozinho (sem confirmar); o criador aprova no vídeo pronto
+        await queueAutoMontage(contentId);
+        router.replace({ pathname: "/finalizar/[id]", params: { id: contentId, auto: "1" } });
+      }
       else if (contentId) router.replace(`/content/${contentId}`);
       else router.back();
     } catch (e) {

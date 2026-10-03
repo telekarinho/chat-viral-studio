@@ -6,6 +6,7 @@ import { StatusBar } from "expo-status-bar";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 import { AppProvider, useApp } from "../src/app-state";
 import { notifyFinishedRenders } from "../src/renderWatch";
+import { runAutoMontages } from "../src/autoMontage";
 import { startSyncEngine } from "../src/sync/engine";
 import { refreshProfilesFromCloud } from "../src/workspace-setup";
 import { initTelemetry, reportError, wrapRoot } from "../src/telemetry";
@@ -51,7 +52,11 @@ function RenderWatch() {
   }, [tapped, navReady]);
   useEffect(() => {
     if (!workspace?.cloud) return;
-    const check = () => void notifyFinishedRenders(workspace.id).catch((e) => reportError(e, "render watch"));
+    const check = () => {
+      void notifyFinishedRenders(workspace.id).catch((e) => reportError(e, "render watch"));
+      // montagens que ficaram para quando a internet voltasse
+      void runAutoMontages().catch((e) => reportError(e, "auto montagem"));
+    };
     check();
     const t = setInterval(() => { if (AppState.currentState === "active") check(); }, RENDER_CHECK_MS);
     const sub = AppState.addEventListener("change", (st) => { if (st === "active") check(); });

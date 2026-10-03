@@ -79,3 +79,14 @@ describe("Tela Hoje", () => {
     expect(syncLabel(base, true)).toBe("Sincronizado ✓");
   });
 });
+
+describe("modo 1 botão", () => {
+  it("vídeo pronto vem antes de tudo e abre para aprovar; o que está montando aparece numa linha", () => {
+    const onOpenReady = jest.fn();
+    setup({ ready: [{ id: "v1", title: "A cabeça mente" }], rendering: [{ id: "v2", title: "Treino" }], onOpenReady });
+    expect(screen.getByTestId("ready-video")).toHaveTextContent(/SEU VÍDEO FICOU PRONTO.*A cabeça mente.*VER E APROVAR/);
+    expect(screen.getByTestId("rendering-now")).toHaveTextContent(/Montando: Treino/);
+    fireEvent.press(screen.getByTestId("ready-video"));
+    expect(onOpenReady).toHaveBeenCalledWith("v1");
+  });
+});
