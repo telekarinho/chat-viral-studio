@@ -64,9 +64,9 @@ export function MusicDrawer({ value, onChange, workspaceId, business, voiceUri, 
   const current = catalog.find((r) => r.id === value.music);
   const ownGone = ownMusicUuid(value.music) && !current && own.length > 0;
 
-  const play = (row: MusicRow, from = row.id === value.music ? startS : 0) => {
+  const play = (row: MusicRow, from = row.id === value.music ? startS : 0, restart = false) => {
     setFocusId(row.id);
-    void preview.toggle(row.id, row.own ? ownMusicUrl(row.own.storageKey) : row.url, { volume, startS: from, voiceUri: withVoice ? voiceUri : null });
+    void preview.toggle(row.id, row.own ? ownMusicUrl(row.own.storageKey) : row.url, { volume, startS: from, voiceUri: withVoice ? voiceUri : null, restart });
   };
   const focus = catalog.find((r) => r.id === (focusId ?? value.music));
   const fav = async (id: string) => setFavorites(await toggleMusicFavorite(id, workspaceId));
@@ -131,8 +131,7 @@ export function MusicDrawer({ value, onChange, workspaceId, business, voiceUri, 
                     onPick={(sec) => {
                       // na faixa escolhida, tocar na linha define onde a música começa no vídeo
                       if (value.music === focus.id) setStart(sec);
-                      if (preview.playing === focus.id) preview.stop();
-                      play(focus, sec);
+                      play(focus, sec, true);
                     }} />
                 ) : null}
                 {value.music === focus.id ? (

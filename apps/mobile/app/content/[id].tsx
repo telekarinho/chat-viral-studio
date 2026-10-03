@@ -170,7 +170,7 @@ export default function ContentScreen() {
           <Text style={{ color: colors.good, fontWeight: "900", fontSize: 18 }}>VÍDEO PRONTO ✓</Text>
           <Button label="▶ VER, APROVAR E PUBLICAR" onPress={() => router.push(`/final/${c.id}`)} testID="top-open-final" />
         </Card>
-      ) : phase === "completo" && !free ? (
+      ) : phase === "completo" ? (
         <Card style={{ gap: 10 }} testID="phase-complete">
           <Text style={{ color: colors.good, fontWeight: "900", fontSize: 18 }}>MATERIAL COMPLETO ✓</Text>
           <Text style={s.muted}>{`${parts!.segments.length} parte(s) gravada(s). Seu Diretor monta; você aprova.`}</Text>
@@ -389,7 +389,7 @@ ${owner?.ws.profile.signature ?? ""}`.trim())} />
                   ) : (
                     <>
                       {job?.status === "failed" ? <Text style={{ color: colors.bad }}>A montagem falhou: {job.error}</Text> : null}
-                      {!job && !jobKnown ? <Text style={s.muted}>Sem internet: a montagem começa sozinha quando a conexão voltar.</Text> : null}
+                      {!job && !jobKnown ? <Text style={s.muted}>Sem internet: toque em FINALIZAR quando a conexão voltar.</Text> : null}
                       <Button compact label="MELHORAR E FINALIZAR (retoque + legenda + música)" loading={busy === "montar"} testID="request-final" onPress={() => run("montar", async () => {
                         const r = await requestFinalRender(c.workspaceId, c.id, parts.plan!);
                         if (!r.ok) throw new Error(r.reason);

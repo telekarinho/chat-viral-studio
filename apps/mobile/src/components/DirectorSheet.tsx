@@ -39,9 +39,9 @@ export function DirectorSheet({ visible, onClose, workspaceId, contentId, segmen
     setSending(true);
     setMsg(null);
     try {
-      if (cloud) await sendDirectorRequest(workspaceId, contentId, t);
+      const saved = cloud ? await sendDirectorRequest(workspaceId, contentId, t) : false;
       setText("");
-      setMsg(cloud ? "Pedido enviado. Abrindo o Claude — a resposta aparece aqui." : "Sem nuvem: abrindo o Claude com o seu pedido.");
+      setMsg(saved ? "Pedido enviado. Abrindo o Claude — a resposta aparece aqui." : "Abrindo o Claude com o seu pedido (este vídeo ainda não subiu para a nuvem; a resposta fica no Claude).");
       await Linking.openURL(claudeAskUrl(workspaceId, contentId, t));
       refresh();
     } catch (e) {

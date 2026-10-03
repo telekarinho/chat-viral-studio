@@ -25,6 +25,12 @@ describe("proposta do diretor", () => {
     expect(mockUpdates).toHaveLength(0);
   });
 
+  it("proposta só com objetivo não é dispensada (intencao revalidada)", async () => {
+    mockRow = { id: "p3", edit: { intencao: "venda" }, motivo: "É anúncio." };
+    expect(await pullEditProposal("ws", "c1", true)).toEqual({ id: "p3", edit: { intencao: "venda" }, motivo: "É anúncio." });
+    expect(mockUpdates).toHaveLength(0);
+  });
+
   it("proposta inválida (volume alto demais) é dispensada e não aparece", async () => {
     mockRow = { id: "p2", edit: { music: "mixkit-22", musicVolume: 0.9 }, motivo: "x" };
     expect(await pullEditProposal("ws", "c1", false)).toBeNull();

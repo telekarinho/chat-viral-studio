@@ -5,7 +5,7 @@ import type { ScriptSegment } from "@postai/domain";
 const mockRequests = [{ id: "r1", texto: "quero mais rápido", resposta: "Propus cortes mais curtos (AutoCut TikTok).", createdAt: "x" }];
 jest.mock("../src/directorChat", () => ({
   listDirectorRequests: jest.fn(async () => mockRequests),
-  sendDirectorRequest: jest.fn(async () => undefined),
+  sendDirectorRequest: jest.fn(async () => true),
   claudeAskUrl: jest.fn(() => "https://claude.ai/new?q=x"),
 }));
 jest.mock("../src/editProposals", () => ({ pullEditProposal: jest.fn(async () => ({ id: "p1", edit: { autocut: "tiktok" }, motivo: "Fala animada." })) }));

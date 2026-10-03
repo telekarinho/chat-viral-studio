@@ -126,7 +126,7 @@ export function supabaseMcpStore(db: SupabaseClient, workspaceId: string, userId
         .eq("workspace_id", workspaceId).is("deleted_at", null);
       if (categoria === "broll") q = q.eq("category", "broll");
       else if (categoria === "prova") q = q.or("category.eq.patrimonio,meta->>shot.not.is.null");
-      else if (categoria === "fala") q = q.neq("category", "broll").is("meta->>shot", null);
+      else if (categoria === "fala") q = q.or("category.is.null,category.neq.broll").is("meta->>shot", null);
       if (favoritas) q = q.eq("favorite", true);
       const { data, error } = await q.order("created_at", { ascending: false }).limit(limite * 2);
       if (error) throw new Error(error.message);

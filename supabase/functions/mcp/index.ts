@@ -915,6 +915,19 @@ var AUTOCUT_THEMES = [
   )
 ];
 var autoCutTheme = (id) => AUTOCUT_THEMES.find((x) => x.id === id);
+var VIDEO_INTENTS = ["venda", "autoridade", "tutorial", "demonstracao", "prova", "historia", "depoimento", "oferta", "bastidor", "motivacional"];
+var INTENT_LABEL = {
+  venda: "Venda",
+  autoridade: "Autoridade",
+  tutorial: "Tutorial",
+  demonstracao: "Demonstra\xE7\xE3o",
+  prova: "Prova",
+  historia: "Hist\xF3ria",
+  depoimento: "Depoimento",
+  oferta: "Oferta",
+  bastidor: "Bastidor",
+  motivacional: "Motivacional"
+};
 
 // ../../packages/domain/src/segments.ts
 var SEGMENT_LABEL = {
@@ -1139,6 +1152,10 @@ function parseEditProposal(input, ctx) {
     if (typeof input.autocut === "string" && AUTOCUT_THEME_IDS.includes(input.autocut)) edit.autocut = input.autocut;
     else errors.push(`autocut: use um destes: ${AUTOCUT_THEME_IDS.join(", ")}.`);
   }
+  if (input.intencao !== void 0) {
+    if (typeof input.intencao === "string" && VIDEO_INTENTS.includes(input.intencao)) edit.intencao = input.intencao;
+    else errors.push(`intencao: use um destes: ${VIDEO_INTENTS.join(", ")}.`);
+  }
   let trackDuration = null;
   if (input.musica !== void 0) {
     const m = typeof input.musica === "string" ? input.musica.trim() : "";
@@ -1171,11 +1188,12 @@ function parseEditProposal(input, ctx) {
     else if (typeof s2 !== "number" || s2 < 0 || s2 > trackDuration - MIN_TAIL_S) errors.push(`inicio_musica_s: de 0 a ${trackDuration - MIN_TAIL_S} segundos.`);
     else edit.musicStartS = Math.round(s2);
   }
-  if (!errors.length && !Object.keys(edit).length) errors.push("Proponha pelo menos um item: autocut, musica, volume ou inicio_musica_s.");
+  if (!errors.length && !Object.keys(edit).length) errors.push("Proponha pelo menos um item: intencao, autocut, musica, volume ou inicio_musica_s.");
   return errors.length ? { ok: false, errors } : { ok: true, edit };
 }
 function describeEditProposal(p, own = []) {
   const bits = [];
+  if (p.intencao) bits.push(`Objetivo ${INTENT_LABEL[p.intencao]}`);
   if (p.autocut) bits.push(`AutoCut ${autoCutTheme(p.autocut).label.replace(/^\S+\s/, "")}`);
   if (p.music) {
     const ownId = ownMusicUuid(p.music);
@@ -1499,8 +1517,9 @@ var MCP_TOOLS = [
   { name: "salvar_cenas", title: "Salvar cenas de apoio", description: "Para conte\xFAdo de cena de apoio (B-roll / prova visual): a lista de takes com instru\xE7\xE3o de filmagem. O app mostra cada take para gravar.", inputSchema: obj({ content_id: { type: "string" }, takes: { type: "array", description: "takes {ordem, nome, duracao_segundos, enquadramento, movimento_camera, local, luz, olhar, emocao, broll, erro_comum, fala_exata (opcional)}", items: { type: "object" } }, provas: { type: "array", items: { type: "string" }, description: "provas film\xE1veis do perfil que esta cena filma (ficam 'filmada' quando a cena for gravada)" } }, ["content_id", "takes"]), annotations: WRITE2 },
   { name: "registrar_metricas", title: "Registrar n\xFAmeros do post", description: "Salva os n\xFAmeros REAIS de um post (ex.: lidos no Metricool ou no painel da rede) para o app e o ranking. Nunca invente n\xFAmeros.", inputSchema: obj({ content_id: { type: "string" }, visualizacoes: { type: "number" }, curtidas: { type: "number" }, comentarios: { type: "number" }, compartilhamentos: { type: "number" }, salvamentos: { type: "number" }, retencao: { type: "number", description: "% de conclus\xE3o/reten\xE7\xE3o m\xE9dia (0\u2013100)" }, tempo_medio_segundos: { type: "number" }, seguidores_ganhos: { type: "number" }, fonte: { type: "string", description: "ex.: Metricool, Instagram" } }, ["content_id", "visualizacoes"]), annotations: WRITE2 },
   { name: "listar_musicas", title: "M\xFAsicas licenciadas", description: "Faixas da biblioteca licenciada (id, clima, dura\xE7\xE3o, licen\xE7a). Use o id em direcao.musica.id. Conta de empresa s\xF3 v\xEA faixas com licen\xE7a comercial.", inputSchema: obj({ clima: { type: "string", description: `opcional: ${Object.keys(MOOD_LABEL).join(", ")}` }, bpm: { type: "number", description: "opcional (as faixas ainda n\xE3o t\xEAm BPM medido)" } }), annotations: RO2 },
-  { name: "propor_edicao", title: "Propor a edi\xE7\xE3o", description: "Depois de ver o que foi gravado (ler_status_gravacao), prop\xF5e a montagem: estilo AutoCut, m\xFAsica, volume e trecho, com o motivo. O criador v\xEA no app e escolhe MONTAR ASSIM (monta) ou AJUSTAR. Nada \xE9 montado nem publicado sem ele.", inputSchema: obj({ content_id: { type: "string" }, autocut: { type: "string", enum: [...AUTOCUT_IDS], description: `estilo da montagem (cortes, zoom, transi\xE7\xE3o, ritmo): ${AUTOCUT_THEMES.map((t2) => `${t2.id} = ${t2.label.replace(/^\S+\s/, "")}`).join("; ")}` }, musica: { type: "string", description: 'id de listar_musicas, "auto", "none" ou um clima' }, volume: { type: "number", description: "0.05 a 0.45, relativo \xE0 voz (0.22 padr\xE3o)" }, inicio_musica_s: { type: "number", description: "segundo da faixa onde a trilha come\xE7a (s\xF3 com faixa espec\xEDfica)" }, motivo: { type: "string", description: "por que esta edi\xE7\xE3o, em 1\u20132 frases simples" } }, ["content_id", "motivo"]), annotations: WRITE2 },
+  { name: "propor_edicao", title: "Propor a edi\xE7\xE3o", description: "Depois de ver o que foi gravado (ler_status_gravacao), prop\xF5e a montagem: estilo AutoCut, m\xFAsica, volume e trecho, com o motivo. O criador v\xEA no app e escolhe MONTAR ASSIM (monta) ou AJUSTAR. Nada \xE9 montado nem publicado sem ele.", inputSchema: obj({ content_id: { type: "string" }, intencao: { type: "string", enum: [...VIDEO_INTENTS], description: "objetivo do v\xEDdeo (combina com o estilo: Venda + Viral)" }, autocut: { type: "string", enum: [...AUTOCUT_IDS], description: `estilo da montagem (cortes, zoom, transi\xE7\xE3o, ritmo): ${AUTOCUT_THEMES.map((t2) => `${t2.id} = ${t2.label.replace(/^\S+\s/, "")}`).join("; ")}` }, musica: { type: "string", description: 'id de listar_musicas, "auto", "none" ou um clima' }, volume: { type: "number", description: "0.05 a 0.45, relativo \xE0 voz (0.22 padr\xE3o)" }, inicio_musica_s: { type: "number", description: "segundo da faixa onde a trilha come\xE7a (s\xF3 com faixa espec\xEDfica)" }, motivo: { type: "string", description: "por que esta edi\xE7\xE3o, em 1\u20132 frases simples" } }, ["content_id", "motivo"]), annotations: WRITE2 },
   { name: "listar_takes", title: "Takes gravados", description: "Cada take gravado do conte\xFAdo, por parte do roteiro: n\xFAmero do take, dura\xE7\xE3o, resolu\xE7\xE3o, c\xE2mera, se subiu, se foi descartado e uma checagem t\xE9cnica (dura\xE7\xE3o \xD7 texto, resolu\xE7\xE3o, orienta\xE7\xE3o). N\xE3o \xE9 nota de viralidade. A montagem usa o take escolhido pelo criador em cada parte (sem escolha: o mais recente n\xE3o descartado).", inputSchema: obj({ content_id: { type: "string" } }, ["content_id"]), annotations: RO2 },
+  { name: "buscar_midias", title: "Acervo de m\xEDdias", description: "Procura no acervo do perfil (takes j\xE1 gravados em qualquer conte\xFAdo): B-roll, provas/produto, falas, favoritos. Use ANTES de pedir para gravar de novo \u2014 d\xE1 para reaproveitar cena de apoio e prova j\xE1 filmadas.", inputSchema: obj({ categoria: { type: "string", enum: ["broll", "prova", "fala", "todas"], description: "padr\xE3o: todas" }, favoritas: { type: "boolean", description: "s\xF3 os marcados com \u2605 pelo criador" }, limite: { type: "number", description: "padr\xE3o 30, m\xE1x. 100" } }), annotations: RO2 },
   { name: "pedidos_do_criador", title: "Pedidos do criador", description: 'O que o criador pediu ao diretor no app sobre um v\xEDdeo ("quero mais r\xE1pido", "troca o come\xE7o"\u2026), sem resposta primeiro. Atenda com as ferramentas de sempre (propor_edicao, salvar_roteiro, listar_takes) e responda com responder_pedido.', inputSchema: obj({ content_id: { type: "string", description: "opcional: s\xF3 deste conte\xFAdo" } }), annotations: RO2 },
   { name: "responder_pedido", title: "Responder pedido", description: "Responde um pedido do criador (aparece no app, no painel do Diretor). Diga em 1\u20133 frases simples o que voc\xEA fez ou prop\xF4s.", inputSchema: obj({ pedido_id: { type: "string" }, resposta: { type: "string" } }, ["pedido_id", "resposta"]), annotations: WRITE2 },
   { name: "ler_status_gravacao", title: "Status da grava\xE7\xE3o", description: "O que j\xE1 foi gravado (por take/parte), o que falta, se j\xE1 subiu e como est\xE1 a montagem do v\xEDdeo.", inputSchema: obj({ content_id: { type: "string" } }, ["content_id"]), annotations: RO2 },
@@ -1690,6 +1709,20 @@ ${lines.join("\n")}`);
     const rows = [...list2].sort((a, b) => Number(favs.has(b.id)) - Number(favs.has(a.id))).map((t2) => `- id ${t2.id} \xB7 "${t2.title}" \u2014 ${t2.artist} \xB7 clima ${t2.mood} (${MOOD_LABEL[t2.mood]}) \xB7 ${t2.bpm ? `${t2.bpm} BPM` : "sem batida definida"} \xB7 ${t2.durationSec}s \xB7 licen\xE7a ${t2.license}${fav(t2.id)}`);
     const note = `Use o valor de "clima" (ex.: ${list2[0]?.mood ?? "reflexao"}) em direcao.musica.clima. BPM medido no \xE1udio. Tend\xEAncia ("em alta"): ainda sem fonte de dados \u2014 n\xE3o informada.`;
     return text2([...ownRows, ...rows, note].join("\n"));
+  }
+  if (name === "buscar_midias") {
+    const cat = typeof args.categoria === "string" && ["broll", "prova", "fala"].includes(args.categoria) ? args.categoria : null;
+    const limite = typeof args.limite === "number" && args.limite > 0 ? Math.min(100, Math.floor(args.limite)) : 30;
+    const list2 = await store.mediaLibrary({ categoria: cat, favoritas: args.favoritas === true, limite });
+    if (!list2.length) return text2("Nada no acervo com esse filtro.");
+    const rows = await Promise.all(list2.map(async (t2) => {
+      const c = t2.contentId ? await store.content(t2.contentId) : null;
+      const facts = [t2.durationMs !== null ? `${(t2.durationMs / 1e3).toFixed(1)}s` : "", t2.width && t2.height ? `${t2.width}x${t2.height}` : "", t2.favorite ? "\u2605" : "", t2.synced ? "na nuvem" : "ainda no celular"].filter(Boolean).join(" \xB7 ");
+      return `- take ${t2.id} \xB7 ${t2.category}${t2.capitulo ? ` (${t2.capitulo})` : ""} \xB7 ${brt(t2.createdAt)} \xB7 ${facts}${c ? ` \xB7 de "${c.title}" (${c.id})` : ""}${t2.tags.length ? ` \xB7 ${t2.tags.join(", ")}` : ""}`;
+    }));
+    return text2(`${list2.length} m\xEDdia(s) no acervo (descartadas ficam de fora):
+${rows.join("\n")}
+B-roll do dia entra sozinho na montagem; para outro, pe\xE7a ao criador para usar a cena (ou grave s\xF3 o que falta).`);
   }
   if (name === "pedidos_do_criador") {
     const cid = typeof args.content_id === "string" && args.content_id ? args.content_id : null;
@@ -2098,6 +2131,32 @@ function supabaseMcpStore(db, workspaceId, userId) {
       if (error?.code === "42P01") return [];
       if (error) throw new Error(error.message);
       return [...new Set((data ?? []).map((r) => r.track_id))];
+    },
+    async mediaLibrary({ categoria, favoritas, limite }) {
+      let q = db.from("takes").select("id, segment_index, created_at, tags, favorite, camera, category, content_item_id, meta, media_files(state, duration_ms, width, height)").eq("workspace_id", workspaceId).is("deleted_at", null);
+      if (categoria === "broll") q = q.eq("category", "broll");
+      else if (categoria === "prova") q = q.or("category.eq.patrimonio,meta->>shot.not.is.null");
+      else if (categoria === "fala") q = q.or("category.is.null,category.neq.broll").is("meta->>shot", null);
+      if (favoritas) q = q.eq("favorite", true);
+      const { data, error } = await q.order("created_at", { ascending: false }).limit(limite * 2);
+      if (error) throw new Error(error.message);
+      return (data ?? []).filter((t2) => !(t2.tags ?? []).includes("descartado")).slice(0, limite).map((t2) => ({
+        id: t2.id,
+        segmentIndex: t2.segment_index,
+        createdAt: t2.created_at,
+        discarded: false,
+        chosen: (t2.tags ?? []).includes("escolhido"),
+        synced: t2.media_files?.state === "uploaded_original",
+        favorite: t2.favorite,
+        camera: t2.camera,
+        durationMs: t2.media_files?.duration_ms ?? null,
+        width: t2.media_files?.width ?? null,
+        height: t2.media_files?.height ?? null,
+        category: t2.category ?? "livre",
+        contentId: t2.content_item_id,
+        tags: (t2.tags ?? []).filter((g) => g !== "escolhido"),
+        capitulo: t2.meta?.capitulo ?? null
+      }));
     },
     async creatorRequests(contentId) {
       let q = db.from("pedidos_diretor").select("id, content_item_id, texto, resposta, created_at").eq("workspace_id", workspaceId);

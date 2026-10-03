@@ -11,11 +11,17 @@ export async function listDirectorRequests(contentId: string): Promise<DirectorR
   return (data ?? []).map((r) => ({ id: r.id as string, texto: r.texto as string, resposta: (r.resposta as string | null) ?? null, createdAt: r.created_at as string }));
 }
 
-/** Guarda o pedido para o Claude ler pelo conector. Lança erro (mostrado na tela) se não der. */
-export async function sendDirectorRequest(workspaceId: string, contentId: string, texto: string): Promise<void> {
-  if (!supabase) throw new Error("O Diretor precisa da nuvem configurada.");
+/**
+ * Guarda o pedido para o Claude ler pelo conector. false = ainda não deu para guardar (conteúdo ainda não subiu
+ * para a nuvem): o app abre o Claude com o pedido do mesmo jeito. Outros erros: lança (mostrado na tela).
+ */
+export async function sendDirectorRequest(workspaceId: string, contentId: string, texto: string): Promise<boolean> {
+  if (!supabase) return false;
   const { error } = await supabase.from("pedidos_diretor").insert({ workspace_id: workspaceId, content_item_id: contentId, texto: texto.trim().slice(0, 600) });
+  // 23503 = conteúdo ainda não sincronizado · 42501 = RLS (idem, o conteúdo não está lá ainda)
+  if (error && (error.code === "23503" || error.code === "42501")) return false;
   if (error) throw new Error(error.message);
+  return true;
 }
 
 /** Abre o Claude já com o pedido: ele lê o vídeo pelo conector, age e responde no app. */

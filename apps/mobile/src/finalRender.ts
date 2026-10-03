@@ -45,6 +45,11 @@ export async function requestFinalRender(workspaceId: string, contentId: string,
     const up = await supabase.from("content_items").update({ structured_payload: row.structured_payload, updated_at: row.updated_at }).eq("id", contentId);
     if (up.error) return { ok: false, reason: `Não consegui salvar as opções escolhidas: ${up.error.message}` };
   }
+  // take escolhido (Take 1 em vez do mais novo) também precisa estar lá antes: a fila de sync é assíncrona
+  for (const t of parts) {
+    const tg = await supabase.from("takes").update({ tags: t.tags }).eq("id", t.id);
+    if (tg.error) return { ok: false, reason: `Não consegui salvar o take escolhido: ${tg.error.message}` };
+  }
   const { error } = await supabase.from("render_jobs").insert({ id: newId(), workspace_id: workspaceId, content_item_id: contentId, plan: { variant, clips: plan.clips.length } });
   // 23505 = outro pedido igual entrou no mesmo instante (índice único): está tudo certo
   if (error && error.code !== "23505") return { ok: false, reason: `Não consegui pedir a montagem: ${error.message}` };

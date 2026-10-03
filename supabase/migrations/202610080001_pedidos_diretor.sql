@@ -18,4 +18,5 @@ drop policy if exists pedidos_diretor_select on pedidos_diretor;
 create policy pedidos_diretor_select on pedidos_diretor for select to authenticated using (public.is_workspace_member(workspace_id));
 drop policy if exists pedidos_diretor_insert on pedidos_diretor;
 create policy pedidos_diretor_insert on pedidos_diretor for insert to authenticated
-  with check (user_id = auth.uid() and public.can_write_workspace(workspace_id));
+  with check (user_id = auth.uid() and public.can_write_workspace(workspace_id) and resposta is null and respondido_at is null
+    and exists (select 1 from content_items c where c.id = content_item_id and c.workspace_id = pedidos_diretor.workspace_id));

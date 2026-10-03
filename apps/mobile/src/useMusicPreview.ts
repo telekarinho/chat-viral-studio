@@ -38,8 +38,9 @@ export function useMusicPreview() {
   useEffect(() => stop, [stop]);
 
   /** Toca `id` (ou para, se já for ela). startS = trecho escolhido; volume relativo à voz. */
-  const toggle = useCallback(async (id: string, url: string | null | Promise<string | null>, opts: { volume: number; startS?: number; voiceUri?: string | null }) => {
-    if (playing === id) return stop();
+  const toggle = useCallback(async (id: string, url: string | null | Promise<string | null>, opts: { volume: number; startS?: number; voiceUri?: string | null; restart?: boolean }) => {
+    // restart = tocar de outro ponto (linha do tempo): não é o "parar" do mesmo botão
+    if (playing === id && !opts.restart) return stop();
     stop();
     setError(null);
     try {
