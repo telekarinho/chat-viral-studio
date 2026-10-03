@@ -4,7 +4,7 @@ import * as Sharing from "expo-sharing";
 import * as Clipboard from "expo-clipboard";
 import { router, useFocusEffect, useLocalSearchParams } from "expo-router";
 import { useVideoPlayer, VideoView } from "expo-video";
-import { DEFAULT_EDIT_CHOICES, PLATFORMS, PLATFORM_LABEL, isBusiness, type Platform } from "@postai/domain";
+import { DEFAULT_EDIT_CHOICES, PLATFORMS, ownMusicUuid, PLATFORM_LABEL, isBusiness, type Platform } from "@postai/domain";
 import { getContent, markPosted, setEditChoices, workspaceById, type ContentItem } from "../../src/db/repo";
 import { chosenTrack, nextTrack } from "../../src/musicChoice";
 import { describeResult, localCover, localFinal, localResult, type RenderResult } from "../../src/finalRender";
@@ -113,7 +113,7 @@ function RedoCard({ c, business }: { c: ContentItem; business: boolean }) {
   };
   return (
     <Card style={{ gap: 8 }} testID="redo-card">
-      <Text style={s.label}>{track ? `Música: ${track.title} — ${track.artist}` : "Sem música"}</Text>
+      <Text style={s.label}>{ownMusicUuid(edit.music) ? "Música: a sua (enviada por você)" : track ? `Música: ${track.title} — ${track.artist}` : "Sem música"}</Text>
       {track ? <Button compact variant="secondary" label="🎵 TROCAR MÚSICA E REFAZER" onPress={() => void redo(nextTrack(track).id)} testID="redo-music" /> : null}
       <Button compact variant="ghost" label="Mudar legenda, embelezar… e refazer" onPress={() => router.push(`/finalizar/${c.id}`)} testID="redo-options" />
     </Card>

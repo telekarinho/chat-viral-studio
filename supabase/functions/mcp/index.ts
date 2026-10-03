@@ -298,6 +298,8 @@ var MUSIC_LIBRARY = [
   mk(175, "calmo", "Digital Clouds", "Alejandro Maga\xF1a (A. M.)", "71cd4ea39edcc7532672bd97311abadfd318d00e7a828310a88b4f57fad9cd48", 101, 129)
 ];
 var trackById = (id) => MUSIC_LIBRARY.find((t) => t.id === id);
+var OWN_MUSIC_PREFIX = "own:";
+var ownMusicId = (uuid) => `${OWN_MUSIC_PREFIX}${uuid}`;
 
 // ../../packages/domain/src/ai/direction.ts
 var MOODS = Object.keys(MOOD_LABEL);
@@ -384,7 +386,11 @@ function directionIssues(d, opts) {
     if (l.fim <= l.inicio) out2.push(`direcao.legendas_na_tela[${i}]: fim precisa ser depois do in\xEDcio.`);
     if (l.inicio > opts.durationSeconds + 2) out2.push(`direcao.legendas_na_tela[${i}]: come\xE7a depois do fim do v\xEDdeo.`);
   }
-  if (d.musica) {
+  const own = d.musica ? opts.ownMusic?.find((m) => ownMusicId(m.id) === d.musica.id) : void 0;
+  if (d.musica && own) {
+    if (opts.business && !own.comercial) out2.push(`direcao.musica: "${own.titulo}" (m\xFAsica pr\xF3pria) n\xE3o tem licen\xE7a comercial declarada \u2014 conta de empresa n\xE3o pode usar.`);
+    if (d.musica.saida !== null && d.musica.saida <= d.musica.entrada) out2.push("direcao.musica: sa\xEDda precisa ser depois da entrada.");
+  } else if (d.musica) {
     const track = trackById(d.musica.id);
     if (!track) out2.push(`direcao.musica.id "${d.musica.id}" n\xE3o existe na biblioteca \u2014 use listar_musicas.`);
     else if (opts.business && track.license !== "comercial") out2.push(`direcao.musica: "${track.title}" n\xE3o tem licen\xE7a comercial \u2014 conta de empresa s\xF3 usa a biblioteca comercial.`);
@@ -1500,10 +1506,12 @@ ${lines.join("\n")}`);
     const mood = typeof args.clima === "string" ? normalizeMood(args.clima) || null : null;
     const bpm = typeof args.bpm === "number" ? args.bpm : null;
     const list2 = MUSIC_LIBRARY.filter((t) => (!business || t.license === "comercial") && (!mood || t.mood === mood) && (bpm === null || t.bpm !== null && Math.abs(t.bpm - bpm) <= BPM_TOLERANCE));
-    if (!list2.length) return text2(`Nenhuma faixa com esse filtro${bpm !== null ? ` (BPM ${bpm} \xB1 ${BPM_TOLERANCE})` : ""}.`);
+    const own = (await store.ownMusic()).filter((m) => !business || m.comercial);
+    const ownRows = mood || bpm !== null ? [] : own.map((m) => `- id ${ownMusicId(m.id)} \xB7 "${m.titulo}" \xB7 m\xFAsica pr\xF3pria do criador \xB7 licen\xE7a ${m.comercial ? "comercial (declarada)" : "pessoal (declarada)"}`);
+    if (!list2.length && !ownRows.length) return text2(`Nenhuma faixa com esse filtro${bpm !== null ? ` (BPM ${bpm} \xB1 ${BPM_TOLERANCE})` : ""}.`);
     const rows = list2.map((t) => `- id ${t.id} \xB7 "${t.title}" \u2014 ${t.artist} \xB7 clima ${t.mood} (${MOOD_LABEL[t.mood]}) \xB7 ${t.bpm ? `${t.bpm} BPM` : "sem batida definida"} \xB7 ${t.durationSec}s \xB7 licen\xE7a ${t.license}`);
-    return text2(`${rows.join("\n")}
-Use o valor de "clima" (ex.: ${list2[0].mood}) em direcao.musica.clima. BPM medido no \xE1udio. Tend\xEAncia ("em alta"): ainda sem fonte de dados \u2014 n\xE3o informada.`);
+    const note = `Use o valor de "clima" (ex.: ${list2[0]?.mood ?? "reflexao"}) em direcao.musica.clima. BPM medido no \xE1udio. Tend\xEAncia ("em alta"): ainda sem fonte de dados \u2014 n\xE3o informada.`;
+    return text2([...ownRows, ...rows, note].join("\n"));
   }
   if (name === "registrar_melhoria") {
     const titulo = String(args.titulo ?? "").trim().slice(0, 140);
@@ -1599,7 +1607,7 @@ ${contractLimits().join("\n")}`;
     const biz = profile.kind === "empresa" ? profile.business : void 0;
     const problems = [
       ...directorIssues(draft),
-      ...draft.direcao ? directionIssues(draft.direcao, { durationSeconds: draft.duration_seconds, spoken: true, business: profile.kind === "empresa" }) : []
+      ...draft.direcao ? directionIssues(draft.direcao, { durationSeconds: draft.duration_seconds, spoken: true, business: profile.kind === "empresa", ownMusic: await store.ownMusic() }) : []
     ];
     if (biz?.noPrice && mentionsPrice(draft)) problems.push("pre\xE7o: o roteiro fala pre\xE7o/valor \u2014 neste perfil de empresa pre\xE7o n\xE3o aparece no v\xEDdeo.");
     for (const c of biz ? pendingClaimsIn(`${draft.script} ${draft.cta}`, biz.pendingClaims ?? []) : []) problems.push(`alega\xE7\xE3o sem prova: "${c}" \u2014 reescreva sem isso.`);
@@ -1830,6 +1838,11 @@ function supabaseMcpStore(db, workspaceId, userId) {
           warnings: r.result?.warnings ?? []
         }))
       };
+    },
+    async ownMusic() {
+      const { data, error } = await db.from("musicas_proprias").select("id, titulo, comercial, storage_key").eq("workspace_id", workspaceId).order("created_at", { ascending: false }).limit(50);
+      if (error) throw new Error(error.message);
+      return (data ?? []).map((m) => ({ id: m.id, titulo: m.titulo, comercial: Boolean(m.comercial), storageKey: m.storage_key }));
     },
     async readScript(contentId) {
       const [script, content, pending] = await Promise.all([

@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { MOOD_LABEL, trackById, type MusicMood, type MusicTrack } from "../music";
+import { MOOD_LABEL, ownMusicId, trackById, type MusicMood, type MusicTrack, type OwnMusic } from "../music";
 
 const MOODS = Object.keys(MOOD_LABEL) as MusicMood[];
 const plain = (s: string) => s.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase().trim();
@@ -85,7 +85,7 @@ export function quotedFragments(s: string): string[] {
 }
 
 /** Problemas da direção que impedem gravar/montar só com o que o app mostra. */
-export function directionIssues(d: Direction, opts: { durationSeconds: number; spoken: boolean; business: boolean }): string[] {
+export function directionIssues(d: Direction, opts: { durationSeconds: number; spoken: boolean; business: boolean; ownMusic?: readonly OwnMusic[] }): string[] {
   const out: string[] = [];
   const orders = d.takes.map((t) => t.ordem);
   if (new Set(orders).size !== orders.length) out.push("direcao.takes: cada take precisa de uma ordem diferente.");
@@ -106,7 +106,11 @@ export function directionIssues(d: Direction, opts: { durationSeconds: number; s
     if (l.fim <= l.inicio) out.push(`direcao.legendas_na_tela[${i}]: fim precisa ser depois do início.`);
     if (l.inicio > opts.durationSeconds + 2) out.push(`direcao.legendas_na_tela[${i}]: começa depois do fim do vídeo.`);
   }
-  if (d.musica) {
+  const own = d.musica ? opts.ownMusic?.find((m) => ownMusicId(m.id) === d.musica!.id) : undefined;
+  if (d.musica && own) {
+    if (opts.business && !own.comercial) out.push(`direcao.musica: "${own.titulo}" (música própria) não tem licença comercial declarada — conta de empresa não pode usar.`);
+    if (d.musica.saida !== null && d.musica.saida <= d.musica.entrada) out.push("direcao.musica: saída precisa ser depois da entrada.");
+  } else if (d.musica) {
     const track: MusicTrack | undefined = trackById(d.musica.id);
     if (!track) out.push(`direcao.musica.id "${d.musica.id}" não existe na biblioteca — use listar_musicas.`);
     else if (opts.business && track.license !== "comercial") out.push(`direcao.musica: "${track.title}" não tem licença comercial — conta de empresa só usa a biblioteca comercial.`);

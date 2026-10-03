@@ -1,6 +1,7 @@
 import { Text, View } from "react-native";
 import { DEFAULT_EDIT_CHOICES, MOOD_LABEL, moodForPillar, type CaptionStyle, type EditChoices, type MusicMood, type Retouch } from "@postai/domain";
 import { Chip, s } from "../ui";
+import { OwnMusicSection } from "./OwnMusicSection";
 
 const RETOUCH_LABEL: Record<Retouch, string> = { forte: "✨ Forte (tipo câmera do iPhone)", leve: "Natural", off: "Desligado" };
 
@@ -16,8 +17,10 @@ const CAPTION_LABEL: Record<CaptionStyle, string> = {
 };
 
 /** Legenda e música da montagem final. "Automática" escolhe o clima pelo pilar do vídeo. */
-export function FinishOptions({ value, onChange, pillarSlug, business }: {
+export function FinishOptions({ value, onChange, pillarSlug, business, workspaceId }: {
   value: EditChoices | null | undefined; onChange: (v: EditChoices) => void; pillarSlug: string; business: boolean;
+  /** perfil na nuvem: mostra "Minhas músicas" (enviar e escolher) */
+  workspaceId?: string;
 }) {
   const v = value ?? { ...DEFAULT_EDIT_CHOICES, retouch: business ? "leve" : "forte" };
   const retouch = v.retouch ?? (business ? "leve" : "forte");
@@ -52,6 +55,7 @@ export function FinishOptions({ value, onChange, pillarSlug, business }: {
         ))}
         <Chip label="Sem música" selected={v.music === "none"} onPress={() => set({ music: "none" })} testID="music-none" />
       </View>
+      {workspaceId ? <OwnMusicSection workspaceId={workspaceId} business={business} selected={v.music} onSelect={(music) => set({ music })} /> : null}
       {v.music !== "none" ? (
         <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8 }}>
           {([["Baixinha", 0.12], ["Normal", 0.22], ["Mais alta", 0.35]] as const).map(([l, vol]) => (
@@ -59,7 +63,7 @@ export function FinishOptions({ value, onChange, pillarSlug, business }: {
           ))}
         </View>
       ) : null}
-      <Text style={s.muted}>Músicas com licença para vídeo nas redes (Mixkit). Quer usar um áudio em alta do TikTok/Instagram? Escolha “Sem música” e adicione o áudio no app da rede ao postar.</Text>
+      <Text style={s.muted}>As músicas da lista têm licença para vídeo nas redes (Mixkit). Quer um áudio em alta do TikTok/Instagram? Escolha “Sem música” e adicione o áudio no app da rede ao postar — lá ele é licenciado.</Text>
     </View>
   );
 }

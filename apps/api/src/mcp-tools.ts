@@ -1,7 +1,7 @@
 import {
   MOOD_LABEL, MUSIC_LIBRARY, buildManualPrompt, contractLimits, directionReport, normalizeMood, buildSegments, checkRepetition, describeRepetition, directionIssues, directorIssues, engagementRate, finalizeDraft, fingerprintsFor, mentionsPrice, parseDraft,
   normalizeText, pendingClaimsIn, projectBrief, rankBy, sharesPer1k, type RankRow, type RankedPost,
-  ScenesSchema, type ContentDraft, type CreatorProfile, type Scenes, type EditChoices, type Fingerprint, type PostMetrics, type ProjectInfo,
+  ScenesSchema, ownMusicId, type ContentDraft, type CreatorProfile, type OwnMusic, type Scenes, type EditChoices, type Fingerprint, type PostMetrics, type ProjectInfo,
 } from "@postai/domain";
 import {
   PROFILE_TOOLS, authorized, callAccountTool, callProfileDataTool, describeCases, describeProofs, type NewProfile, type ProfileDataStore,
@@ -57,6 +57,8 @@ export interface McpStore extends ProfileDataStore {
   saveMetrics(contentId: string, metrics: PostMetrics): Promise<void>;
   readScript(contentId: string): Promise<McpScript>;
   recordingStatus(contentId: string): Promise<McpRecording>;
+  /** músicas próprias que o criador enviou no app (com a licença declarada) */
+  ownMusic(): Promise<OwnMusic[]>;
   /** cria o plano dos dias que ainda não têm (o app usa o mesmo plano ao abrir o dia) */
   planDays(startDate: string, days: number): Promise<{ date: string; created: boolean; items: McpContent[] }[]>;
   /** pilares com roteiro nos últimos N dias (contagem por slug) */
@@ -292,9 +294,13 @@ export async function callProfileTool(store: McpStore, name: string, args: Json,
     const mood = typeof args.clima === "string" ? normalizeMood(args.clima) || null : null;
     const bpm = typeof args.bpm === "number" ? args.bpm : null;
     const list = MUSIC_LIBRARY.filter((t) => (!business || t.license === "comercial") && (!mood || t.mood === mood) && (bpm === null || (t.bpm !== null && Math.abs(t.bpm - bpm) <= BPM_TOLERANCE)));
-    if (!list.length) return text(`Nenhuma faixa com esse filtro${bpm !== null ? ` (BPM ${bpm} ± ${BPM_TOLERANCE})` : ""}.`);
+    // músicas próprias do criador (sem clima/BPM medidos); empresa só vê as com licença comercial declarada
+    const own = (await store.ownMusic()).filter((m) => !business || m.comercial);
+    const ownRows = mood || bpm !== null ? [] : own.map((m) => `- id ${ownMusicId(m.id)} · "${m.titulo}" · música própria do criador · licença ${m.comercial ? "comercial (declarada)" : "pessoal (declarada)"}`);
+    if (!list.length && !ownRows.length) return text(`Nenhuma faixa com esse filtro${bpm !== null ? ` (BPM ${bpm} ± ${BPM_TOLERANCE})` : ""}.`);
     const rows = list.map((t) => `- id ${t.id} · "${t.title}" — ${t.artist} · clima ${t.mood} (${MOOD_LABEL[t.mood]}) · ${t.bpm ? `${t.bpm} BPM` : "sem batida definida"} · ${t.durationSec}s · licença ${t.license}`);
-    return text(`${rows.join("\n")}\nUse o valor de "clima" (ex.: ${list[0]!.mood}) em direcao.musica.clima. BPM medido no áudio. Tendência ("em alta"): ainda sem fonte de dados — não informada.`);
+    const note = `Use o valor de "clima" (ex.: ${list[0]?.mood ?? "reflexao"}) em direcao.musica.clima. BPM medido no áudio. Tendência ("em alta"): ainda sem fonte de dados — não informada.`;
+    return text([...ownRows, ...rows, note].join("\n"));
   }
   if (name === "registrar_melhoria") {
     const titulo = String(args.titulo ?? "").trim().slice(0, 140);
@@ -382,7 +388,7 @@ export async function callProfileTool(store: McpStore, name: string, args: Json,
     const biz = profile.kind === "empresa" ? profile.business : undefined;
     const problems: string[] = [
       ...directorIssues(draft),
-      ...(draft.direcao ? directionIssues(draft.direcao, { durationSeconds: draft.duration_seconds, spoken: true, business: profile.kind === "empresa" }) : []),
+      ...(draft.direcao ? directionIssues(draft.direcao, { durationSeconds: draft.duration_seconds, spoken: true, business: profile.kind === "empresa", ownMusic: await store.ownMusic() }) : []),
     ];
     if (biz?.noPrice && mentionsPrice(draft)) problems.push("preço: o roteiro fala preço/valor — neste perfil de empresa preço não aparece no vídeo.");
     for (const c of biz ? pendingClaimsIn(`${draft.script} ${draft.cta}`, biz.pendingClaims ?? []) : []) problems.push(`alegação sem prova: "${c}" — reescreva sem isso.`);

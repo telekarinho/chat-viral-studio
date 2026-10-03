@@ -7,9 +7,9 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import {
   CAPTION_STYLES, MOOD_LABEL, RETOUCH_LEVELS, SHORT_ROLES, assignBroll, buildAss, buildEditPlan, buildSegments, cuesFromWords, moodForPillar, parseDraft, pickTrack,
   planCuts, trackById, watermarkCorner, wholeTakeSegment, withClips,
-  type CaptionStyle, type Direction, type EditClip, type EditPlan, type MusicMood, type PlanMusic, type RenderVariant, type Retouch,
+  ownMusicId, ownMusicUuid, type CaptionStyle, type Direction, type OwnMusic, type EditClip, type EditPlan, type MusicMood, type PlanMusic, type RenderVariant, type Retouch,
 } from "@postai/domain";
-import { fetchTrack, transcribeClip } from "./media-extras";
+import { downloadOwnMusic, fetchTrack, transcribeClip } from "./media-extras";
 import { probe, render } from "./ffmpeg";
 import { filterPath } from "./render";
 
@@ -51,7 +51,7 @@ export interface ServerChoices {
  * Escolhas do criador para a montagem (content_items.structured_payload.edit), validadas no servidor.
  * Tudo que não vier (ou vier inválido) cai no padrão automático.
  */
-export function editChoices(payload: Record<string, unknown> | null | undefined, pillarSlug: string, business: boolean, seed: string, direction?: Direction | null): ServerChoices {
+export function editChoices(payload: Record<string, unknown> | null | undefined, pillarSlug: string, business: boolean, seed: string, direction?: Direction | null, own?: OwnMusic | null): ServerChoices {
   const edit = (payload?.edit ?? {}) as Record<string, unknown>;
   const flag = (k: string) => (typeof edit[k] === "boolean" ? (edit[k] as boolean) : true);
   // pessoal: "forte" (tipo iPhone); empresa: "leve" (não alisa a textura do produto que aparece junto)
@@ -63,6 +63,12 @@ export function editChoices(payload: Record<string, unknown> | null | undefined,
   const base = { captionStyle, accentColor, retouch, stabilize: flag("stabilize"), autoCut: flag("autoCut"), voiceClean: flag("voiceClean"), broll: flag("broll"), hook: flag("hook") };
   const choice = typeof edit.music === "string" ? edit.music : "auto";
   if (choice === "none") return { ...base, music: null };
+  // música própria do criador (escolhida no app ou pela direção); empresa só com licença comercial declarada
+  const ownWanted = choice === "auto" ? dm?.id : choice;
+  if (own && ownWanted === ownMusicId(own.id) && !(business && !own.comercial)) {
+    const win = choice === "auto" && dm ? { startMs: Math.round(dm.entrada * 1000), endMs: dm.saida === null ? null : Math.round(dm.saida * 1000) } : {};
+    return { ...base, music: { trackId: ownMusicId(own.id), mood: moodForPillar(pillarSlug, business), volume, storageKey: own.storageKey, title: own.titulo, ...win } };
+  }
   // "auto" + direção com música da biblioteca: a faixa, o volume e a janela que o diretor pediu
   const directed = choice === "auto" && dm ? trackById(dm.id) : undefined;
   if (directed && !(business && directed.license !== "comercial")) {
@@ -115,7 +121,8 @@ export async function buildServerPlan(db: SupabaseClient, job: RenderJobRow): Pr
   const tone = profile.data.tone as { kind?: string; watermark?: unknown } | null;
   const business = tone?.kind === "empresa";
   const direction = parsed.draft.direcao ?? null;
-  const choices = editChoices(content.data.structured_payload, content.data.pillar_slug ?? "", business, job.content_item_id, direction);
+  const ownTrack = await ownMusicFor(db, job.workspace_id, content.data.structured_payload, direction);
+  const choices = editChoices(content.data.structured_payload, content.data.pillar_slug ?? "", business, job.content_item_id, direction, ownTrack);
   const variant = jobVariant(job);
   const freeSpeech = script.data?.model === "fala-livre";
   const prompt = freeSpeech ? "" : parsed.draft.script.slice(0, 600);
@@ -158,6 +165,16 @@ export async function buildServerPlan(db: SupabaseClient, job: RenderJobRow): Pr
 }
 
 /** Cenas de apoio (B-roll) do mesmo dia do conteúdo, mais recentes primeiro. */
+/** A música própria pedida (escolha do app ou da direção), só se for DESTE perfil. */
+async function ownMusicFor(db: SupabaseClient, workspaceId: string, payload: Record<string, unknown> | null, direction: Direction | null): Promise<OwnMusic | null> {
+  const edit = (payload?.edit ?? {}) as { music?: unknown };
+  const wanted = typeof edit.music === "string" && edit.music !== "auto" ? edit.music : direction?.musica?.id ?? "";
+  const uuid = ownMusicUuid(wanted);
+  if (!uuid) return null;
+  const { data } = await db.from("musicas_proprias").select("id, titulo, comercial, storage_key").eq("workspace_id", workspaceId).eq("id", uuid).maybeSingle();
+  return data ? { id: data.id as string, titulo: data.titulo as string, comercial: Boolean(data.comercial), storageKey: data.storage_key as string } : null;
+}
+
 async function findBrolls(db: SupabaseClient, workspaceId: string, planDate: string | null): Promise<ServerPlan["brolls"]> {
   if (!planDate) return [];
   // dia local de Brasília (UTC-3)
@@ -257,8 +274,9 @@ export async function processJob(db: SupabaseClient, job: RenderJobRow, fontFile
     const assFile = join(dir, "legendas.ass");
     writeFileSync(assFile, buildAss(plan), "utf8");
     const track = plan.music ? trackById(plan.music.trackId) : undefined;
-    const musicFile = track ? await fetchTrack(track, process.env.MUSIC_CACHE ?? join(tmpdir(), "postai-music")) : null;
-    if (track && !musicFile) warnings.push("A música não pôde ser baixada agora: o vídeo saiu sem música. Toque em REFAZER para tentar de novo.");
+    const ownKey = plan.music?.storageKey ?? null;
+    const musicFile = ownKey ? await downloadOwnMusic(db, job.workspace_id, ownKey, dir) : track ? await fetchTrack(track, process.env.MUSIC_CACHE ?? join(tmpdir(), "postai-music")) : null;
+    if ((track || ownKey) && !musicFile) warnings.push("A música não pôde ser baixada agora: o vídeo saiu sem música. Toque em REFAZER para tentar de novo.");
 
     const output = join(dir, "final.mp4");
     const probed = await render({ plan: musicFile ? plan : { ...plan, music: null }, inputs, fontFile, output, assFile, fontsDir: process.env.FONTS_DIR ?? null, musicFile, brollFiles, denoiseModel: process.env.RNNOISE_MODEL ?? null });
@@ -294,7 +312,7 @@ export async function processJob(db: SupabaseClient, job: RenderJobRow, fontFile
 
     const result: RenderResult = {
       variant: sp.variant, warnings, transcript: edited.transcript, cover_key: coverKey, cuts: edited.cuts,
-      broll: Object.keys(brollFiles).length, music: musicFile && track ? `${track.title} — ${track.artist}` : null, spokenCaptions: edited.spoken,
+      broll: Object.keys(brollFiles).length, music: musicFile ? (track ? `${track.title} — ${track.artist}` : plan.music?.title ? `${plan.music.title} (sua)` : null) : null, spokenCaptions: edited.spoken,
     };
     const row = { status: "done", output_key: `${base}.mp4`, output_size: bytes.length, error: null, updated_at: new Date().toISOString() };
     let done = await db.from("render_jobs").update({ ...row, result }).eq("id", job.id);

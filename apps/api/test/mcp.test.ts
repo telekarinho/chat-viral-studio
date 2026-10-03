@@ -40,6 +40,7 @@ function fakeStore(opts: { profile?: typeof RODRIGO_PROFILE; recent?: ContentDra
     readScript: async () => (opts.pending
       ? { draft: null, edit: null, metrics: null, postedAt: null, pendingFromAssistant: true, pending: { sentAt: "2026-10-02T12:00:00Z", draft: opts.pending, scenes: null } }
       : { draft: raw, edit: null, metrics: null, postedAt: null, pendingFromAssistant: true }),
+    ownMusic: async () => [{ id: "77777777-7777-4777-8777-777777777777", titulo: "Trilha do Loucura de Amor", comercial: false, storageKey: "ws/music/a.mp3" }],
     recordingStatus: async () => ({ takes: [{ segmentIndex: 0, synced: true }, { segmentIndex: 1, synced: false }], renders: [{ status: "failed", error: "parte 3 faltando", createdAt: "x", variant: "completo", warnings: [] }] }),
     planDays: async (start, days) => Array.from({ length: days }, (_, i) => ({ date: i === 0 ? start : `dia+${i}`, created: i > 0, items: i === 0 && own ? [own] : [] })),
     pillarCounts: async () => ({ familia: 3 }),
@@ -232,6 +233,14 @@ describe("conector MCP do Post.ai (diretor de gravações)", () => {
     const ok = await call(ctx, "salvar_cenas", { content_id: ID, takes: [{ ordem: 1, nome: "Close da textura", duracao_segundos: 4, enquadramento: "macro no copo", luz: "lateral" }] });
     expect(textOf(ok)).toContain("1 take(s)");
     expect(broll.scenes[0]!.takes[0]).toMatchObject({ nome: "Close da textura", fala_exata: "" });
+  });
+
+  it("música própria aparece em listar_musicas e vale na direção (empresa só com licença comercial)", async () => {
+    const { ctx } = fakeCtx();
+    expect(textOf(await call(ctx, "listar_musicas"))).toContain('id own:77777777-7777-4777-8777-777777777777 · "Trilha do Loucura de Amor" · música própria');
+    const direcao = { takes: [{ ordem: 1, nome: "A", fala_exata: draft.script, duracao_segundos: draft.duration_seconds }], musica: { id: "own:77777777-7777-4777-8777-777777777777", volume: 0.3 } };
+    expect(textOf(await call(ctx, "salvar_roteiro", { content_id: ID, roteiro: { ...draft, direcao } }))).toContain("enviado para o Post.ai");
+    expect(textOf(await call(ctx, "listar_musicas", { profile_id: EMPRESA }))).not.toContain("Loucura de Amor");
   });
 
   it("métricas: o assistente registra números reais (sem inventar) e o desempenho mostra o top 3", async () => {

@@ -99,6 +99,11 @@ export function supabaseMcpStore(db: SupabaseClient, workspaceId: string, userId
         })),
       };
     },
+    async ownMusic() {
+      const { data, error } = await db.from("musicas_proprias").select("id, titulo, comercial, storage_key").eq("workspace_id", workspaceId).order("created_at", { ascending: false }).limit(50);
+      if (error) throw new Error(error.message);
+      return (data ?? []).map((m) => ({ id: m.id as string, titulo: m.titulo as string, comercial: Boolean(m.comercial), storageKey: m.storage_key as string }));
+    },
     async readScript(contentId): Promise<McpScript> {
       const [script, content, pending] = await Promise.all([
         db.from("scripts").select("draft").eq("workspace_id", workspaceId).eq("content_item_id", contentId).order("updated_at", { ascending: false }).limit(1).maybeSingle(),
