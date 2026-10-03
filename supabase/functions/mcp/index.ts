@@ -425,7 +425,7 @@ function directionReport(d) {
   ];
   if (silent.length) out2.push({ campo: "takes sem fala", aplicado: false, como: `${silent.length} take(s) sem fala aparecem como instru\xE7\xE3o no conte\xFAdo, mas n\xE3o viram parte do v\xEDdeo \u2014 grave como cena de apoio (B-roll) do dia para a montagem usar` });
   if (d.legendas_na_tela.length) {
-    out2.push({ campo: "legendas_na_tela", aplicado: true, como: `${d.legendas_na_tela.length} texto(s) na tela nos tempos e posi\xE7\xF5es pedidos (substituem o gancho autom\xE1tico)` });
+    out2.push({ campo: "legendas_na_tela", aplicado: true, como: `${d.legendas_na_tela.length} texto(s) na tela nos tempos pedidos, sempre acima da cabe\xE7a \u2014 a posi\xE7\xE3o pedida \xE9 ignorada para n\xE3o cobrir o rosto nem a legenda (substituem o gancho autom\xE1tico)` });
     if (d.legendas_na_tela.some((l) => l.estilo.trim())) out2.push({ campo: "legendas_na_tela[].estilo", aplicado: false, como: "o estilo \xE9 sempre a letra manuscrita do perfil; o texto de estilo fica s\xF3 como refer\xEAncia" });
   }
   if (d.musica) {
@@ -1305,7 +1305,7 @@ var WEEKDAY = ["dom", "seg", "ter", "qua", "qui", "sex", "s\xE1b"];
 var DIRECTION_GUIDE = [
   'DIRE\xC7\xC3O COMPLETA (campo "direcao" no mesmo JSON do roteiro \u2014 o app grava, legenda, mixa e exporta s\xF3 com isto):',
   "- takes[]: {ordem, nome, fala_exata (palavra por palavra; vazio = cena sem fala), ritmo (pausas), duracao_segundos, enquadramento, movimento_camera, local, luz, olhar, emocao, broll, erro_comum}. Cada take com fala vira uma parte gravada, na ordem.",
-  "- legendas_na_tela[]: {texto (2\u20135 palavras), inicio, fim (segundos do v\xEDdeo final), posicao: topo|centro|base, estilo}. Substituem o gancho autom\xE1tico na tela.",
+  "- legendas_na_tela[]: {texto (2\u20135 palavras), inicio, fim (segundos do v\xEDdeo final), posicao: topo|centro|base, estilo}. Substituem o gancho autom\xE1tico na tela. Regra fixa do app: texto na tela SEMPRE acima da cabe\xE7a e legenda da fala SEMPRE abaixo do queixo (a posi\xE7\xE3o pedida \xE9 ignorada para nunca cobrir o rosto).",
   "- musica: {id (de listar_musicas), clima, bpm (null se n\xE3o souber), volume 0.05\u20130.6 relativo \xE0 voz (0.22 padr\xE3o), entrada, saida (segundos; saida null = at\xE9 o fim)}. Empresa: s\xF3 licen\xE7a comercial.",
   "- edicao: {cortes, transicao, zoom} \xB7 capa: {frame (segundo do v\xEDdeo), texto curto} \xB7 publicacao_por_rede[]: {rede: instagram|tiktok|facebook|youtube_shorts, horario HH:MM, hashtags, primeiro_comentario}",
   "- teste_ab: {ganchos: 2\u20133 ganchos, metrica}. Os ganchos tamb\xE9m v\xE3o em hook_options.",

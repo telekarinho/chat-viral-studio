@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { BUSINESS_PILLARS, RODRIGO_PILLARS, RODRIGO_PROFILE, ScenesSchema, buildAss, buildDayPlan, buildEditPlan, buildSegments, businessRoutine, directionIssues, generateLocal, normalizeMood, parseDraft, rodrigoRoutine, type ContentDraft } from "../src";
+import { BUSINESS_PILLARS, RODRIGO_PILLARS, RODRIGO_PROFILE, ScenesSchema, buildAss, buildDayPlan, buildEditPlan, buildSegments, businessRoutine, directionIssues, generateLocal, normalizeMood, overlaySpot, parseDraft, rodrigoRoutine, type ContentDraft } from "../src";
 
 const base = generateLocal({ profile: RODRIGO_PROFILE, pillarSlug: "familia", pillarName: "Família", format: "main_video", eventText: null, recent: [] }).draft;
 const direcao = {
@@ -61,7 +61,15 @@ describe("direção completa do diretor", () => {
     });
     const ass = buildAss(plan);
     expect(plan.hookText).toBeNull();
-    expect(ass).toContain("{\\an5\\fad(120,200)}VIDA REAL 40+");
+    // "centro" vai para o alto: o meio é da legenda da fala (nunca um texto em cima do outro)
+    expect(ass).toContain("{\\an8\\pos(540,250)\\fscx100\\fscy100\\fad(120,200)}VIDA REAL 40+");
+    expect(ass).not.toContain("\\an5");
+    const base = buildAss({ ...plan, overlays: [{ text: "Base", startMs: 0, endMs: 1000, position: "base" }] });
+    // "base" também vai para cima: o texto na tela nunca fica na faixa da legenda da fala
+    expect(base).toContain("{\\an8\\pos(540,250)\\fscx100\\fscy100\\fad(120,200)}BASE");
+    // cabeça alta (topo em 20%): o texto encolhe para caber acima dela
+    expect(overlaySpot(0.2)).toEqual({ top: 0.07, scale: 0.75 });
+    expect(overlaySpot(null)).toEqual({ top: 0.13, scale: 1 });
     expect(ass).not.toContain("GANCHO AUTOMÁTICO");
   });
 });

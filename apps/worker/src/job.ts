@@ -1,15 +1,15 @@
 import { execFile } from "node:child_process";
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import {
-  CAPTION_STYLES, MOOD_LABEL, RETOUCH_LEVELS, SHORT_ROLES, assignBroll, buildAss, buildEditPlan, buildSegments, cuesFromWords, moodForPillar, parseDraft, pickTrack,
+  CAPTION_STYLES, MOOD_LABEL, clipStartsMs, RETOUCH_LEVELS, SHORT_ROLES, assignBroll, buildAss, buildEditPlan, buildSegments, cuesFromWords, moodForPillar, parseDraft, pickTrack,
   planCuts, trackById, watermarkCorner, wholeTakeSegment, withClips,
   ownMusicId, ownMusicUuid, type CaptionStyle, type Direction, type OwnMusic, type EditClip, type EditPlan, type MusicMood, type PlanMusic, type RenderVariant, type Retouch,
 } from "@postai/domain";
-import { downloadOwnMusic, fetchTrack, transcribeClip } from "./media-extras";
+import { detectFaceBottom, downloadOwnMusic, fetchTrack, transcribeClip } from "./media-extras";
 import { probe, render } from "./ffmpeg";
 import { filterPath } from "./render";
 
@@ -229,6 +229,70 @@ export async function editFromSpeech(sp: Pick<ServerPlan, "plan" | "choices" | "
   return { plan: withClips(plan, clips), transcript: said.join(" ").replace(/\s+/g, " ").trim(), cuts, spoken: spoken === plan.clips.length };
 }
 
+/**
+ * Rosto da fonte → altura no vídeo final: o quadro é ampliado até cobrir 9:16 e cortado no centro; o zoom do efeito
+ * (e o "punch" dos cortes) afasta o queixo do centro — usa o maior zoom do trecho para nunca subestimar.
+ */
+export function faceBottomOnOutput(fb: number, srcW: number, srcH: number, clip: Pick<EditClip, "effect" | "keep">, outW = 1080, outH = 1920): number {
+  const s = Math.max(outW / srcW, outH / srcH);
+  const cropY = (srcH * s - outH) / 2;
+  const y = (fb * srcH * s - cropY) / outH;
+  const zoom = Math.max(clip.effect.fromScale, clip.effect.toScale) + ((clip.keep?.length ?? 0) > 1 ? JUMP_PUNCH : 0);
+  return Math.min(1, Math.max(0, 0.5 + (y - 0.5) * zoom));
+}
+const JUMP_PUNCH = 0.1;
+
+async function withFaces(plan: EditPlan, inputs: readonly string[]): Promise<EditPlan> {
+  const clips = await Promise.all(plan.clips.map(async (c, i) => {
+    const from = c.keep?.[0]?.startMs ?? c.trimStartMs;
+    const to = c.keep?.length ? c.keep[c.keep.length - 1]!.endMs : c.trimStartMs + c.durationMs;
+    const f = inputs[i] ? await detectFaceBottom(inputs[i]!, from, to) : null;
+    return {
+      ...c,
+      faceBottom: f ? faceBottomOnOutput(f.faceBottom, f.width, f.height, c, plan.width, plan.height) : null,
+      // o mesmo enquadramento/zoom vale para o alto da cabeça (o zoom o afasta do centro para cima)
+      faceTop: f ? faceBottomOnOutput(f.faceTop, f.width, f.height, c, plan.width, plan.height) : null,
+    };
+  }));
+  return { ...plan, clips };
+}
+
+/** Fonte da capa com texto: a mesma letra manuscrita das legendas. */
+const COVER_FONT = "CoveredByYourGrace.ttf";
+const COVER_MAX_FONT = 140;
+const COVER_LINE_CHARS = 14;
+
+/** Momento do vídeo final → parte gravada e segundo dentro do arquivo original (respeitando cortes). */
+export function coverSource(plan: Pick<EditPlan, "clips" | "transitions">, atMs: number): { clip: number; ms: number } {
+  const starts = clipStartsMs(plan);
+  let k = plan.clips.length - 1;
+  for (let i = 0; i < plan.clips.length; i++) if (atMs < starts[i]! + plan.clips[i]!.durationMs) { k = i; break; }
+  const clip = plan.clips[k]!;
+  let local = Math.max(0, Math.min(clip.durationMs - 1, atMs - starts[k]!));
+  for (const seg of clip.keep ?? []) {
+    const len = seg.endMs - seg.startMs;
+    if (local < len) return { clip: k, ms: seg.startMs + local };
+    local -= len;
+  }
+  return { clip: k, ms: clip.trimStartMs + local };
+}
+
+/** Texto da capa em até 2 linhas, em maiúsculas, com a fonte do maior tamanho que cabe na largura. */
+export function coverTextLayout(text: string): { text: string; fontSize: number } {
+  const words = text.toLocaleUpperCase("pt-BR").split(/\s+/).filter(Boolean);
+  const lines: string[] = [];
+  for (const w of words) {
+    const last = lines[lines.length - 1];
+    if (last && (last + " " + w).length <= COVER_LINE_CHARS) lines[lines.length - 1] = `${last} ${w}`;
+    else lines.push(w);
+  }
+  // no máximo 2 linhas: junta o resto na segunda
+  const two = lines.length > 2 ? [lines[0]!, lines.slice(1).join(" ")] : lines;
+  const longest = Math.max(...two.map((l) => l.length), 1);
+  // letra manuscrita ocupa ~0,5 da altura por caractere; 86% da largura do vídeo
+  return { text: two.join("\n"), fontSize: Math.max(48, Math.min(COVER_MAX_FONT, Math.floor((1080 * 0.86) / (0.5 * longest)))) };
+}
+
 async function download(db: SupabaseClient, key: string, file: string): Promise<void> {
   const dl = await db.storage.from("takes").download(key);
   if (dl.error) throw new Error(`download ${key}: ${dl.error.message}`);
@@ -253,8 +317,9 @@ export async function processJob(db: SupabaseClient, job: RenderJobRow, fontFile
     const edited = await editFromSpeech(measured, inputs, dir);
     if (!edited.spoken) warnings.push("Não consegui ouvir a fala de todas as partes: a legenda seguiu o roteiro e nada foi cortado nessas partes.");
 
+    // legenda abaixo do queixo: acha o rosto em cada parte (no quadro final, já com enquadramento e zoom)
+    let plan = await withFaces(edited.plan, inputs);
     // cenas de apoio: só depois dos cortes (as durações mudam)
-    let plan = edited.plan;
     const brollFiles: Record<string, string> = {};
     if (sp.brolls.length) {
       plan = withClips(plan, assignBroll(plan.clips, sp.brolls));
@@ -288,21 +353,27 @@ export async function processJob(db: SupabaseClient, job: RenderJobRow, fontFile
     const up = await db.storage.from("takes").upload(`${base}.mp4`, bytes, { contentType: "video/mp4", upsert: true });
     if (up.error) throw new Error(`upload final: ${up.error.message}`);
 
-    // capa: quadro do gancho (já com o texto na tela)
+    // capa: sem texto do diretor = quadro do vídeo pronto (já com o gancho); com texto = quadro LIMPO da gravação
+    // original (sem legenda) + o texto uma vez só, do tamanho que cabe — nunca texto em cima de texto
     let coverKey: string | null = null;
     try {
       const cover = join(dir, "capa.jpg");
-      // direção: quadro e texto da capa escolhidos pelo diretor
       const capa = sp.direction?.capa ?? null;
       const atMs = capa ? Math.min(Math.max(0, plan.totalMs - 100), capa.frame * 1000) : Math.min(1200, plan.totalMs / 3);
       const coverText = capa?.texto.trim() ?? "";
-      const vf: string[] = [];
       if (coverText) {
+        const src = coverSource(plan, atMs);
+        const layout = coverTextLayout(coverText);
         const tf = join(dir, "capa.txt");
-        writeFileSync(tf, coverText.toLocaleUpperCase("pt-BR"), "utf8");
-        vf.push("-vf", `drawtext=fontfile='${filterPath(fontFile)}':textfile='${filterPath(tf)}':fontsize=110:fontcolor=white:borderw=6:bordercolor=black@0.7:x=(w-text_w)/2:y=h*0.12`);
+        writeFileSync(tf, layout.text, "utf8");
+        const font = process.env.FONTS_DIR && existsSync(join(process.env.FONTS_DIR, COVER_FONT)) ? join(process.env.FONTS_DIR, COVER_FONT) : fontFile;
+        const vf = `scale=${plan.width}:${plan.height}:force_original_aspect_ratio=increase,crop=${plan.width}:${plan.height},eq=contrast=1.06:gamma=0.98,` +
+          `drawtext=fontfile='${filterPath(font)}':textfile='${filterPath(tf)}':fontsize=${layout.fontSize}:line_spacing=${Math.round(layout.fontSize * 0.15)}:` +
+          `fontcolor=0xF3E9D2:borderw=5:bordercolor=black@0.75:shadowx=0:shadowy=6:shadowcolor=black@0.5:x=(w-text_w)/2:y=h*0.10`;
+        await run("ffmpeg", ["-y", "-loglevel", "error", "-ss", (src.ms / 1000).toFixed(2), "-i", inputs[src.clip]!, "-vf", vf, "-frames:v", "1", "-q:v", "3", cover]);
+      } else {
+        await run("ffmpeg", ["-y", "-loglevel", "error", "-ss", (atMs / 1000).toFixed(2), "-i", output, "-frames:v", "1", "-q:v", "3", cover]);
       }
-      await run("ffmpeg", ["-y", "-loglevel", "error", "-ss", (atMs / 1000).toFixed(2), "-i", output, ...vf, "-frames:v", "1", "-q:v", "3", cover]);
       const cu = await db.storage.from("takes").upload(`${base}.jpg`, readFileSync(cover), { contentType: "image/jpeg", upsert: true });
       if (cu.error) throw new Error(cu.error.message);
       coverKey = `${base}.jpg`;

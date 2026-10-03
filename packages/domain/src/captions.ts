@@ -66,6 +66,38 @@ export const CAPTION_FONTS = { manuscrito: "Covered By Your Grace", destaque: "A
 export const CAPTION_CREAM = "#F3E6CF"; // preset "Manuscrito" do print do Rodrigo
 export const DEFAULT_ACCENT = "#FFD23F";
 export const HOOK_MS = 3000;
+/** a legenda da fala nunca passa daqui para baixo (a assinatura fica abaixo) */
+const CAPTION_SAFE_BOTTOM = 0.855;
+const CAPTION_MIN_TOP = 0.45;
+const CAPTION_MIN_SCALE = 0.6;
+/** altura que o bloco da legenda ocupa (fração do vídeo), por estilo — até 2 linhas na manuscrita */
+const CAPTION_BLOCK: Record<CaptionStyle, number> = { manuscrito: 0.14, destaque: 0.08, limpo: 0.08, nenhuma: 0 };
+
+/** Onde a legenda da fala começa (topo do bloco) e quanto a letra encolhe para caber entre o queixo e a assinatura. */
+export function captionSpot(faceBottom: number | null, style: CaptionStyle): { top: number; scale: number } {
+  const block = CAPTION_BLOCK[style];
+  // sem rosto encontrado: o mais baixo possível (logo acima da assinatura) — no enquadramento de selfie, abaixo da barba
+  if (faceBottom === null || !block) return { top: Math.round((CAPTION_SAFE_BOTTOM - block) * 1000) / 1000, scale: 1 };
+  const below = Math.max(CAPTION_MIN_TOP, faceBottom + 0.01);
+  const scale = Math.max(CAPTION_MIN_SCALE, Math.min(1, (CAPTION_SAFE_BOTTOM - below) / block));
+  const top = Math.min(below, CAPTION_SAFE_BOTTOM - block * scale);
+  return { top: Math.round(top * 1000) / 1000, scale: Math.round(scale * 100) / 100 };
+}
+
+/** texto na tela (gancho e textos do diretor): SEMPRE acima da cabeça — nunca sobre o rosto nem na faixa da legenda */
+const OVERLAY_TOP = 0.13;
+const OVERLAY_MIN_TOP = 0.07;
+/** altura do bloco do texto na tela (letra 132, até 2 linhas) */
+const OVERLAY_BLOCK = 0.16;
+
+/** Onde o texto na tela começa e quanto encolhe para caber entre o alto da tela e o alto da cabeça. */
+export function overlaySpot(faceTop: number | null): { top: number; scale: number } {
+  if (faceTop === null) return { top: OVERLAY_TOP, scale: 1 };
+  const room = faceTop - 0.01 - OVERLAY_MIN_TOP;
+  const scale = Math.max(CAPTION_MIN_SCALE, Math.min(1, room / OVERLAY_BLOCK));
+  const top = Math.max(OVERLAY_MIN_TOP, Math.min(OVERLAY_TOP, faceTop - 0.01 - OVERLAY_BLOCK * scale));
+  return { top: Math.round(top * 1000) / 1000, scale: Math.round(scale * 100) / 100 };
+}
 
 function assTime(ms: number): string {
   const cs = Math.max(0, Math.round(ms / 10));
@@ -112,18 +144,33 @@ export function buildAss(plan: Pick<EditPlan, "clips" | "captionStyle" | "width"
     const top = corner.startsWith("sup") ? `\\pos(${corner.endsWith("esq") ? 60 : plan.width - 60},${Math.round(plan.height * 0.07)})` : "";
     events.push(`Dialogue: 2,${assTime(0)},${assTime(plan.totalMs!)},assinatura,,0,0,0,,{\\an${an}${top}}${assText(sig.toLocaleUpperCase("pt-BR"))}`);
   }
-  if (hook) events.push(`Dialogue: 1,${assTime(0)},${assTime(Math.min(HOOK_MS, plan.totalMs ?? HOOK_MS))},gancho,,0,0,0,,{\\fad(120,200)}${assText(hook.toLocaleUpperCase("pt-BR"))}`);
-  // textos na tela do diretor: mesma letra do gancho, na posição pedida (topo / centro / base)
+  // texto na tela (gancho e textos do diretor): SEMPRE acima da cabeça — a legenda da fala fica abaixo do queixo.
+  // A posição pedida pelo diretor (topo/centro/base) é ignorada de propósito: um texto nunca cobre o rosto nem a legenda.
+  const clipStarts = clipStartsMs(plan);
+  const headTopAt = (ms: number) => {
+    let k = 0;
+    while (k + 1 < plan.clips.length && clipStarts[k + 1]! <= ms) k++;
+    return plan.clips[k]?.faceTop ?? null;
+  };
+  const overlayTag = (ms: number) => {
+    const o = overlaySpot(headTopAt(ms));
+    const fs = Math.round(100 * o.scale);
+    return `\\an8\\pos(${Math.round(plan.width / 2)},${Math.round(plan.height * o.top)})\\fscx${fs}\\fscy${fs}`;
+  };
+  if (hook) events.push(`Dialogue: 1,${assTime(0)},${assTime(Math.min(HOOK_MS, plan.totalMs ?? HOOK_MS))},gancho,,0,0,0,,{${overlayTag(0)}\\fad(120,200)}${assText(hook.toLocaleUpperCase("pt-BR"))}`);
   for (const o of plan.overlays ?? []) {
     const end = Math.min(o.endMs, plan.totalMs ?? o.endMs);
     if (end <= o.startMs || !o.text.trim()) continue;
-    const an = { topo: 8, centro: 5, base: 2 }[o.position];
-    events.push(`Dialogue: 1,${assTime(o.startMs)},${assTime(end)},gancho,,0,0,0,,{\\an${an}\\fad(120,200)}${assText(o.text.toLocaleUpperCase("pt-BR"))}`);
+    events.push(`Dialogue: 1,${assTime(o.startMs)},${assTime(end)},gancho,,0,0,0,,{${overlayTag(o.startMs)}\\fad(120,200)}${assText(o.text.toLocaleUpperCase("pt-BR"))}`);
   }
   if (style === "nenhuma") return [...header, ...events].join("\n") + "\n";
   const starts = clipStartsMs(plan);
   for (const [k, clip] of plan.clips.entries()) {
     const offset = starts[k]!;
+    // legenda SEMPRE abaixo do queixo/barba (nunca no rosto); se o espaço for curto, a letra diminui
+    const spot = captionSpot(clip.faceBottom ?? null, style);
+    const at = `\\an8\\pos(${Math.round(plan.width / 2)},${Math.round(plan.height * spot.top)})`;
+    const sc = (n: number) => Math.round(n * spot.scale);
     for (const cue of clip.captions) {
       const s = offset + cue.startMs;
       const e = offset + cue.endMs;
@@ -133,12 +180,14 @@ export function buildAss(plan: Pick<EditPlan, "clips" | "captionStyle" | "width"
           const ws = i === 0 ? s : offset + w.startMs;
           const we = i === cue.words!.length - 1 ? e : offset + cue.words![i + 1]!.startMs;
           if (we <= ws) return;
-          const txt = cue.words!.map((x, j) => (j === i ? `{\\c${accent}\\fscx110\\fscy110}${assText(x.text)}{\\c${white}\\fscx100\\fscy100}` : assText(x.text))).join(" ");
-          events.push(`Dialogue: 0,${assTime(ws)},${assTime(we)},destaque,,0,0,0,,${i === 0 ? "{\\fad(60,0)}" : ""}${txt}`);
+          const txt = cue.words!.map((x, j) => (j === i ? `{\\c${accent}\\fscx${sc(110)}\\fscy${sc(110)}}${assText(x.text)}{\\c${white}\\fscx${sc(100)}\\fscy${sc(100)}}` : assText(x.text))).join(" ");
+          events.push(`Dialogue: 0,${assTime(ws)},${assTime(we)},destaque,,0,0,0,,{${at}\\fscx${sc(100)}\\fscy${sc(100)}${i === 0 ? "\\fad(60,0)" : ""}}${txt}`);
         });
       } else {
         // manuscrito entra com um "pop" curto (92% → 100%) e sai rápido: ritmo de Shorts/Reels
-        const anim = style === "manuscrito" ? "{\\fad(70,50)\\fscx92\\fscy92\\t(0,140,\\fscx100\\fscy100)}" : "{\\fad(90,70)}";
+        const anim = style === "manuscrito"
+          ? `{${at}\\fad(70,50)\\fscx${sc(92)}\\fscy${sc(92)}\\t(0,140,\\fscx${sc(100)}\\fscy${sc(100)})}`
+          : `{${at}\\fscx${sc(100)}\\fscy${sc(100)}\\fad(90,70)}`;
         const text = style === "manuscrito" ? cue.text.toLocaleUpperCase("pt-BR") : cue.text;
         events.push(`Dialogue: 0,${assTime(s)},${assTime(e)},${style},,0,0,0,,${anim}${assText(text)}`);
       }

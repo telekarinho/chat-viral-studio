@@ -7,7 +7,7 @@ import { describe, expect, it } from "vitest";
 import { RODRIGO_PROFILE, assignBroll, buildAss, buildEditPlan, buildSegments, generateLocal, withClips, type SpokenWord } from "@postai/domain";
 import { writeFileSync } from "node:fs";
 import { escapeDrawtext, ffmpegArgs, filterPath, jumpCutPunch, zoomExpr } from "../src/render";
-import { editChoices, editFromSpeech, jobVariant } from "../src/job";
+import { coverSource, coverTextLayout, editChoices, faceBottomOnOutput, editFromSpeech, jobVariant } from "../src/job";
 import { probe, render } from "../src/ffmpeg";
 
 const run = promisify(execFile);
@@ -215,5 +215,34 @@ describe("catálogo MMIX para o estúdio", async () => {
     ], "https://mmix.com.br");
     expect(out).toEqual([{ id: 348, sku: "CF-MIXERP-1778541098", nome: "Mixer Profissional MMIX SD 201 ControlPot", categoria: "Mixer", modelo: null, imagem: "https://mmix.com.br/uploads/catalogo/produtos/348/foto_1.jpeg" }]);
     expect(JSON.stringify(out)).not.toMatch(/preco|valor|R\$/);
+  });
+});
+
+describe("capa com texto do diretor", () => {
+  it("quadro limpo: momento do vídeo final vira parte e segundo do arquivo original (com cortes)", () => {
+    const plan = { clips: [
+      { durationMs: 2000, trimStartMs: 250, keep: [{ startMs: 300, endMs: 1100 }, { startMs: 1700, endMs: 2900 }] },
+      { durationMs: 3000, trimStartMs: 250 },
+    ], transitions: [{ durationMs: 0 }] } as unknown as Parameters<typeof coverSource>[0];
+    expect(coverSource(plan, 500)).toEqual({ clip: 0, ms: 800 });
+    expect(coverSource(plan, 1000)).toEqual({ clip: 0, ms: 1900 });
+    expect(coverSource(plan, 2500)).toEqual({ clip: 1, ms: 750 });
+  });
+  it("texto da capa em até 2 linhas e do tamanho que cabe", () => {
+    expect(coverTextLayout("Prefiro caminhar sozinho")).toEqual({ text: "PREFIRO\nCAMINHAR SOZINHO", fontSize: 116 });
+    expect(coverTextLayout("Aos 40").fontSize).toBe(140);
+    expect(coverTextLayout("uma frase bem longa que não cabe em duas linhas curtas").text.split("\n")).toHaveLength(2);
+  });
+});
+
+describe("legenda abaixo do queixo", () => {
+  it("rosto da gravação vira altura no vídeo final (enquadramento + maior zoom do trecho)", () => {
+    const hold = { effect: { kind: "hold", fromScale: 1, toScale: 1, moveMs: 0 } } as unknown as Parameters<typeof faceBottomOnOutput>[3];
+    expect(faceBottomOnOutput(0.7, 1080, 1920, hold)).toBeCloseTo(0.7);
+    // 720x1280 já é 9:16: mesma fração
+    expect(faceBottomOnOutput(0.7, 720, 1280, hold)).toBeCloseTo(0.7);
+    // zoom de 1.14 + "punch" de corte (0.1): o queixo desce para 0.5 + 0.2 × 1.24
+    const zoom = { effect: { kind: "punch_in", fromScale: 1, toScale: 1.14, moveMs: 450 }, keep: [{ startMs: 0, endMs: 1 }, { startMs: 2, endMs: 3 }] } as unknown as Parameters<typeof faceBottomOnOutput>[3];
+    expect(faceBottomOnOutput(0.7, 1080, 1920, zoom)).toBeCloseTo(0.748);
   });
 });

@@ -34,6 +34,10 @@ export interface EditClip {
   durationMs: number;
   effect: ClipEffect;
   captions: CaptionCue[]; // relative to clip start (after trim)
+  /** onde termina o rosto (queixo/barba) neste trecho, fração da altura do vídeo final; null = não achou */
+  faceBottom?: number | null;
+  /** onde fica o alto da cabeça neste trecho (fração da altura); null = não achou — o texto na tela fica acima disso */
+  faceTop?: number | null;
   /** trechos do ORIGINAL que entram (corte automático de pausas/erros); ausente = trim simples */
   keep?: { startMs: number; endMs: number }[];
   /** cena de apoio (B-roll) por cima da imagem enquanto a voz continua */

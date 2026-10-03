@@ -58,6 +58,9 @@ jobs:
           # filtro de voz por rede neural (RNNoise, modelo "leavened-quisling": voz × ruído geral; sem direito autoral)
           curl -fsSL -o "$RUNNER_TEMP/lq.rnnn" https://raw.githubusercontent.com/GregorR/rnnoise-models/master/leavened-quisling-2018-08-31/lq.rnnn
           echo "1957528b752799fddf06270bc5469af7cf54c3badc358544ae2abed730943ff9  $RUNNER_TEMP/lq.rnnn" | sha256sum -c -
+          # detector de rosto (YuNet, OpenCV Zoo, MIT): a legenda fica abaixo do queixo
+          curl -fsSL -o "$RUNNER_TEMP/yunet.onnx" https://github.com/opencv/opencv_zoo/raw/main/models/face_detection_yunet/face_detection_yunet_2023mar.onnx
+          echo "8f2383e4dd3cfbb4553ea8718107fc0423210dc964f9f4280604804ed2552fa4  $RUNNER_TEMP/yunet.onnx" | sha256sum -c -
       # legenda sincronizada com a fala: Whisper local (grátis, sem API); modelo e pacotes em cache entre execuções
       - uses: actions/setup-python@v5
         if: steps.queue.outputs.n != '0'
@@ -85,6 +88,7 @@ jobs:
           WHISPER_MODEL: small
           MUSIC_CACHE: ${{ runner.temp }}/postai-music
           RNNOISE_MODEL: ${{ runner.temp }}/lq.rnnn
+          FACE_MODEL: ${{ runner.temp }}/yunet.onnx
         run: |
           for i in $(seq 1 10); do npx tsx apps/worker/src/main.ts --once; done
 
