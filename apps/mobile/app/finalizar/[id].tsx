@@ -172,7 +172,7 @@ export default function FinalizarScreen() {
           </Card>
           <Button label="CONFIRMAR E MONTAR" onPress={() => { forceRequest.current = true; setConfirmed(true); }} testID="confirm-render" />
           <Button variant="ghost" compact label={showOptions ? "Fechar opções" : "Mudar alguma coisa"} onPress={() => setShowOptions(!showOptions)} testID="change-options" />
-          {showOptions ? <FinishOptions value={edit} onChange={save} pillarSlug={c.pillarSlug} business={cp.business} workspaceId={workspace?.cloud ? c.workspaceId : undefined} /> : null}
+          {showOptions ? <FinishOptions value={edit} onChange={save} pillarSlug={c.pillarSlug} business={cp.business} workspaceId={workspace?.cloud ? c.workspaceId : undefined} contentId={c.id} direction={c.draft?.direcao} /> : null}
         </>
       ) : (
         <Card style={{ gap: 12 }} testID="render-progress">
