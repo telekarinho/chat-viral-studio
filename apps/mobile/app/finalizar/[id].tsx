@@ -2,9 +2,9 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { Text, View } from "react-native";
 import { router, useFocusEffect, useLocalSearchParams } from "expo-router";
 import { useKeepAwake } from "expo-keep-awake";
-import { DEFAULT_EDIT_CHOICES, type EditChoices, type Retouch } from "@postai/domain";
+import { DEFAULT_EDIT_CHOICES, nextTask, toLocalDateKey, type EditChoices, type RecordingTask, type Retouch } from "@postai/domain";
 import { chosenTrack, nextTrack } from "../../src/musicChoice";
-import { getContent, getTake, setEditChoices, type ContentItem, type Take } from "../../src/db/repo";
+import { getContent, getTake, listTasks, setEditChoices, type ContentItem, type Take } from "../../src/db/repo";
 import { contentPlan, type ContentPlan } from "../../src/finalPlan";
 import { downloadFinal, kickRenderWorker, latestRenderJob, requestFinalRender, type RenderJob } from "../../src/finalRender";
 import { MusicPreview } from "../../src/components/MusicPreview";
@@ -40,6 +40,22 @@ export default function FinalizarScreen() {
   const retryAsked = useRef(false);
   // pedir montagem nova mesmo que já exista um vídeo pronto (confirmar de novo / refazer)
   const forceRequest = useRef(refazer === "1");
+  // enquanto monta, dá para seguir gravando: próxima missão pendente de hoje (outra que não esta)
+  const [next, setNext] = useState<RecordingTask | null>(null);
+  useEffect(() => {
+    void listTasks(toLocalDateKey(new Date())).then((ts) => setNext(nextTask(ts.filter((t) => t.contentItemId !== id), new Date()))).catch(() => undefined);
+  }, [id]);
+  // há quanto tempo está na etapa atual (atualiza a cada 30 s)
+  const phaseKey = `${confirmed}:${job?.status ?? ""}`;
+  const [since, setSince] = useState(() => Date.now());
+  const [, setTick] = useState(0);
+  useEffect(() => setSince(Date.now()), [phaseKey]);
+  useEffect(() => {
+    const t = setInterval(() => setTick((x) => x + 1), 30_000);
+    return () => clearInterval(t);
+  }, []);
+  const mins = Math.floor((Date.now() - since) / 60_000);
+  const stepSince = mins >= 1 ? `${mins} min` : "";
 
   const refresh = useCallback(async () => {
     const item = await getContent(id);
@@ -170,14 +186,34 @@ export default function FinalizarScreen() {
               <Button label="TENTAR DE NOVO" onPress={() => { retryAsked.current = true; setJob(null); setWaitMsg("Pedindo de novo…"); }} testID="retry-render" />
             </>
           ) : (
-            <Text style={s.muted}>Pode sair desta tela: aviso no celular quando ficar pronto.</Text>
+            <Text style={s.muted}>{`${etaText(step)}${stepSince ? ` · há ${stepSince}` : ""}. Pode sair desta tela: aviso no celular quando ficar pronto.`}</Text>
           )}
         </Card>
       )}
+      {step !== "confirmar" && step !== "baixando" ? (
+        // não precisa esperar: a montagem continua no servidor e o aviso chega quando ficar pronta
+        <View style={{ gap: 8 }}>
+          {next ? (
+            <Button label={`▶ GRAVAR O PRÓXIMO: ${next.title} (${hhmm(next.scheduledFor)})`} testID="record-next"
+              onPress={() => router.replace({ pathname: "/record", params: { taskId: next.id, contentId: next.contentItemId ?? "" } })} />
+          ) : null}
+          <Button variant="secondary" label="VOLTAR PARA HOJE" onPress={() => router.replace("/")} testID="back-today-from-render" />
+        </View>
+      ) : null}
       {error ? <Text style={{ color: colors.bad }}>{error}</Text> : null}
     </Screen>
   );
 }
+
+/** Tempo esperado em cada etapa (o servidor de edição acorda a cada pedido; a montagem leva alguns minutos). */
+function etaText(step: Step): string {
+  if (step === "enviando") return "Enviando os vídeos — depende da internet";
+  if (step === "fila") return "Na fila — o servidor começa em até ~5 min";
+  if (step === "montando") return "Editando — leva uns 3 a 6 minutos";
+  return "Quase lá";
+}
+
+const hhmm = (iso: string) => new Date(iso).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" });
 
 function Row({ label, action }: { label: string; action?: { label: string; onPress: () => void; testID?: string } }) {
   return (
