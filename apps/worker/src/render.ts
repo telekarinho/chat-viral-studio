@@ -189,12 +189,14 @@ export function ffmpegArgs(r: RenderInput): string[] {
     const T = total / 1000;
     const vol = Math.min(0.6, Math.max(0.05, plan.music!.volume));
     // janela da direção (entra aos X s, sai aos Y s); sem ela, o vídeo todo
+    // narração: a música começou junto com a gravação; o vídeo pula o começo do take, então a música pula igual
+    const seekS = plan.music!.narration ? (plan.clips[0]?.trimStartMs ?? 0) / 1000 : 0;
     const startS = Math.min(T, Math.max(0, (plan.music!.startMs ?? 0) / 1000));
     const endS = Math.min(T, Math.max(startS, plan.music!.endMs == null ? T : plan.music!.endMs / 1000));
     const D = endS - startS;
     const delayMs = Math.round(startS * 1000);
     parts.push(
-      `[${r.inputs.length + brollOrder.length}:a]aresample=48000,aformat=channel_layouts=stereo,atrim=duration=${D.toFixed(3)},asetpts=PTS-STARTPTS,volume=${vol.toFixed(2)},` +
+      `[${r.inputs.length + brollOrder.length}:a]aresample=48000,aformat=channel_layouts=stereo,atrim=start=${seekS.toFixed(3)}:duration=${D.toFixed(3)},asetpts=PTS-STARTPTS,volume=${vol.toFixed(2)},` +
         `afade=t=in:d=${Math.min(MUSIC_FADE_IN_S, D / 2).toFixed(3)},afade=t=out:st=${Math.max(0, D - MUSIC_FADE_OUT_S).toFixed(3)}:d=${Math.min(MUSIC_FADE_OUT_S, D / 2).toFixed(3)}` +
         `${delayMs > 0 ? `,adelay=${delayMs}|${delayMs}` : ""},apad=whole_dur=${T.toFixed(3)}[mus]`,
     );

@@ -7,7 +7,7 @@ import { useVideoPlayer, VideoView } from "expo-video";
 import * as Brightness from "expo-brightness";
 import { Camera, useCameraDevice, useCameraPermission, useMicrophonePermission, type VideoFile } from "react-native-vision-camera";
 import {
-  DEFAULT_EDIT_CHOICES, PRESET_LABEL, PRODUCTION_MODES, RECORDING_CHECKLIST, RECORDING_TIPS, SHOT_LIBRARY, availablePresets, buildSegments, initialTeleprompter, isBusiness, type ProjectInfo, type ShotKey, pickFormat, segmentProgress, supportedFps, teleprompterReducer,
+  DEFAULT_EDIT_CHOICES, PRESET_LABEL, ownMusicId, ownMusicUuid, PRODUCTION_MODES, RECORDING_CHECKLIST, RECORDING_TIPS, SHOT_LIBRARY, availablePresets, buildSegments, initialTeleprompter, isBusiness, type ProjectInfo, type ShotKey, pickFormat, segmentProgress, supportedFps, teleprompterReducer,
   type ResolutionPreset, type Retouch, type ScriptSegment,
 } from "@postai/domain";
 import { getContent, getTask, latestTakesBySegment, registerTake, requireWorkspace, queuePatrimonio, runTaskAction, setEditChoices, workspaceById, updateSettings, updateTakeMeta, type ContentItem, type Take } from "../src/db/repo";
@@ -16,6 +16,9 @@ import { newId } from "../src/config";
 import { syncNow } from "../src/sync/engine";
 import { reportError } from "../src/telemetry";
 import { Teleprompter } from "../src/components/Teleprompter";
+import { chosenTrack } from "../src/musicChoice";
+import { useNarrationMusic } from "../src/narration";
+import { listOwnMusic, ownMusicUrl } from "../src/ownMusic";
 import { Button, Loading, Screen, colors, s } from "../src/ui";
 
 type Phase = "ready" | "recording" | "saving" | "saved" | "error";
@@ -56,6 +59,24 @@ export default function RecordScreen() {
   const [retouch, setRetouch] = useState<Retouch>("forte");
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [showScene, setShowScene] = useState(false);
+  // narrar com música no fone (vídeo inteiro de uma vez): a música toca no fone; a câmera grava só a voz
+  const [business, setBusiness] = useState(false);
+  const [narrate, setNarrate] = useState(false);
+  // música própria escolhida para o vídeo: link temporário para tocar no fone
+  const [ownTrack, setOwnTrack] = useState<{ id: string; title: string; url: string } | null>(null);
+  const libraryTrack = content && params.partes !== "1" && !patrimonio
+    ? chosenTrack({ ...DEFAULT_EDIT_CHOICES, ...content.edit }, content.id, content.pillarSlug, business, content.draft?.direcao) : null;
+  const narrationTrack = params.partes !== "1" && !patrimonio ? (ownTrack ?? (libraryTrack ? { id: libraryTrack.id, title: libraryTrack.title, url: libraryTrack.url } : null)) : null;
+  const narration = useNarrationMusic(narrate && narrationTrack ? narrationTrack.url : null, NARRATION_EAR_VOLUME);
+  useEffect(() => {
+    const uuid = content?.edit?.music ? ownMusicUuid(content.edit.music) : null;
+    if (!content || !uuid) return;
+    void listOwnMusic(content.workspaceId).then(async (list) => {
+      const m = list.find((x) => x.id === uuid);
+      const url = m ? await ownMusicUrl(m.storageKey) : null;
+      if (m && url) setOwnTrack({ id: ownMusicId(m.id), title: m.titulo, url });
+    }).catch(() => undefined);
+  }, [content]);
   const [phase, setPhase] = useState<Phase>("ready");
   const [message, setMessage] = useState<string | null>(null);
   const [saved, setSaved] = useState<Take | null>(null);
@@ -80,6 +101,7 @@ export default function RecordScreen() {
       if (content) {
         setContent(content);
         const business = isBusiness((await workspaceById(content.workspaceId)).profile);
+        setBusiness(business);
         setRetouch(content.edit?.retouch ?? (business ? "leve" : "forte"));
       }
       if (content?.project) {
@@ -151,6 +173,10 @@ export default function RecordScreen() {
         } : undefined,
       });
       if (segIndex !== null) setRecordedParts((r) => [...new Set([...r, segIndex])]);
+      // gravou narrando com a música: a montagem usa a MESMA faixa, do começo, sem cortar pausas (fica no tempo da música)
+      if (narrate && narrationTrack && content) {
+        void setEditChoices(content.id, { ...DEFAULT_EDIT_CHOICES, ...content.edit, music: narrationTrack.id, narracao: true, autoCut: false }).then(setContent).catch((e) => reportError(e, "narration edit"));
+      }
       setSaved(take);
       setPhase("saved");
       void syncNow();
@@ -159,7 +185,7 @@ export default function RecordScreen() {
       setMessage(`Não consegui salvar o vídeo: ${e instanceof Error ? e.message : String(e)}`);
       setPhase("error");
     }
-  }, [taskId, contentId, category, position, segIndex, project, shot, segments]);
+  }, [taskId, contentId, category, position, segIndex, project, shot, segments, narrate, narrationTrack, content]);
 
   const beginRecording = useCallback(() => {
     if (!camera.current) return;
@@ -169,12 +195,15 @@ export default function RecordScreen() {
       fileType: "mp4",
       onRecordingFinished: (v) => void onFinished(v),
       onRecordingError: (e) => {
+        narration.stop();
         reportError(e, "recording");
         setMessage(`A gravação falhou: ${e.message}`);
         setPhase("error");
       },
     });
-  }, [onFinished]);
+    // a música começa junto com a gravação (no fone)
+    if (narrate) narration.start();
+  }, [onFinished, narrate, narration]);
 
   // countdown finished → start recording (countdown lives in the teleprompter reducer)
   useEffect(() => {
@@ -188,6 +217,11 @@ export default function RecordScreen() {
     if (phase === "recording") {
       dispatch({ type: "pause" });
       void camera.current?.stopRecording();
+      narration.stop();
+      return;
+    }
+    if (narrate && !narration.ready) {
+      setMessage(narration.error ? `A música não carregou: ${narration.error}` : "Carregando a música… espere um instante.");
       return;
     }
     if (freeDiskBytes() < LOW_DISK) setMessage("Pouco espaço no celular (<500 MB). Grave takes curtos.");
@@ -370,6 +404,9 @@ export default function RecordScreen() {
             <RailButton onLight={ringLight} icon="✨" label={RETOUCH_SHORT[retouch]} selected={retouch !== "off"} onPress={cycleRetouch} testID="beauty" />
           ) : null}
           <RailButton onLight={ringLight} icon="Aa" label={prompterOn ? "Texto" : "Sem texto"} selected={prompterOn} onPress={() => setPrompterOn(!prompterOn)} testID="toggle-prompter" />
+          {narrationTrack ? (
+            <RailButton onLight={ringLight} icon="🎧" label={narrate ? "Narrando" : "Narrar"} selected={narrate} onPress={() => setNarrate(!narrate)} testID="toggle-narration" />
+          ) : null}
           <RailButton onLight={ringLight} icon="⚙" label="Ajustes" selected={settingsOpen} onPress={() => setSettingsOpen(!settingsOpen)} testID="open-settings" />
         </View>
       ) : null}
@@ -382,6 +419,11 @@ export default function RecordScreen() {
 
       <View style={[st.bottom, { bottom: 28 + insets.bottom }]}>
         {message ? <Text style={st.message} accessibilityRole="alert">{message}</Text> : null}
+        {narrate && narrationTrack && !recording ? (
+          <View style={st.tip} testID="narration-tip">
+            <Text style={st.tipText}>{`🎧 Use FONE DE OUVIDO: “${narrationTrack.title}” toca no fone desde o começo e a câmera grava só a sua voz. No vídeo final a música entra no mesmo tempo.${narration.ready ? "" : " (carregando a música…)"}`}</Text>
+          </View>
+        ) : null}
         {!recording && !settingsOpen && !patrimonio ? (
           <Pressable style={st.tip} testID="recording-tip" disabled={!scene.length} onPress={() => setShowScene(!showScene)}
             accessibilityRole={scene.length ? "button" : undefined} accessibilityHint={scene.length ? "Alterna entre como falar e como filmar" : undefined}>
@@ -515,6 +557,9 @@ function SoftGlow({ color }: { color: string }) {
 type LightMode = "off" | "warm" | "neutral";
 const NEXT_LIGHT: Record<LightMode, LightMode> = { off: "neutral", neutral: "warm", warm: "off" };
 const LIGHT_LABEL: Record<LightMode, string> = { off: "Luz", neutral: "Luz máx.", warm: "Quente" };
+/** volume da música no fone enquanto narra (o vídeo final usa o volume escolhido na montagem) */
+const NARRATION_EAR_VOLUME = 0.6;
+
 /** instruções do diretor sobre a fala (o resto é a cena: local, luz, enquadramento…) */
 const SPEECH_LABELS = ["Ritmo", "Emoção", "Olhar"];
 /** teleprompter começa abaixo da etiqueta da parte (que fica a 18px da área segura) */
