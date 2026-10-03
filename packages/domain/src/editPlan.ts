@@ -67,6 +67,8 @@ export interface PlanMusic {
   /** direção: segundo do vídeo em que a música entra / sai (sem = o vídeo todo) */
   startMs?: number;
   endMs?: number | null;
+  /** narração com a música no fone: a faixa começou junto com a gravação — pula o mesmo trecho cortado do início do take */
+  narration?: boolean;
 }
 
 /** Texto na tela escrito pelo diretor (tempos na linha do tempo final). */
@@ -252,6 +254,8 @@ export interface EditChoices {
   broll?: boolean;
   /** gancho escrito na tela nos 3 primeiros segundos */
   hook?: boolean;
+  /** gravado narrando com a música no fone: a mesma faixa entra do começo, no tempo da gravação (sem corte de pausas) */
+  narracao?: boolean;
 }
 
 export const DEFAULT_EDIT_CHOICES: EditChoices = {

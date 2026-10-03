@@ -60,9 +60,13 @@ export function editChoices(payload: Record<string, unknown> | null | undefined,
   const accentColor = typeof edit.accentColor === "string" && /^#[0-9a-fA-F]{6}$/.test(edit.accentColor) ? edit.accentColor : undefined;
   const dm = direction?.musica ?? null;
   const volume = typeof edit.musicVolume === "number" && edit.musicVolume >= 0.05 && edit.musicVolume <= 0.6 ? edit.musicVolume : (dm?.volume ?? 0.22);
-  const base = { captionStyle, accentColor, retouch, stabilize: flag("stabilize"), autoCut: flag("autoCut"), voiceClean: flag("voiceClean"), broll: flag("broll"), hook: flag("hook") };
+  const narration = edit.narracao === true;
+  // narração: sem corte de pausas (a fala fica no tempo da música que tocava no fone)
+  const base = { captionStyle, accentColor, retouch, stabilize: flag("stabilize"), autoCut: narration ? false : flag("autoCut"), voiceClean: flag("voiceClean"), broll: flag("broll"), hook: flag("hook") };
   const choice = typeof edit.music === "string" ? edit.music : "auto";
   if (choice === "none") return { ...base, music: null };
+  const narrated = narration ? trackById(choice) : undefined;
+  if (narrated) return { ...base, music: { trackId: narrated.id, mood: narrated.mood, volume, narration: true } };
   // "auto" + direção com música da biblioteca: a faixa, o volume e a janela que o diretor pediu
   const directed = choice === "auto" && dm ? trackById(dm.id) : undefined;
   if (directed && !(business && directed.license !== "comercial")) {

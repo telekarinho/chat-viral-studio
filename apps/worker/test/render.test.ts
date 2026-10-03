@@ -148,10 +148,18 @@ describe("renderizador (comando)", () => {
     expect(editChoices({ edit: { music: "mixkit-22" } }, "academia", false, "c1", direction).music?.trackId).toBe("mixkit-22");
     expect(editChoices({ edit: { music: "none" } }, "academia", false, "c1", direction).music).toBeNull();
   });
+  it("narração com música no fone: mesma faixa, sem corte de pausas, e a música pula o mesmo começo do take", () => {
+    const ch = editChoices({ edit: { music: "mixkit-839", narracao: true, autoCut: true } }, "familia", false, "c");
+    expect(ch.autoCut).toBe(false);
+    expect(ch.music).toEqual({ trackId: "mixkit-839", mood: "familia", volume: 0.22, narration: true });
+    const p = { ...plan, music: ch.music! };
+    const args = ffmpegArgs({ plan: p, inputs: ["a.mp4", "b.mp4", "c.mp4"], fontFile: "f.ttf", output: "o.mp4", hasAudio: [true, true, true], musicFile: "m.mp3" }).join(" ");
+    expect(args).toContain(`atrim=start=${(plan.clips[0]!.trimStartMs / 1000).toFixed(3)}:duration=`);
+  });
   it("música com janela: entra atrasada e completa até o fim do vídeo", () => {
     const p = { ...plan, music: { trackId: "mixkit-839", mood: "familia" as const, volume: 0.3, startMs: 2000, endMs: 5000 } };
     const args = ffmpegArgs({ plan: p, inputs: ["a.mp4", "b.mp4", "c.mp4"], fontFile: "f.ttf", output: "o.mp4", hasAudio: [true, true, true], musicFile: "m.mp3" }).join(" ");
-    expect(args).toContain("atrim=duration=3.000");
+    expect(args).toContain("atrim=start=0.000:duration=3.000");
     expect(args).toContain("adelay=2000|2000");
     expect(args).toMatch(/apad=whole_dur=/);
   });
