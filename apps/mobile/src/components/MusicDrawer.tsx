@@ -109,7 +109,7 @@ export function MusicDrawer({ value, onChange, workspaceId, business, voiceUri }
           </View>
 
           {workspaceId ? (
-            <OwnMusicSection workspaceId={workspaceId} business={business} selected={value.music} onSelect={(music) => onChange({ ...value, music })} voiceUri={voiceUri} musicVolume={value.musicVolume ?? 0.22} />
+            <OwnMusicSection workspaceId={workspaceId} business={business} selected={value.music} onSelect={(music) => onChange({ ...value, music })} />
           ) : null}
         </View>
       )}
