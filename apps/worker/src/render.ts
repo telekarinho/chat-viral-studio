@@ -15,9 +15,12 @@ export interface RenderInput {
   musicFile?: string | null;
   /** cenas de apoio baixadas: takeId → arquivo local (só as usadas em plan.clips[].broll) */
   brollFiles?: Record<string, string>;
+  /** modelo RNNoise (.rnnn): filtro de voz por rede neural — tira vento, carro e rua (sem ele, só a limpeza leve) */
+  denoiseModel?: string | null;
 }
 
-const BROLL_SKIP_S = 0.15; // pula o toque no botão no começo da cena de apoio
+const BROLL_SKIP_S = 0.15;
+const DENOISE_MIX = 0.85; // pula o toque no botão no começo da cena de apoio
 
 /** Expressão select/aselect com os trechos que ficam (tempo do arquivo original, em segundos). */
 export function keepExpr(keep: readonly { startMs: number; endMs: number }[]): string {
@@ -111,7 +114,9 @@ export function ffmpegArgs(r: RenderInput): string[] {
   const brollOrder = plan.clips.filter((c) => c.broll && r.brollFiles?.[c.broll.takeId]).map((c) => c.broll!.takeId);
   const brollIndex = (takeId: string) => r.inputs.length + brollOrder.indexOf(takeId);
   // voz limpa (leve): corta ronco de vento/carro, reduz ruído de fundo, dá um pouco de clareza e nivela o volume
-  const voice = plan.voiceClean ? ",highpass=f=90,afftdn=nr=10:nf=-28,equalizer=f=3200:t=q:w=1.5:g=2,acompressor=threshold=-20dB:ratio=2.5:attack=8:release=160:makeup=1.5" : "";
+  // com o modelo de rede neural (RNNoise), antes: separa a voz do barulho da rua; mix < 1 guarda um pouco do ambiente (soa natural)
+  const neural = plan.voiceClean && r.denoiseModel ? `aresample=48000,aformat=channel_layouts=mono,arnndn=m='${filterPath(r.denoiseModel)}':mix=${DENOISE_MIX},aformat=sample_fmts=fltp:channel_layouts=stereo,` : "";
+  const voice = plan.voiceClean ? `,highpass=f=90,afftdn=nr=10:nf=-28,equalizer=f=3200:t=q:w=1.5:g=2,acompressor=threshold=-20dB:ratio=2.5:attack=8:release=160:makeup=1.5` : "";
 
   plan.clips.forEach((clip, i) => {
     const start = sec(clip.trimStartMs);
@@ -141,7 +146,8 @@ export function ffmpegArgs(r: RenderInput): string[] {
     }
     if (r.hasAudio[i]) {
       const a = cut ? `aselect='${keepExpr(cut)}',asetpts=N/SR/TB` : `atrim=start=${start}:end=${end},asetpts=PTS-STARTPTS`;
-      parts.push(`[${i}:a]${a},aresample=48000,aformat=channel_layouts=stereo${voice}[a${i}]`);
+      // a rede neural limpa o áudio contínuo ANTES do corte (depois de cortado ela gera amostras inválidas no fim)
+      parts.push(`[${i}:a]${neural}${a},aresample=48000,aformat=channel_layouts=stereo${voice}[a${i}]`);
     } else {
       parts.push(`anullsrc=channel_layout=stereo:sample_rate=48000,atrim=duration=${sec(clip.durationMs)}[a${i}]`);
     }
