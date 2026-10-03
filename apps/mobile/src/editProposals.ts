@@ -16,7 +16,7 @@ export async function pullEditProposal(workspaceId: string, contentId: string, b
   if (error || !data) return null;
   const e = (data.edit ?? {}) as EditProposal;
   const own = e.music?.startsWith("own:") ? await listOwnMusic(workspaceId).catch(() => []) : [];
-  const parsed = parseEditProposal({ autocut: e.autocut, musica: e.music, volume: e.musicVolume, inicio_musica_s: e.musicStartS }, { business, own });
+  const parsed = parseEditProposal({ intencao: e.intencao, autocut: e.autocut, musica: e.music, volume: e.musicVolume, inicio_musica_s: e.musicStartS }, { business, own });
   if (!parsed.ok) {
     await decideEditProposal(contentId, "dispensar");
     return null;

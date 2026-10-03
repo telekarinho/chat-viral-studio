@@ -21,6 +21,7 @@ function fakeStore(opts: { profile?: typeof RODRIGO_PROFILE; recent?: ContentDra
   const metrics: { contentId: string; m: PostMetrics }[] = [];
   const improvements: { titulo: string }[] = [];
   const proposals: { contentId: string; edit: unknown; motivo: string }[] = [];
+  const requests = [{ id: "r1", contentId: ID, texto: "quero mais rápido", createdAt: "2026-10-01T12:00:00Z", resposta: null as string | null }];
   const own = opts.content === undefined ? thought : opts.content;
   const state = { profile: opts.profile ?? RODRIGO_PROFILE, pillars: null as Pillar[] | null, cases: [] as RealCase[], proofs: [] as FilmableProof[] };
   const store: McpStore = {
@@ -42,6 +43,16 @@ function fakeStore(opts: { profile?: typeof RODRIGO_PROFILE; recent?: ContentDra
       ? { draft: null, edit: null, metrics: null, postedAt: null, pendingFromAssistant: true, pending: { sentAt: "2026-10-02T12:00:00Z", draft: opts.pending, scenes: null } }
       : { draft: raw, edit: null, metrics: null, postedAt: null, pendingFromAssistant: true }),
     musicFavorites: async () => ["mixkit-963"],
+    mediaLibrary: async ({ categoria }) => [
+      { id: "b1", segmentIndex: null, createdAt: "2026-10-01T12:00:00Z", discarded: false, synced: true, favorite: true, camera: "back", durationMs: 3200, width: 1080, height: 1920, category: "broll", contentId: ID, tags: [], capitulo: null },
+      { id: "p1", segmentIndex: null, createdAt: "2026-10-01T13:00:00Z", discarded: false, synced: false, favorite: false, camera: "back", durationMs: 8000, width: 1080, height: 1920, category: "main_video", contentId: null, tags: ["mixer"], capitulo: "Close do produto" },
+    ].filter((t) => !categoria || (categoria === "broll" ? t.category === "broll" : categoria === "prova" ? Boolean(t.capitulo) : t.category !== "broll")),
+    creatorRequests: async (cid) => requests.filter((r) => !cid || r.contentId === cid),
+    answerRequest: async (rid, resposta) => {
+      const r = requests.find((x) => x.id === rid);
+      if (r) r.resposta = resposta;
+      return Boolean(r);
+    },
     takes: async () => [
       { id: "t1", segmentIndex: 0, createdAt: "a", discarded: false, synced: true, favorite: false, camera: "front", durationMs: 600, width: 1080, height: 1920 },
       { id: "t2", segmentIndex: 0, createdAt: "b", discarded: true, synced: true, favorite: false, camera: "front", durationMs: 4000, width: 1080, height: 1920 },
@@ -264,6 +275,25 @@ describe("conector MCP do Post.ai (diretor de gravações)", () => {
     const ok = textOf(await call(ctx, "propor_edicao", { content_id: ID, autocut: "tiktok", musica: "mixkit-963", volume: 0.3, inicio_musica_s: 10, motivo: "Fala curta e animada: ritmo rápido na batida." }));
     expect(ok).toContain("MONTAR ASSIM");
     expect(pessoal.proposals[0]).toMatchObject({ contentId: ID, edit: { autocut: "tiktok", music: "mixkit-963", musicVolume: 0.3, musicStartS: 10 } });
+  });
+
+  it("buscar_midias: o diretor acha B-roll e provas já gravados antes de pedir de novo", async () => {
+    const { ctx } = fakeCtx();
+    const all = textOf(await call(ctx, "buscar_midias"));
+    expect(all).toContain("2 mídia(s) no acervo");
+    expect(all).toMatch(/take b1 · broll · .* · 3\.2s · 1080x1920 · ★ · na nuvem · de "Pensamento do Dia"/);
+    expect(all).toMatch(/take p1 · main_video \(Close do produto\) .* ainda no celular · mixer/);
+    expect(textOf(await call(ctx, "buscar_midias", { categoria: "broll" }))).not.toContain("take p1");
+  });
+
+  it("pedidos do criador: o diretor lê e responde", async () => {
+    const { ctx } = fakeCtx();
+    const list = textOf(await call(ctx, "pedidos_do_criador", { content_id: ID }));
+    expect(list).toContain('pedido r1');
+    expect(list).toContain('"quero mais rápido" · SEM RESPOSTA');
+    expect(isError(await call(ctx, "responder_pedido", { pedido_id: "nao-existe", resposta: "ok, fiz" }))).toBe(true);
+    expect(textOf(await call(ctx, "responder_pedido", { pedido_id: "r1", resposta: "Propus o AutoCut TikTok: cortes mais curtos." }))).toContain("painel do Diretor");
+    expect(textOf(await call(ctx, "pedidos_do_criador"))).toContain("respondido: Propus o AutoCut TikTok");
   });
 
   it("listar_takes: por parte, qual a montagem usa, descartados e checagem técnica", async () => {

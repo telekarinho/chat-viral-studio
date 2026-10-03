@@ -1,5 +1,5 @@
 import type { MusicMood } from "./music";
-import type { AutoCutThemeId } from "./autocut";
+import type { AutoCutThemeId, VideoIntent } from "./autocut";
 import type { ScriptSegment, SegmentRole } from "./segments";
 import type { WatermarkCorner } from "./watermark";
 
@@ -272,6 +272,10 @@ export interface EditChoices {
   narracao?: boolean;
   /** tema do AutoCut escolhido (o servidor usa os parâmetros de montagem dele); ausente = montagem padrão */
   autocut?: AutoCutThemeId;
+  /** objetivo do vídeo (Venda, Autoridade…), combinado com o estilo do AutoCut */
+  intencao?: VideoIntent;
+  /** título da capa ("" = sem título; ausente = o do diretor) — vale na próxima montagem */
+  capaTexto?: string;
   /** trecho da música: segundo da faixa onde a trilha começa (ausente = automático) */
   musicStartS?: number;
 }

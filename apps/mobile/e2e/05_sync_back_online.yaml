@@ -9,7 +9,9 @@ appId: me.rodrigoserra.postai
     commands:
       - tapOn: "Wait"
 - tapOn:
-    id: tab-Projetos
+    id: tab-Biblioteca
+- tapOn:
+    id: library-tab-takes
 - extendedWaitUntil:
     visible: "SINCRONIZADO"
     timeout: 240000

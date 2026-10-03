@@ -3,23 +3,23 @@ import { Pressable, StyleSheet, Text, TextInput, View, useWindowDimensions } fro
 import { router, useLocalSearchParams } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useKeepAwake } from "expo-keep-awake";
-import { useVideoPlayer, VideoView } from "expo-video";
 import * as Brightness from "expo-brightness";
 import { Camera, useCameraDevice, useCameraPermission, useMicrophonePermission, type VideoFile } from "react-native-vision-camera";
 import {
-  DEFAULT_EDIT_CHOICES, PRESET_LABEL, ownMusicId, ownMusicUuid, PRODUCTION_MODES, RECORDING_CHECKLIST, RECORDING_TIPS, SHOT_LIBRARY, availablePresets, buildSegments, initialTeleprompter, isBusiness, type ProjectInfo, type ShotKey, pickFormat, segmentProgress, supportedFps, teleprompterReducer,
+  DEFAULT_EDIT_CHOICES, FORMAT_LABEL, PRESET_LABEL, SPEECH_MODE_LABEL, prompterText, ownMusicId, ownMusicUuid, PRODUCTION_MODES, RECORDING_CHECKLIST, RECORDING_TIPS, SHOT_LIBRARY, availablePresets, buildSegments, initialTeleprompter, isBusiness, type ProjectInfo, type ShotKey, pickFormat, segmentProgress, supportedFps, teleprompterReducer,
   type ResolutionPreset, type Retouch, type ScriptSegment,
 } from "@postai/domain";
-import { getContent, getTask, latestTakesBySegment, registerTake, requireWorkspace, queuePatrimonio, runTaskAction, setEditChoices, workspaceById, updateSettings, updateTakeMeta, type ContentItem, type Take } from "../src/db/repo";
+import { chooseTake, getContent, getTask, latestTakesBySegment, listTakes, registerTake, requireWorkspace, queuePatrimonio, runTaskAction, setEditChoices, workspaceById, updateSettings, updateTakeMeta, type ContentItem, type Take } from "../src/db/repo";
 import { freeDiskBytes, persistRecording } from "../src/media";
 import { newId } from "../src/config";
 import { syncNow } from "../src/sync/engine";
 import { reportError } from "../src/telemetry";
 import { Teleprompter } from "../src/components/Teleprompter";
+import { TakeReview } from "../src/components/TakeReview";
 import { chosenTrack } from "../src/musicChoice";
 import { useNarrationMusic } from "../src/narration";
 import { listOwnMusic, ownMusicUrl } from "../src/ownMusic";
-import { Button, Loading, Screen, colors, s } from "../src/ui";
+import { Button, Loading, Screen, s } from "../src/ui";
 
 type Phase = "ready" | "recording" | "saving" | "saved" | "error";
 const LOW_DISK = 500 * 1024 * 1024;
@@ -80,6 +80,15 @@ export default function RecordScreen() {
   const [phase, setPhase] = useState<Phase>("ready");
   const [message, setMessage] = useState<string | null>(null);
   const [saved, setSaved] = useState<Take | null>(null);
+  // takes desta parte (mais novos primeiro) para escolher entre Take 1 / Take 2…
+  const [partTakes, setPartTakes] = useState<Take[]>([]);
+  useEffect(() => {
+    if (!saved) return setPartTakes([]);
+    if (!saved.contentItemId || saved.segmentIndex === null) return setPartTakes([saved]);
+    void listTakes({ contentItemId: saved.contentItemId })
+      .then((all) => setPartTakes(all.filter((t) => t.segmentIndex === saved.segmentIndex && !t.tags.includes("descartado"))))
+      .catch(() => setPartTakes([saved]));
+  }, [saved]);
   const [elapsed, setElapsed] = useState(0);
   const camera = useRef<Camera>(null);
   const pendingStart = useRef(false);
@@ -116,7 +125,7 @@ export default function RecordScreen() {
         setSegments(segs);
         setRecordedParts(recorded);
         setSegIndex(next);
-        setScript(segs[next]?.text ?? "");
+        setScript(prompterText(segs[next]?.text ?? "", segs[next]?.speechMode));
       } else if (content?.draft) {
         const hook = content.draft.hook_options[content.selectedHook ?? 0];
         setScript(hook && !content.draft.script.startsWith(hook) ? `${hook}\n\n${content.draft.script}` : content.draft.script);
@@ -268,43 +277,33 @@ export default function RecordScreen() {
   function goToPart(i: number) {
     if (!segments?.[i]) return;
     setSegIndex(i);
-    setScript(segments[i].text);
+    setScript(prompterText(segments[i].text, segments[i].speechMode));
     setSaved(null);
     setMessage(null);
     setPhase("ready");
     dispatch({ type: "restart" });
   }
 
-  /** "Ficou ruim": keep the file (never lose footage) but take it out of the edit, then record again. */
-  async function discardAndRetake(take: Take, part: number | null) {
-    await updateTakeMeta(take.id, { tags: [...take.tags, "descartado"] });
-    if (part !== null) setRecordedParts((r) => r.filter((i) => i !== part));
-    if (part !== null) goToPart(part);
-    else {
-      setSaved(null);
-      setPhase("ready");
-      dispatch({ type: "restart" });
-    }
+  /** Gravar de novo: o take anterior fica guardado como reserva (nunca é apagado) e dá para escolher depois. */
+  function retake(part: number | null) {
+    if (part !== null) return goToPart(part);
+    setSaved(null);
+    setPhase("ready");
+    dispatch({ type: "restart" });
   }
 
   if (phase === "saved" && saved && segments && segIndex !== null) {
     const prog = segmentProgress(segments.length, recordedParts);
+    const takes = partTakes.length ? partTakes : [saved];
     return (
       <Screen testID="saved-screen">
-        <Text style={{ fontSize: 22, fontWeight: "900", color: colors.good }} testID="saved-local">{`Parte ${segIndex + 1} salva ✓ — assista e decida`}</Text>
-        <ReviewPlayer uri={saved.media.localUri} />
-        <View style={[s.row, { justifyContent: "space-between" }]}>
-          <View style={{ flex: 1 }}>
-            {prog.next !== null ? (
-              <Button label={`✓ FICOU BOM — PARTE ${prog.next + 1}`} onPress={() => goToPart(prog.next!)} testID="next-part" />
-            ) : (
-              <Button label="✓ FICOU BOM — CONCLUIR" onPress={attachAndDone} testID="attach-done" />
-            )}
-          </View>
-        </View>
-        <Button variant="secondary" label={`↺ GRAVAR DE NOVO A PARTE ${segIndex + 1}`} onPress={() => void discardAndRetake(saved, segIndex)} testID="retake-part" />
-        {project ? <StudioNotes take={saved} /> : null}
-        <Text style={s.muted}>{`${prog.recorded.length} de ${segments.length} partes boas · ${segments.map((sg) => (prog.recorded.includes(sg.index) ? "✓" : "○")).join(" ")}`}</Text>
+        <TakeReview takes={takes} text={segments[segIndex]?.text ?? ""} title={`Parte ${segIndex + 1} salva ✓ · ${segments[segIndex]?.label ?? ""}`}
+          useLabel={prog.next !== null ? `✓ USAR ESTE — PARTE ${prog.next + 1}` : "✓ USAR ESTE — CONCLUIR"} useTestID={prog.next !== null ? "next-part" : "attach-done"}
+          retakeLabel="↺ GRAVAR NOVAMENTE" retakeTestID="retake-part" onRetake={() => retake(segIndex)}
+          onUse={(t) => void chooseTake(t.id).then(() => (prog.next !== null ? goToPart(prog.next) : attachAndDone())).catch((e) => setMessage(String(e)))}>
+          {project ? <StudioNotes take={saved} /> : null}
+          <Text style={s.muted}>{`${prog.recorded.length} de ${segments.length} partes · ${segments.map((sg) => (prog.recorded.includes(sg.index) ? "✓" : "○")).join(" ")}`}</Text>
+        </TakeReview>
       </Screen>
     );
   }
@@ -312,12 +311,12 @@ export default function RecordScreen() {
   if (phase === "saved" && saved) {
     return (
       <Screen testID="saved-screen">
-        <Text style={{ fontSize: 22, fontWeight: "900", color: colors.good }} testID="saved-local">Salvo no aparelho ✓ — assista e decida</Text>
-        <ReviewPlayer uri={saved.media.localUri} />
-        <Button label={patrimonio ? "✓ FICOU BOM — ENVIAR PARA A FÁBRICA" : taskId ? "✓ FICOU BOM — MARCAR FEITO" : "✓ FICOU BOM"} onPress={attachAndDone} testID="attach-done" />
-        <Button variant="secondary" label="↺ GRAVAR DE NOVO" onPress={() => void discardAndRetake(saved, null)} testID="record-again" />
-        {project ? <StudioNotes take={saved} /> : null}
-        <Text style={s.muted}>{`${Math.round((saved.media.durationMs ?? 0) / 1000)}s · ${(saved.media.sizeBytes / 1_048_576).toFixed(1)} MB · o original fica guardado no celular e sobe para a nuvem sozinho.`}</Text>
+        <TakeReview takes={[saved]} text={script} title="Take gravado ✓"
+          useLabel={patrimonio ? "✓ USAR ESTE — ENVIAR PARA A FÁBRICA" : taskId ? "✓ USAR ESTE — MARCAR FEITO" : "✓ USAR ESTE"} useTestID="attach-done"
+          retakeLabel="↺ GRAVAR NOVAMENTE" retakeTestID="record-again" onRetake={() => retake(null)} onUse={() => void attachAndDone()}>
+          {project ? <StudioNotes take={saved} /> : null}
+          <Text style={s.muted}>{`${(saved.media.sizeBytes / 1_048_576).toFixed(1)} MB · o original fica guardado no celular e sobe para a nuvem sozinho.`}</Text>
+        </TakeReview>
       </Screen>
     );
   }
@@ -343,10 +342,12 @@ export default function RecordScreen() {
   const direction = segments && segIndex !== null ? segments[segIndex]?.direction : undefined;
   const speech = (direction ?? []).filter((d) => SPEECH_LABELS.includes(d.label));
   const scene = (direction ?? []).filter((d) => !SPEECH_LABELS.includes(d.label));
-  const join = (xs: { label: string; value: string }[]) => xs.map((d) => `${d.label}: ${d.value}`).join(" · ");
-  const tip = direction?.length
-    ? (showScene ? `🎥 ${join(scene)}` : `🎙 ${join(speech) || "Fale com calma, olhando para a lente."}`)
-    : role && !firstPart ? RECORDING_TIPS[role] : `${RECORDING_CHECKLIST}. ${RECORDING_TIPS[role ?? "hook"]}`;
+  const join = (xs: { label: string; value: string }[]) => xs.map((d) => d.value).join(" · ");
+  // a direção do Claude para ESTE take vem antes das dicas genéricas
+  const speechMode = segments && segIndex !== null ? segments[segIndex]?.speechMode : undefined;
+  const howToSpeak = [speechMode ? SPEECH_MODE_LABEL[speechMode] : "", join(speech)].filter(Boolean).join(" · ")
+    || (role && !firstPart ? RECORDING_TIPS[role] : RECORDING_TIPS[role ?? "hook"]);
+  const howToShoot = join(scene) || RECORDING_CHECKLIST;
   return (
     <View style={[st.root, ringLight && { backgroundColor: RING_COLOR[light] }]} testID="record-screen">
       <View style={ringLight ? [st.frame, { width: ovalW, borderRadius: ovalW / 2, marginTop: -80 }] : st.frame}>
@@ -385,11 +386,11 @@ export default function RecordScreen() {
         ) : segments && segIndex !== null ? (
           <View style={st.topPill}>
             <Text style={st.topPillText} testID="part-indicator" accessible accessibilityRole="header" accessibilityLabel={`Parte ${segIndex + 1} de ${segments.length}, ${segments[segIndex]?.label ?? ""}`}>
-              {`Parte ${segIndex + 1}/${segments.length} · ${segments[segIndex]?.label ?? ""}`}
+              {`Parte ${segIndex + 1}/${segments.length} · ${(segments[segIndex]?.label ?? "").toUpperCase()}`}
             </Text>
           </View>
         ) : (
-          <View style={st.topPill}><Text style={st.topPillText}>{`${PRESET_LABEL[format && presets.includes(preset) ? preset : "1080p"]} · ${effectiveFps}fps`}</Text></View>
+          <View style={st.topPill}><Text style={st.topPillText}>{FORMAT_LABEL[category as keyof typeof FORMAT_LABEL] ?? "Gravação livre"}</Text></View>
         )}
         <View style={{ width: 44 }} />
       </View>
@@ -407,7 +408,7 @@ export default function RecordScreen() {
           {narrationTrack ? (
             <RailButton onLight={ringLight} icon="🎧" label={narrate ? "Narrando" : "Narrar"} selected={narrate} onPress={() => setNarrate(!narrate)} testID="toggle-narration" />
           ) : null}
-          <RailButton onLight={ringLight} icon="⚙" label="Ajustes" selected={settingsOpen} onPress={() => setSettingsOpen(!settingsOpen)} testID="open-settings" />
+          <RailButton onLight={ringLight} icon="⚙" label="Mais" selected={settingsOpen} onPress={() => setSettingsOpen(!settingsOpen)} testID="open-settings" />
         </View>
       ) : null}
       {project ? (
@@ -425,10 +426,11 @@ export default function RecordScreen() {
           </View>
         ) : null}
         {!recording && !settingsOpen && !patrimonio ? (
-          <Pressable style={st.tip} testID="recording-tip" disabled={!scene.length} onPress={() => setShowScene(!showScene)}
-            accessibilityRole={scene.length ? "button" : undefined} accessibilityHint={scene.length ? "Alterna entre como falar e como filmar" : undefined}>
-            <Text style={st.tipText} numberOfLines={showScene ? 6 : 3}>{direction?.length ? tip : `💡 ${tip}`}</Text>
-            {scene.length ? <Text style={st.tipSub}>{showScene ? "Toque para ver como falar" : "Toque para ver a cena (local, luz, enquadramento)"}</Text> : null}
+          <Pressable style={st.tip} testID="recording-tip" onPress={() => setShowScene(!showScene)}
+            accessibilityRole="button" accessibilityHint="Alterna entre como falar e como filmar">
+            <Text style={st.tipTitle}>{showScene ? "🎥 COMO FILMAR" : "🎙 COMO FALAR"}</Text>
+            <Text style={st.tipText} numberOfLines={showScene ? 6 : 3}>{showScene ? howToShoot : howToSpeak}</Text>
+            <Text style={st.tipSub}>{showScene ? "Toque para ver como falar" : "Toque para ver como filmar"}</Text>
             {content && retouch !== "off" && !direction?.length ? <Text style={st.tipSub}>{`✨ Embelezamento ${RETOUCH_SHORT[retouch].toLowerCase()} entra no vídeo final (a câmera mostra sem filtro)`}</Text> : null}
           </Pressable>
         ) : null}
@@ -490,7 +492,6 @@ export default function RecordScreen() {
   );
 }
 
-/** Plays the take right after recording, looping, with sound — to judge it on the spot. */
 /** Medidas e observações anotadas na hora da filmagem (vão para o clipe, base da ficha técnica). */
 function StudioNotes({ take }: { take: Take }) {
   const [text, setText] = useState(take.meta.medidas ?? "");
@@ -501,22 +502,6 @@ function StudioNotes({ take }: { take: Take }) {
         placeholder="Medidas, temperatura, textura, observações desta tomada" accessibilityLabel="Medidas e observações" testID="studio-notes" />
       <Button compact variant="ghost" label={ok ? "✓ ANOTADO" : "SALVAR ANOTAÇÃO"} onPress={() => void updateTakeMeta(take.id, { meta: { medidas: text.trim() || null } }).then(() => setOk(true))} />
     </View>
-  );
-}
-
-function ReviewPlayer({ uri }: { uri: string }) {
-  const player = useVideoPlayer(uri, (p) => {
-    p.loop = true;
-    p.play();
-  });
-  return (
-    <VideoView
-      player={player}
-      style={{ width: "72%", alignSelf: "center", aspectRatio: 9 / 16, borderRadius: 18, backgroundColor: "#000" }}
-      nativeControls
-      contentFit="cover"
-      testID="review-player"
-    />
   );
 }
 
@@ -596,6 +581,7 @@ const st = StyleSheet.create({
   pillText: { color: "#FFFFFF", fontWeight: "800", fontSize: 13 },
   meta: { color: "#FFFFFF", fontWeight: "700", fontSize: 13 },
   tip: { alignSelf: "stretch", backgroundColor: "rgba(0,0,0,0.5)", paddingHorizontal: 12, paddingVertical: 8, borderRadius: 14, gap: 4 },
+  tipTitle: { color: "#FFFFFF", fontWeight: "900", fontSize: 11, letterSpacing: 1, opacity: 0.85 },
   tipText: { color: "#FFFFFF", fontWeight: "700", fontSize: 13, lineHeight: 18 },
   tipSub: { color: "#FFFFFF", fontWeight: "600", fontSize: 11, opacity: 0.8 },
   rec: { color: "#FF4D4D", fontWeight: "900", fontSize: 16, backgroundColor: "rgba(0,0,0,0.45)", paddingHorizontal: 14, paddingVertical: 8, borderRadius: 18, overflow: "hidden" },

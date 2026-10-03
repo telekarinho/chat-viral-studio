@@ -80,6 +80,10 @@ describe("renderizador (comando)", () => {
     expect(editChoices(null, "academia", false, "c").retouch).toBe("forte");
     expect(editChoices(null, "demonstracao", true, "c").retouch).toBe("leve");
     expect(editChoices({ edit: { retouch: "rosa-choque", stabilize: "x" } }, "academia", false, "c")).toMatchObject({ retouch: "forte", stabilize: true });
+    // título da capa do criador: vale sobre o do diretor; "" = sem título; ausente = o do diretor
+    expect(editChoices({ edit: { capaTexto: "  Mixer na prática  " } }, "academia", false, "c").capaTexto).toBe("Mixer na prática");
+    expect(editChoices({ edit: { capaTexto: "" } }, "academia", false, "c").capaTexto).toBe("");
+    expect(editChoices(null, "academia", false, "c").capaTexto).toBeUndefined();
   });
   it("corte automático vira select/aselect, voz limpa e cena de apoio por cima", () => {
     const clips = plan.clips.map((c, i) => (i === 0 ? { ...c, durationMs: 1800, keep: [{ startMs: 300, endMs: 1200 }, { startMs: 1900, endMs: 2800 }] } : i === 1 ? { ...c, broll: { takeId: "cafe", atMs: 900, durationMs: 1200 } } : c));

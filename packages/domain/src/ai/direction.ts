@@ -33,6 +33,8 @@ export const TakeSchema = z.object({
   emocao: s(120).default(""),
   broll: s(300).default(""),
   erro_comum: s(240).default(""),
+  /** como usar o texto: exata = palavra por palavra · aproximada = com suas palavras · topicos = só os pontos · improviso = fala livre dirigida */
+  modo_fala: z.enum(["exata", "aproximada", "topicos", "improviso"]).default("exata"),
 });
 
 export const ON_SCREEN_POSITIONS = ["topo", "centro", "base"] as const;
@@ -159,4 +161,20 @@ export function directionReport(d: Direction): { campo: string; aplicado: boolea
   if (d.publicacao_por_rede.length) out.push({ campo: "publicacao_por_rede", aplicado: false, como: "horário, hashtags e 1º comentário aparecem no app para o criador copiar; o app não agenda nem posta sozinho" });
   if (d.teste_ab) out.push({ campo: "teste_ab", aplicado: false, como: "os ganchos aparecem no app; o vídeo usa o gancho escolhido pelo criador (não gera 3 versões)" });
   return out;
+}
+
+export type SpeechMode = "exata" | "aproximada" | "topicos" | "improviso";
+export const SPEECH_MODE_LABEL: Record<SpeechMode, string> = {
+  exata: "Leia palavra por palavra", aproximada: "Fale com suas palavras", topicos: "Fale os pontos, do seu jeito", improviso: "Improviso dirigido",
+};
+
+/**
+ * Texto do teleprompter conforme o modo pedido pelo diretor: não força leitura literal quando ele pediu naturalidade.
+ * tópicos = uma linha por ideia; improviso = só a ideia central (a 1ª frase), para falar livre.
+ */
+export function prompterText(text: string, mode: SpeechMode = "exata"): string {
+  if (mode === "exata" || mode === "aproximada") return text;
+  const ideas = text.split(/(?<=[.!?…])\s+|\n+/).map((x) => x.trim()).filter(Boolean);
+  if (mode === "topicos") return ideas.map((x) => `• ${x}`).join("\n");
+  return `🎯 ${ideas[0] ?? text}`;
 }

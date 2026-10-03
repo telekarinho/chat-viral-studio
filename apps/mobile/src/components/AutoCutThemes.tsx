@@ -1,5 +1,5 @@
 import { ScrollView, Text, View } from "react-native";
-import { AUTOCUT_THEMES, activeAutoCutTheme, applyAutoCutTheme, autoCutTheme, type EditChoices } from "@postai/domain";
+import { AUTOCUT_THEMES, INTENT_LABEL, VIDEO_INTENTS, activeAutoCutTheme, applyAutoCutTheme, autoCutTheme, type EditChoices } from "@postai/domain";
 import { Chip, colors, s } from "../ui";
 
 /**
@@ -12,6 +12,12 @@ export function AutoCutThemes({ value, onChange }: { value: EditChoices; onChang
   const chosen = autoCutTheme(value.autocut);
   return (
     <View style={{ gap: 8 }} testID="autocut-themes">
+      <Text style={s.label}>Objetivo do vídeo</Text>
+      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8, paddingRight: 8 }}>
+        {VIDEO_INTENTS.map((i) => (
+          <Chip key={i} label={INTENT_LABEL[i]} selected={value.intencao === i} onPress={() => onChange({ ...value, intencao: value.intencao === i ? undefined : i })} testID={`intent-${i}`} />
+        ))}
+      </ScrollView>
       <Text style={s.label}>AutoCut — estilo da montagem</Text>
       <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8, paddingRight: 8 }}>
         {AUTOCUT_THEMES.map((theme) => (

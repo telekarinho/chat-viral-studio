@@ -1,5 +1,5 @@
 import {
-  applyTaskAction, buildDayPlan, toLocalDateKey, type ContentDraft, type ContentFormat, type CreatorProfile, type Fingerprint,
+  CHOSEN_TAG, DISCARDED_TAG, applyTaskAction, buildDayPlan, chosenTakes, toLocalDateKey, type ContentDraft, type ContentFormat, type CreatorProfile, type Fingerprint,
   type FingerprintType, type GenerationMeta, type MediaRecord, type MediaState, type Pillar, type RecordingTask, type ResolutionPreset,
   type RoutineBlock, type TaskAction, type TaskStatus, type ClipMeta, type ProjectInfo, type UseTarget, PRODUCTION_MODES, type EditChoices, type PostMetrics, type Scenes, watermarkCorner,
 } from "@postai/domain";
@@ -811,11 +811,18 @@ export async function queuePatrimonio(takeId: string, ordemId: number, clipeNum:
 
 /** Latest take per part for a content item (a retake replaces the previous choice; originals are kept). */
 export async function latestTakesBySegment(contentItemId: string): Promise<Map<number, Take>> {
-  const takes = await listTakes({ contentItemId });
-  const out = new Map<number, Take>();
-  for (const t of takes) {
-    if (t.tags.includes("descartado")) continue;
-    if (t.segmentIndex !== null && !out.has(t.segmentIndex)) out.set(t.segmentIndex, t); // list is newest first
+  // escolhido de cada parte, ou o mais recente (lista vem dos mais novos para os mais antigos)
+  return chosenTakes(await listTakes({ contentItemId }));
+}
+
+/** Escolhe o take da parte (os outros da mesma parte viram reserva; nada é apagado). */
+export async function chooseTake(takeId: string): Promise<void> {
+  const t = await getTake(takeId);
+  if (!t?.contentItemId || t.segmentIndex === null) return;
+  const same = (await listTakes({ contentItemId: t.contentItemId })).filter((x) => x.segmentIndex === t.segmentIndex);
+  for (const x of same) {
+    const has = x.tags.includes(CHOSEN_TAG);
+    const want = x.id === takeId;
+    if (has !== want) await updateTakeMeta(x.id, { tags: want ? [...x.tags.filter((g) => g !== DISCARDED_TAG), CHOSEN_TAG] : x.tags.filter((g) => g !== CHOSEN_TAG) });
   }
-  return out;
 }

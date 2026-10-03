@@ -5,6 +5,7 @@ import { router, useFocusEffect, useLocalSearchParams } from "expo-router";
 import { FORMAT_LABEL, PLATFORMS, PLATFORM_LABEL, SHORT_ROLES, WATERMARK_LABEL, type EditPlan, type Platform, type ScriptSegment } from "@postai/domain";
 import { completeContent, getContent, listTakes, listTasks, setEditChoices, workspaceById, selectHook, type ContentItem, type Take, type Workspace } from "../../src/db/repo";
 import { ProjectPanel } from "../../src/components/ProjectPanel";
+import { DirectorSheet } from "../../src/components/DirectorSheet";
 import { FinishOptions } from "../../src/components/FinishOptions";
 import { FREE_SPEECH_MODEL } from "../../src/freeSpeech";
 import { generateForContent, saveUserEdit } from "../../src/generate";
@@ -37,6 +38,9 @@ export default function ContentScreen() {
   const [owner, setOwner] = useState<{ ws: Workspace; takes: Take[] } | null>(null);
   const [business, setBusiness] = useState(false);
   const [assistantMsg, setAssistantMsg] = useState<string | null>(null);
+  const [directorOpen, setDirectorOpen] = useState(false);
+  const [showDetails, setShowDetails] = useState(false);
+  const [showCaption, setShowCaption] = useState(false);
 
   const load = useCallback(async () => {
     const item = await getContent(id);
@@ -91,25 +95,11 @@ export default function ContentScreen() {
     return () => clearInterval(t);
   }, [pendingJob, c]);
 
-  // tudo automático: quando todas as partes estão gravadas e na nuvem, a montagem começa sozinha
+  // material completo: a montagem é pedida em Finalizar (com a proposta do Diretor), não sozinha aqui
   const [autoMsg, setAutoMsg] = useState<string | null>(null);
   const [jobKnown, setJobKnown] = useState(false);
   const [short, setShort] = useState<{ job: RenderJob | null; uri: string | null }>({ job: null, uri: null });
   const [result, setResult] = useState<RenderResult | null>(null);
-  const readyToAuto = Boolean(c && parts?.plan && !finalUri && !job && jobKnown);
-  useEffect(() => {
-    if (!readyToAuto || !c || !parts?.plan) return;
-    const plan = parts.plan;
-    const attempt = () => void requestFinalRender(c.workspaceId, c.id, plan).then((r) => {
-      if (r.ok) {
-        setAutoMsg(null);
-        void latestRenderJob(c.id).then(setJob).catch(() => setAutoMsg("Montagem pedida. Sem internet para acompanhar agora."));
-      } else setAutoMsg(r.reason);
-    }).catch((e: unknown) => setAutoMsg(e instanceof Error ? e.message : String(e)));
-    attempt();
-    const t = setInterval(attempt, 20_000);
-    return () => clearInterval(t);
-  }, [readyToAuto, c, parts]);
 
   // versão curta: acompanha e baixa sozinha
   const shortPending = short.job?.status === "queued" || short.job?.status === "rendering";
@@ -159,6 +149,13 @@ export default function ContentScreen() {
   const recordParams = { contentId: c.id, taskId: taskId ?? "" };
   const free = c.meta?.model === FREE_SPEECH_MODEL;
   const canShort = Boolean(parts && parts.recorded.length > 1 && parts.segments.filter((sg) => SHORT_ROLES.includes(sg.role)).length >= 2);
+  // fase do vídeo: gravando → material completo → pronto (cada fase mostra só o que importa agora)
+  const phase: "gravando" | "completo" | "pronto" = finalUri ? "pronto" : parts?.plan ? "completo" : "gravando";
+  const published = Boolean(c.posted) || c.status === "published";
+  const sheet = d ? (
+    <DirectorSheet visible={directorOpen} onClose={() => setDirectorOpen(false)} workspaceId={c.workspaceId} contentId={c.id}
+      segments={parts?.segments ?? []} recorded={parts?.recorded ?? []} business={business} cloud={Boolean(workspace?.cloud)} />
+  ) : null;
 
   return (
     <Screen testID="content-screen">
@@ -167,11 +164,22 @@ export default function ContentScreen() {
       <H1>{d?.title ?? "Sem roteiro ainda"}</H1>
       {error ? <ErrorBox message={error} /> : null}
       {assistantMsg ? <Card testID="assistant-draft"><Text style={{ color: colors.good, fontWeight: "800" }}>{assistantMsg}</Text></Card> : null}
-      {/* próximo passo sempre no topo: gravou tudo → finalizar; já montado → postar */}
-      {finalUri ? (
-        <Button label="▶ VER VÍDEO FINAL E POSTAR" onPress={() => router.push(`/final/${c.id}`)} testID="top-open-final" />
-      ) : parts?.plan ? (
-        <Button label="▶ FINALIZAR VÍDEO (montar e postar)" onPress={() => router.push(`/finalizar/${c.id}`)} testID="open-finalizar" />
+      {sheet}
+      {phase === "pronto" ? (
+        <Card style={{ gap: 10 }} testID="phase-ready">
+          <Text style={{ color: colors.good, fontWeight: "900", fontSize: 18 }}>VÍDEO PRONTO ✓</Text>
+          <Button label="▶ VER, APROVAR E PUBLICAR" onPress={() => router.push(`/final/${c.id}`)} testID="top-open-final" />
+        </Card>
+      ) : phase === "completo" ? (
+        <Card style={{ gap: 10 }} testID="phase-complete">
+          <Text style={{ color: colors.good, fontWeight: "900", fontSize: 18 }}>MATERIAL COMPLETO ✓</Text>
+          <Text style={s.muted}>{`${parts!.segments.length} parte(s) gravada(s). Seu Diretor monta; você aprova.`}</Text>
+          <Button label="FINALIZAR" onPress={() => router.push(`/finalizar/${c.id}`)} testID="open-finalizar" />
+          <View style={s.row}>
+            <Button compact variant="secondary" label="VER PROPOSTA DO DIRETOR" onPress={() => router.push(`/finalizar/${c.id}`)} testID="open-proposal" />
+            <Button compact variant="ghost" label="🎬 FALAR COM O DIRETOR" onPress={() => setDirectorOpen(true)} testID="open-director" />
+          </View>
+        </Card>
       ) : null}
       {c.project && owner ? <ProjectPanel c={c} ws={owner.ws} takes={owner.takes} onChange={() => void load()} /> : null}
 
@@ -232,12 +240,33 @@ ${owner?.ws.profile.signature ?? ""}`.trim())} />
             </Card>
           ) : null}
           {free ? null : (<>
-          <Button label={parts && parts.recorded.length > 0 && parts.recorded.length < parts.segments.length ? `CONTINUAR POR PARTES (${parts.recorded.length}/${parts.segments.length})` : "GRAVAR POR PARTES"} onPress={() => router.push({ pathname: "/record", params: { ...recordParams, partes: "1" } })} testID="record-parts" />
-          <View style={s.row}>
-            <Button variant="secondary" label="TELEPROMPTER + GRAVAR TUDO" onPress={() => router.push({ pathname: "/record", params: { ...recordParams, prompter: "1" } })} testID="open-teleprompter" />
-            <Button variant="ghost" label="SÓ GRAVAR" onPress={() => router.push({ pathname: "/record", params: recordParams })} />
-          </View>
-
+          {phase === "gravando" ? (
+            <Card style={{ gap: 10 }} testID="director-card">
+              <Text style={{ fontSize: 12, fontWeight: "900", color: colors.accent, letterSpacing: 1 }}>🎬 DIRETOR DE CRIAÇÃO</Text>
+              <Text style={s.body}><Text style={{ fontWeight: "900" }}>Objetivo: </Text>{d.key_phrase}</Text>
+              <Text style={s.body}><Text style={{ fontWeight: "900" }}>Gancho: </Text>{`“${d.hook_options[c.selectedHook ?? 0] ?? d.hook_options[0]}”`}</Text>
+              {parts ? (
+                <View testID="parts-card">
+                  <Text style={[s.label, { marginBottom: 2 }]}>{`Takes necessários · ${parts.recorded.length} de ${parts.segments.length}`}</Text>
+                  {parts.segments.map((sg) => (
+                    <Text key={sg.index} style={{ color: parts.recorded.includes(sg.index) ? colors.good : colors.muted, fontWeight: "700" }}>
+                      {`${parts.recorded.includes(sg.index) ? "✅" : "○"} ${sg.label}`}
+                    </Text>
+                  ))}
+                </View>
+              ) : null}
+              <Button label={parts && parts.recorded.length > 0 ? `CONTINUAR GRAVAÇÃO (${parts.recorded.length}/${parts.segments.length})` : "GRAVAR POR PARTES"}
+                onPress={() => router.push({ pathname: "/record", params: { ...recordParams, partes: "1" } })} testID="record-parts" />
+              <Button variant="secondary" label="🎬 FALAR COM O DIRETOR" onPress={() => setDirectorOpen(true)} testID="open-director" />
+              <View style={s.row}>
+                <Button compact variant="ghost" label="TELEPROMPTER + GRAVAR TUDO" onPress={() => router.push({ pathname: "/record", params: { ...recordParams, prompter: "1" } })} testID="open-teleprompter" />
+                <Button compact variant="ghost" label="SÓ GRAVAR" onPress={() => router.push({ pathname: "/record", params: recordParams })} />
+              </View>
+            </Card>
+          ) : (
+            <Button variant="ghost" label={showDetails ? "Esconder roteiro e detalhes" : "Ver roteiro e detalhes"} onPress={() => setShowDetails(!showDetails)} testID="toggle-details" />
+          )}
+          {phase === "gravando" || showDetails ? (<>
           <Section>3 ganchos — escolha um</Section>
           {d.hook_options.map((h, i) => (
             <Card key={i} style={{ borderWidth: 2, borderColor: (c.selectedHook ?? 0) === i ? colors.ink : "transparent" }} testID={`hook-${i}`}>
@@ -293,26 +322,30 @@ ${owner?.ws.profile.signature ?? ""}`.trim())} />
             {d.recording_suggestions.map((r, i) => <Text key={i} style={s.body}>• {r.scene} ({r.duration_seconds}s){r.location_hint ? ` — ${r.location_hint}` : ""}</Text>)}
           </Card>
 
-          <Section>Legenda para postar</Section>
-          <View style={s.row}>
-            {PLATFORMS.map((p) => <Chip key={p} label={PLATFORM_LABEL[p]} selected={platform === p} onPress={() => { setPlatform(p); setCopied(null); }} testID={`platform-${p}`} />)}
-          </View>
-          <Card style={{ gap: 10 }} testID="caption-card">
-            <Text style={s.body} selectable testID="caption-text">{d.caption[platform]}</Text>
-            <Button compact label={copied === platform ? "LEGENDA COPIADA ✓" : `COPIAR LEGENDA ${PLATFORM_LABEL[platform].toUpperCase()}`} onPress={() => copy(platform, d.caption[platform])} testID="copy-caption" />
-          </Card>
+          </>) : null}
+          {phase === "gravando" && !showCaption ? (
+            <Button variant="ghost" label="📋 Legenda para postar (ver)" onPress={() => setShowCaption(true)} testID="show-caption" />
+          ) : (
+            <>
+              <Section>Legenda para postar</Section>
+              <View style={s.row}>
+                {PLATFORMS.map((p) => <Chip key={p} label={PLATFORM_LABEL[p]} selected={platform === p} onPress={() => { setPlatform(p); setCopied(null); }} testID={`platform-${p}`} />)}
+              </View>
+              <Card style={{ gap: 10 }} testID="caption-card">
+                <Text style={s.body} selectable testID="caption-text">{d.caption[platform]}</Text>
+                <Button compact label={copied === platform ? "LEGENDA COPIADA ✓" : `COPIAR LEGENDA ${PLATFORM_LABEL[platform].toUpperCase()}`} onPress={() => copy(platform, d.caption[platform])} testID="copy-caption" />
+              </Card>
+            </>
+          )}
           </>)}
 
-          {parts ? (
+          {phase !== "gravando" && (autoMsg || job?.status === "failed" || job?.status === "queued" || job?.status === "rendering") ? (
+            <Text style={{ color: job?.status === "failed" ? colors.bad : colors.info, fontWeight: "700" }} testID="render-status-line">
+              {job?.status === "failed" ? `A montagem falhou: ${job.error ?? "erro"}` : job?.status === "queued" ? "Na fila de montagem — pode sair desta tela." : job?.status === "rendering" ? "Montando o vídeo…" : autoMsg}
+            </Text>
+          ) : null}
+          {parts && phase !== "gravando" && showDetails ? (
             <>
-              <Section>Partes ({parts.recorded.length}/{parts.segments.length})</Section>
-              <Card testID="parts-card">
-                {parts.segments.map((sg) => (
-                  <Text key={sg.index} style={{ color: parts.recorded.includes(sg.index) ? colors.good : colors.muted, fontWeight: "700" }}>
-                    {parts.recorded.includes(sg.index) ? "✓" : "○"} {sg.index + 1}. {sg.label}
-                  </Text>
-                ))}
-              </Card>
               {parts.plan ? (
                 <Card testID="edit-plan" style={{ gap: 4 }}>
                   <Text style={{ fontWeight: "900", color: colors.ink }}>{`Edição automática pronta · ${Math.round(parts.plan.totalMs / 1000)}s · retoque leve incluído`}</Text>
@@ -356,7 +389,7 @@ ${owner?.ws.profile.signature ?? ""}`.trim())} />
                   ) : (
                     <>
                       {job?.status === "failed" ? <Text style={{ color: colors.bad }}>A montagem falhou: {job.error}</Text> : null}
-                      {!job && !jobKnown ? <Text style={s.muted}>Sem internet: a montagem começa sozinha quando a conexão voltar.</Text> : null}
+                      {!job && !jobKnown ? <Text style={s.muted}>Sem internet: toque em FINALIZAR quando a conexão voltar.</Text> : null}
                       <Button compact label="MELHORAR E FINALIZAR (retoque + legenda + música)" loading={busy === "montar"} testID="request-final" onPress={() => run("montar", async () => {
                         const r = await requestFinalRender(c.workspaceId, c.id, parts.plan!);
                         if (!r.ok) throw new Error(r.reason);
@@ -373,8 +406,8 @@ ${owner?.ws.profile.signature ?? ""}`.trim())} />
             </>
           ) : null}
 
-          <Section>{`Takes deste conteúdo (${takes.length})`}</Section>
-          {takes.map((t) => (
+          {phase === "gravando" || showDetails ? <Section>{`Takes deste conteúdo (${takes.length})`}</Section> : null}
+          {(phase === "gravando" || showDetails ? takes : []).map((t) => (
             <Card key={t.id}>
               <Text style={{ fontWeight: "700", color: colors.ink }} onPress={() => router.push(`/take/${t.id}`)} accessibilityRole="link">
                 Take de {new Date(t.createdAt).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })} · {Math.round(t.media.sizeBytes / 1_048_576)} MB
@@ -382,7 +415,8 @@ ${owner?.ws.profile.signature ?? ""}`.trim())} />
             </Card>
           ))}
 
-          {finalUri ? <MetricsCard content={c} onSaved={setC} /> : null}
+          {/* números só depois de publicar */}
+          {finalUri && published ? <MetricsCard content={c} onSaved={setC} /> : null}
 
           <View style={{ gap: 10, marginTop: 8 }}>
             {c.status !== "done" ? (

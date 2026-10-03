@@ -18,14 +18,19 @@ appId: me.rodrigoserra.postai
     visible:
       id: content-screen
     timeout: 60000
+# o cartão do Diretor fica no topo: os ganchos vêm logo abaixo (rola até cada um, de cima para baixo)
+- scrollUntilVisible:
+    element:
+      id: hook-0
+    timeout: 60000
+- scrollUntilVisible:
+    element:
+      id: hook-1
+    timeout: 60000
 - scrollUntilVisible:
     element:
       id: hook-2
     timeout: 60000
-- assertVisible:
-    id: hook-0
-- assertVisible:
-    id: hook-1
 - scrollUntilVisible:
     element:
       id: narrative-POR ISSO
@@ -39,6 +44,13 @@ appId: me.rodrigoserra.postai
       text: ".*E se der certo!.*"
     timeout: 60000
 - takeScreenshot: 02_roteiro
+# legenda de postagem fica recolhida antes de gravar
+- scrollUntilVisible:
+    element:
+      id: show-caption
+    timeout: 60000
+- tapOn:
+    id: show-caption
 - scrollUntilVisible:
     element:
       id: platform-tiktok
@@ -78,4 +90,8 @@ appId: me.rodrigoserra.postai
       id: content-screen
     timeout: 60000
 - assertVisible:
-    id: hook-0
+    id: director-card
+- scrollUntilVisible:
+    element:
+      id: hook-0
+    timeout: 60000

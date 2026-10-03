@@ -2,14 +2,15 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { Text, View } from "react-native";
 import { router, useFocusEffect, useLocalSearchParams } from "expo-router";
 import { useKeepAwake } from "expo-keep-awake";
-import { DEFAULT_EDIT_CHOICES, applyEditProposal, nextTask, ownMusicUuid, toLocalDateKey, type EditChoices, type RecordingTask, type Retouch } from "@postai/domain";
+import { DEFAULT_EDIT_CHOICES, applyEditProposal, styleLabel, nextTask, ownMusicUuid, toLocalDateKey, type EditChoices, type RecordingTask, type Retouch } from "@postai/domain";
 import { chosenTrack, nextTrack } from "../../src/musicChoice";
-import { getContent, getTake, listTasks, setEditChoices, type ContentItem, type Take } from "../../src/db/repo";
+import { getContent, getTake, listTakes, listTasks, setEditChoices, type ContentItem, type Take } from "../../src/db/repo";
 import { contentPlan, type ContentPlan } from "../../src/finalPlan";
 import { downloadFinal, kickRenderWorker, latestRenderJob, requestFinalRender, type RenderJob } from "../../src/finalRender";
 import { MusicPreview } from "../../src/components/MusicPreview";
 import { FinishOptions } from "../../src/components/FinishOptions";
 import { DirectorProposal } from "../../src/components/DirectorProposal";
+import { DirectorSheet } from "../../src/components/DirectorSheet";
 import { decideEditProposal, pullEditProposal, type PendingProposal, type ProposalDecision } from "../../src/editProposals";
 import { useApp } from "../../src/app-state";
 import { setContentOnScreen } from "../../src/renderWatch";
@@ -41,6 +42,9 @@ export default function FinalizarScreen() {
   const [error, setError] = useState<string | null>(null);
   const [showOptions, setShowOptions] = useState(false);
   const [proposal, setProposal] = useState<PendingProposal | null>(null);
+  const [directorOpen, setDirectorOpen] = useState(false);
+  // "Take 2" do gancho: qual take da 1ª parte a montagem vai usar
+  const [hookTake, setHookTake] = useState<string | null>(null);
   const opening = useRef(false);
   const retryAsked = useRef(false);
   // pedir montagem nova mesmo que já exista um vídeo pronto (confirmar de novo / refazer)
@@ -69,6 +73,12 @@ export default function FinalizarScreen() {
     const plan = await contentPlan(item);
     setCp(plan);
     setTakes((await Promise.all((plan?.takes ?? []).map((t) => getTake(t.id)))).filter((t): t is Take => Boolean(t)));
+    const first = plan?.plan?.clips[0];
+    if (first) {
+      const options = (await listTakes({ contentItemId: item.id })).filter((t) => t.segmentIndex === first.segmentIndex && !t.tags.includes("descartado")).reverse();
+      const n = options.findIndex((t) => t.id === first.takeId);
+      setHookTake(n >= 0 ? `Take ${n + 1}${options.length > 1 ? ` de ${options.length}` : ""}` : null);
+    }
     // sugestão do diretor (Claude) para esta montagem, se houver
     if (plan) void pullEditProposal(item.workspaceId, item.id, plan.business).then(setProposal).catch(() => undefined);
     try {
@@ -169,29 +179,39 @@ export default function FinalizarScreen() {
   return (
     <Screen testID="finalizar-screen">
       <Eyebrow>{c.draft?.title ?? c.title}</Eyebrow>
-      <H1>{step === "confirmar" ? "Seu vídeo vai sair assim" : "Montando seu vídeo"}</H1>
+      <H1>{step === "confirmar" ? "Seu Diretor montaria assim" : "Montando seu vídeo"}</H1>
+      <DirectorSheet visible={directorOpen} onClose={() => { setDirectorOpen(false); void refresh(); }} workspaceId={c.workspaceId} contentId={c.id}
+        segments={cp.segments} recorded={cp.recorded} business={cp.business} cloud={Boolean(workspace?.cloud)} />
 
       {step === "confirmar" ? (
         <>
           {proposal ? <DirectorProposal proposal={proposal} onDecide={(d) => void decide(d).catch((e) => setError(String(e)))} /> : null}
           <Card style={{ gap: 10 }} testID="final-summary">
-            <Row label={`✓ ${cp.plan.clips.length} parte(s) juntas, ~${Math.round(cp.plan.totalMs / 1000)}s`} />
-            <Row label={`✓ Cortar erros, pausas e repetições${edit.autoCut === false ? " (desligado)" : ""}`} />
-            <Row label={`✓ Legenda: ${CAPTION_NAME[edit.captionStyle] ?? edit.captionStyle}`} />
-            <Row label={ownMusicUuid(edit.music) ? "✓ Música: a sua (enviada por você)"
-              : autoPick ? "✓ Música: automática (escolhida na montagem, sem repetir as últimas)"
-                : track ? `✓ Música: ${track.title} — ${track.artist}` : "✓ Sem música"}
+            <Text style={{ fontSize: 22, fontWeight: "900", color: colors.ink }} testID="summary-style">
+              {`${styleLabel(edit) ?? "Montagem padrão"} · ~${Math.round(cp.plan.totalMs / 1000)}s`}
+            </Text>
+            <Row label={`Gancho: ${hookTake ?? "parte 1"}`} />
+            <Row label={`Cortes: erros, pausas e repetições${edit.autoCut === false ? " (desligado)" : ""} · ${cp.plan.clips.length} parte(s)`} />
+            <Row label={`Legenda: ${CAPTION_NAME[edit.captionStyle] ?? edit.captionStyle}`} />
+            <Row label={ownMusicUuid(edit.music) ? "Música: a sua (enviada por você)"
+              : autoPick ? "Música: automática (escolhida na montagem, sem repetir as últimas)"
+                : track ? `Música: ${track.title} — ${track.artist}` : "Sem música"}
               action={track ? { label: "TROCAR", onPress: () => save({ ...edit, music: nextTrack(track).id }), testID: "swap-music" } : undefined} />
             {track && !autoPick ? (
               <MusicPreview track={track} volume={edit.musicVolume ?? c.draft?.direcao?.musica?.volume ?? DEFAULT_EDIT_CHOICES.musicVolume ?? 0.22}
                 entradaS={edit.music === "auto" && c.draft?.direcao?.musica?.id === track.id ? c.draft.direcao.musica.entrada : 0}
                 voiceUri={takes.find((t) => t.id === cp.plan!.clips[0]?.takeId)?.media.localUri ?? null} />
             ) : null}
-            <Row label={`✓ Embelezar a pele: ${RETOUCH_NAME[retouch]}`} />
-            <Row label={`✓ Voz limpa, gancho na tela, capa e assinatura`} />
+            <Row label={`B-roll: ${edit.broll === false ? "sem cenas de apoio" : "cenas de apoio do dia por cima da fala, quando houver"}`} />
+            <Row label={`Capa: ${c.draft?.direcao?.capa ? `frame em ${c.draft.direcao.capa.frame}s${c.draft.direcao.capa.texto ? ` · “${c.draft.direcao.capa.texto}”` : ""}` : "frame limpo escolhido na montagem"}`} />
+            <Row label={`Embelezar a pele: ${RETOUCH_NAME[retouch]} · voz limpa · assinatura`} />
           </Card>
-          <Button label="CONFIRMAR E MONTAR" onPress={() => { forceRequest.current = true; setConfirmed(true); }} testID="confirm-render" />
-          <Button variant="ghost" compact label={showOptions ? "Fechar opções" : "Mudar alguma coisa"} onPress={() => setShowOptions(!showOptions)} testID="change-options" />
+          {/* com sugestão do diretor pendente, o MONTAR ASSIM é o dela (acima) */}
+          <Button variant={proposal ? "secondary" : "primary"} label={proposal ? "MONTAR COMO ESTÁ" : "MONTAR ASSIM"} onPress={() => { forceRequest.current = true; setConfirmed(true); }} testID="confirm-render" />
+          <View style={[s.row, { gap: 8 }]}>
+            <View style={{ flex: 1 }}><Button variant="secondary" compact label={showOptions ? "FECHAR AJUSTES" : "AJUSTAR"} onPress={() => setShowOptions(!showOptions)} testID="change-options" /></View>
+            <View style={{ flex: 1 }}><Button variant="ghost" compact label="PEDIR OUTRA IDEIA AO DIRETOR" onPress={() => setDirectorOpen(true)} testID="open-director" /></View>
+          </View>
           {showOptions ? <FinishOptions value={edit} onChange={save} pillarSlug={c.pillarSlug} business={cp.business} workspaceId={workspace?.cloud ? c.workspaceId : undefined} contentId={c.id} direction={c.draft?.direcao}
             voiceUri={takes.find((t) => t.id === cp.plan!.clips[0]?.takeId)?.media.localUri ?? null} /> : null}
         </>

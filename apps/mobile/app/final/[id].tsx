@@ -1,5 +1,5 @@
 import { useCallback, useState } from "react";
-import { Image, Text, View } from "react-native";
+import { Image, Text, TextInput, View } from "react-native";
 import * as Sharing from "expo-sharing";
 import * as Clipboard from "expo-clipboard";
 import { router, useFocusEffect, useLocalSearchParams } from "expo-router";
@@ -21,7 +21,7 @@ function Player({ uri }: { uri: string }) {
 
 const BUTTON_ORDER: ShareTarget[] = ["tiktok", "instagram", "youtube", "whatsapp"];
 
-/** Vídeo final pronto: 1 toque para cada rede (legenda da rede copiada, vídeo já anexado). */
+/** Vídeo final pronto: primeiro revisar/aprovar, depois publicar. */
 export default function FinalScreen() {
   const { id, v } = useLocalSearchParams<{ id: string; v?: string }>();
   const variant = v === "curto" ? "curto" : "completo";
@@ -33,6 +33,8 @@ export default function FinalScreen() {
   const [copied, setCopied] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
   const [business, setBusiness] = useState(false);
+  const [approved, setApproved] = useState(false);
+
   useFocusEffect(useCallback(() => {
     void localFinal(id, variant).then(setUri);
     void localCover(id, variant).then(setCover);
@@ -44,7 +46,6 @@ export default function FinalScreen() {
   }, [id, variant]));
 
   if (!uri || !c?.draft) return <Screen><Loading label="Abrindo vídeo final…" /></Screen>;
-  // fala livre: a legenda do post é o que foi dito (transcrição), com a assinatura
   const free = c.meta?.model === FREE_SPEECH_MODEL && Boolean(result?.transcript);
   const signature = c.draft.caption.instagram.split("\n").pop() ?? "";
   const spoken = free ? `${result!.transcript}\n\n${signature}`.trim() : null;
@@ -68,29 +69,40 @@ export default function FinalScreen() {
   return (
     <Screen testID="final-screen">
       <Button variant="ghost" compact label="← Voltar" onPress={() => router.back()} />
-      <Eyebrow>{variant === "curto" ? "Versão curta — pronta para postar" : "Pronto para postar"}</Eyebrow>
+      <Eyebrow>{variant === "curto" ? "Versão curta · ficou assim" : "Ficou assim"}</Eyebrow>
       <H1>{draft.title}</H1>
-      <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8 }}>
-        {BUTTON_ORDER.map((t) => (
-          <View key={t} style={{ flexBasis: "47%", flexGrow: 1 }}>
-            <Button label={`POSTAR NO ${SHARE_TARGETS[t].label.toUpperCase()}`} onPress={() => void share(t)} testID={`share-${t}`} />
-          </View>
-        ))}
-      </View>
-      <Button variant="secondary" label="OUTROS APPS" onPress={() => void share(null)} testID="share-final" />
-      {notice ? <Text style={{ color: colors.good, fontWeight: "800" }} accessibilityLiveRegion="polite">{notice}</Text> : null}
+
+      <Player uri={uri} />
       {describeResult(result) ? <Text style={s.muted}>{describeResult(result)}</Text> : null}
       {result?.warnings?.map((w) => <Text key={w} style={{ color: colors.warn, fontWeight: "700" }}>{`⚠ ${w}`}</Text>)}
-      {variant === "completo" ? <RedoCard c={c} business={business} /> : null}
-      <Player uri={uri} />
-      {cover ? (
-        <Card style={{ gap: 8 }}>
-          <Text style={s.label}>Capa do vídeo</Text>
-          <Image source={{ uri: cover }} style={{ width: "50%", alignSelf: "center", aspectRatio: 9 / 16, borderRadius: 12 }} accessibilityLabel="Capa do vídeo" />
-          <Button compact variant="secondary" label="COMPARTILHAR / SALVAR CAPA" onPress={() => void Sharing.shareAsync(cover, { mimeType: "image/jpeg", dialogTitle: "Capa do vídeo" }).catch((e: unknown) => setNotice(`Não consegui abrir a capa: ${e instanceof Error ? e.message : String(e)}`))} testID="share-cover" />
+
+      {!approved ? (
+        <Card style={{ gap: 10 }} testID="approval-card">
+          <Text style={{ fontSize: 18, fontWeight: "900", color: colors.ink }}>Gostou do resultado?</Text>
+          <Button label="✓ APROVAR E PUBLICAR" onPress={() => setApproved(true)} testID="approve-final" />
+          {variant === "completo" ? <RedoCard c={c} business={business} /> : null}
         </Card>
-      ) : null}
-      <Text style={s.label}>Legenda de cada rede (copiada sozinha ao postar)</Text>
+      ) : (
+        <>
+          <Card style={{ gap: 10 }} testID="publish-card">
+            <Text style={{ fontSize: 18, fontWeight: "900", color: colors.ink }}>Pronto para publicar</Text>
+            <Text style={s.muted}>Escolha a rede. O vídeo abre no app e a legenda fica copiada para colar.</Text>
+            <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8 }}>
+              {BUTTON_ORDER.map((t) => (
+                <View key={t} style={{ flexBasis: "47%", flexGrow: 1 }}>
+                  <Button label={SHARE_TARGETS[t].label.toUpperCase()} onPress={() => void share(t)} testID={`share-${t}`} />
+                </View>
+              ))}
+            </View>
+            <Button variant="secondary" label="OUTROS APPS" onPress={() => void share(null)} testID="share-final" />
+          </Card>
+          {notice ? <Text style={{ color: colors.good, fontWeight: "800" }} accessibilityLiveRegion="polite">{notice}</Text> : null}
+        </>
+      )}
+
+      <CoverCard c={c} cover={cover} variant={variant} onError={setNotice} />
+
+      <Text style={s.label}>Legenda de cada rede</Text>
       <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8 }}>
         {PLATFORMS.map((p) => <Chip key={p} label={PLATFORM_LABEL[p]} selected={platform === p} onPress={() => { setPlatform(p); setCopied(false); }} />)}
       </View>
@@ -98,12 +110,12 @@ export default function FinalScreen() {
         <Text style={s.body} selectable>{caption}</Text>
       </Card>
       <Button variant="ghost" label={copied ? "LEGENDA COPIADA ✓" : "COPIAR ESTA LEGENDA"} onPress={async () => { await Clipboard.setStringAsync(caption); setCopied(true); }} />
-      <MetricsCard content={c} onSaved={setC} />
+      {/* números só depois de publicar */}
+      {c.posted || c.status === "published" ? <MetricsCard content={c} onSaved={setC} /> : null}
     </Screen>
   );
 }
 
-/** Não gostou? Troca a música (mesmo clima) e monta de novo, ou volta para mudar as outras opções. */
 function RedoCard({ c, business }: { c: ContentItem; business: boolean }) {
   const edit = c.edit ?? { ...DEFAULT_EDIT_CHOICES, retouch: business ? "leve" : "forte" };
   const track = chosenTrack(edit, c.id, c.pillarSlug, business, c.draft?.direcao);
@@ -112,10 +124,45 @@ function RedoCard({ c, business }: { c: ContentItem; business: boolean }) {
     router.replace({ pathname: "/finalizar/[id]", params: { id: c.id, refazer: "1" } });
   };
   return (
-    <Card style={{ gap: 8 }} testID="redo-card">
-      <Text style={s.label}>{ownMusicUuid(edit.music) ? "Música: a sua (enviada por você)" : track ? `Música: ${track.title} — ${track.artist}` : "Sem música"}</Text>
+    <View style={{ gap: 8 }} testID="redo-card">
+      <Text style={s.muted}>{ownMusicUuid(edit.music) ? "Música: a sua" : track ? `Música: ${track.title} — ${track.artist}` : "Sem música"}</Text>
       {track ? <Button compact variant="secondary" label="🎵 TROCAR MÚSICA E REFAZER" onPress={() => void redo(nextTrack(track).id)} testID="redo-music" /> : null}
-      <Button compact variant="ghost" label="Mudar legenda, embelezar… e refazer" onPress={() => router.push(`/finalizar/${c.id}`)} testID="redo-options" />
+      <Button compact variant="secondary" label="AJUSTAR" onPress={() => router.push(`/finalizar/${c.id}`)} testID="redo-options" />
+    </View>
+  );
+}
+
+/** Capa: ver, salvar/compartilhar e trocar o título (vale na próxima montagem). Sem capa, publica do mesmo jeito. */
+function CoverCard({ c, cover, variant, onError }: { c: ContentItem; cover: string | null; variant: string; onError: (m: string) => void }) {
+  const current = c.edit?.capaTexto ?? c.draft?.direcao?.capa?.texto ?? "";
+  const [title, setTitle] = useState<string | null>(null);
+  const saveTitle = async (t: string) => {
+    await setEditChoices(c.id, { ...DEFAULT_EDIT_CHOICES, ...c.edit, capaTexto: t.trim() });
+    router.replace({ pathname: "/finalizar/[id]", params: { id: c.id, refazer: "1" } });
+  };
+  return (
+    <Card style={{ gap: 8 }} testID="cover-card">
+      <Text style={s.label}>Capa</Text>
+      {cover ? (
+        <>
+          <Image source={{ uri: cover }} style={{ width: "50%", alignSelf: "center", aspectRatio: 9 / 16, borderRadius: 12 }} accessibilityLabel="Capa do vídeo" />
+          <Button compact variant="secondary" label="SALVAR / COMPARTILHAR CAPA" onPress={() => void Sharing.shareAsync(cover, { mimeType: "image/jpeg", dialogTitle: "Capa do vídeo" }).catch((e: unknown) => onError(`Não consegui abrir a capa: ${e instanceof Error ? e.message : String(e)}`))} testID="share-cover" />
+        </>
+      ) : <Text style={s.muted} testID="no-cover">Sem capa desta vez — dá para publicar normalmente (a rede usa o primeiro quadro).</Text>}
+      {variant === "completo" ? (
+        title === null ? (
+          <Button compact variant="ghost" label={current ? `EDITAR TÍTULO DA CAPA (“${current}”)` : "PÔR TÍTULO NA CAPA"} onPress={() => setTitle(current)} testID="edit-cover-title" />
+        ) : (
+          <View style={{ gap: 6 }}>
+            <TextInput value={title} onChangeText={setTitle} maxLength={60} style={s.input} placeholder="Título curto (vazio = sem título)" accessibilityLabel="Título da capa" testID="cover-title-input" />
+            <View style={s.row}>
+              <Button compact label="SALVAR E REFAZER" onPress={() => void saveTitle(title).catch((e: unknown) => onError(String(e)))} testID="cover-title-save" />
+              <Button compact variant="ghost" label="CANCELAR" onPress={() => setTitle(null)} />
+            </View>
+            <Text style={s.muted}>A capa é gerada na montagem: o vídeo é refeito com o novo título. Trocar o quadro da capa vem numa próxima versão.</Text>
+          </View>
+        )
+      ) : null}
     </Card>
   );
 }

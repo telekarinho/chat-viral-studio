@@ -5,7 +5,7 @@ import { join } from "node:path";
 import { promisify } from "node:util";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import {
-  CAPTION_STYLES, MOOD_LABEL, applyAutoCutToPlan, pickAutoTrack, autoCutParams, clipStartsMs, type AutoCutParams, type AutoCutThemeId, RETOUCH_LEVELS, SHORT_ROLES, assignBroll, buildAss, buildEditPlan, buildSegments, cuesFromWords, moodForPillar, parseDraft,
+  CAPTION_STYLES, MOOD_LABEL, applyAutoCutToPlan, chosenTakes, pickAutoTrack, autoCutParams, clipStartsMs, type AutoCutParams, type AutoCutThemeId, RETOUCH_LEVELS, SHORT_ROLES, assignBroll, buildAss, buildEditPlan, buildSegments, cuesFromWords, moodForPillar, parseDraft,
   planCuts, trackById, watermarkCorner, wholeTakeSegment, withClips,
   ownMusicId, ownMusicUuid, type CaptionStyle, type Direction, type OwnMusic, type EditClip, type EditPlan, type MusicMood, type PlanMusic, type RenderVariant, type Retouch,
 } from "@postai/domain";
@@ -49,6 +49,8 @@ export interface ServerChoices {
   autoCut: boolean; voiceClean: boolean; broll: boolean; hook: boolean;
   /** ritmo da montagem (tema do AutoCut ou o padrão) */
   autocut: AutoCutParams;
+  /** título da capa escolhido pelo criador ("" = sem título); ausente = o do diretor */
+  capaTexto?: string;
 }
 
 /**
@@ -78,7 +80,8 @@ function editChoicesBase(payload: Record<string, unknown> | null | undefined, pi
   const narration = edit.narracao === true;
   // narração: sem corte de pausas (a fala fica no tempo da música que tocava no fone)
   const autocut = autoCutParams({ autocut: typeof edit.autocut === "string" ? (edit.autocut as AutoCutThemeId) : undefined });
-  const base = { captionStyle, accentColor, retouch, stabilize: flag("stabilize"), autoCut: narration ? false : flag("autoCut"), voiceClean: flag("voiceClean"), broll: flag("broll"), hook: flag("hook"), autocut };
+  const capaTexto = typeof edit.capaTexto === "string" ? edit.capaTexto.trim().slice(0, 60) : undefined;
+  const base = { ...(capaTexto !== undefined ? { capaTexto } : {}), captionStyle, accentColor, retouch, stabilize: flag("stabilize"), autoCut: narration ? false : flag("autoCut"), voiceClean: flag("voiceClean"), broll: flag("broll"), hook: flag("hook"), autocut };
   const choice = typeof edit.music === "string" ? edit.music : "auto";
   if (choice === "none") return { ...base, music: null };
   // música própria do criador (escolhida no app ou pela direção); empresa só com licença comercial declarada
@@ -157,10 +160,8 @@ export async function buildServerPlan(db: SupabaseClient, job: RenderJobRow): Pr
 
   const brolls = choices.broll && variant === "completo" ? await findBrolls(db, job.workspace_id, content.data.plan_date as string | null) : [];
   const own = ((takes.data ?? []) as unknown as TakeRow[]).filter((t) => t.workspace_id === job.workspace_id && !(t.tags ?? []).includes("descartado"));
-  const latest = new Map<number, TakeRow>();
-  for (const t of own) {
-    if (t.segment_index !== null && !latest.has(t.segment_index)) latest.set(t.segment_index, t);
-  }
+  // take escolhido de cada parte (ou o mais recente) — mesma regra do app
+  const latest = new Map([...chosenTakes(own.map((t) => ({ ...t, segmentIndex: t.segment_index }))).entries()].map(([k, v]) => [k, v as TakeRow]));
   // recorded in one go (no parts): enhance the latest whole take as a single clip
   if (latest.size === 0) {
     const whole = own.find((t) => t.segment_index === null);
@@ -402,7 +403,7 @@ export async function processJob(db: SupabaseClient, job: RenderJobRow, fontFile
       const cover = join(dir, "capa.jpg");
       const capa = sp.direction?.capa ?? null;
       const atMs = capa ? Math.min(Math.max(0, plan.totalMs - 100), capa.frame * 1000) : Math.min(1200, plan.totalMs / 3);
-      const coverText = capa?.texto.trim() ?? "";
+      const coverText = sp.choices.capaTexto ?? capa?.texto.trim() ?? "";
       if (coverText) {
         const src = coverSource(plan, atMs);
         const layout = coverTextLayout(coverText);

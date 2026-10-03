@@ -126,3 +126,20 @@ export function applyAutoCutToPlan(plan: EditPlan, p: AutoCutParams): EditPlan {
   const totalMs = clips.reduce((a, c) => a + c.durationMs, 0) - transitions.reduce((a, x) => a + x.durationMs, 0);
   return { ...plan, clips, transitions, totalMs };
 }
+
+/**
+ * Objetivo do vídeo (combina com o estilo do AutoCut: "Venda + Viral"). Hoje orienta o Diretor e aparece no
+ * resumo; a montagem ainda é definida pelo estilo — o objetivo não muda cortes sozinho.
+ */
+export const VIDEO_INTENTS = ["venda", "autoridade", "tutorial", "demonstracao", "prova", "historia", "depoimento", "oferta", "bastidor", "motivacional"] as const;
+export type VideoIntent = (typeof VIDEO_INTENTS)[number];
+export const INTENT_LABEL: Record<VideoIntent, string> = {
+  venda: "Venda", autoridade: "Autoridade", tutorial: "Tutorial", demonstracao: "Demonstração", prova: "Prova", historia: "História",
+  depoimento: "Depoimento", oferta: "Oferta", bastidor: "Bastidor", motivacional: "Motivacional",
+};
+
+/** "Venda + Viral" · "Viral" · "Venda" · null */
+export function styleLabel(v: Pick<EditChoices, "autocut" | "intencao">): string | null {
+  const parts = [v.intencao ? INTENT_LABEL[v.intencao] : "", autoCutTheme(v.autocut)?.label.replace(/^\S+\s/, "") ?? ""].filter(Boolean);
+  return parts.length ? parts.join(" + ") : null;
+}

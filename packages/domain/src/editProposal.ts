@@ -1,4 +1,4 @@
-import { AUTOCUT_THEME_IDS, applyAutoCutTheme, autoCutTheme, type AutoCutThemeId } from "./autocut";
+import { AUTOCUT_THEME_IDS, INTENT_LABEL, VIDEO_INTENTS, applyAutoCutTheme, autoCutTheme, type AutoCutThemeId, type VideoIntent } from "./autocut";
 import type { EditChoices } from "./editPlan";
 import { MOOD_LABEL, ownMusicUuid, trackById, type MusicMood, type OwnMusic } from "./music";
 
@@ -12,13 +12,14 @@ const MIN_TAIL_S = 5;
 
 /** O que o diretor (Claude) propõe para a montagem. Só entra no vídeo quando o criador aceita no app. */
 export interface EditProposal {
+  intencao?: VideoIntent;
   autocut?: AutoCutThemeId;
   music?: string;
   musicVolume?: number;
   musicStartS?: number;
 }
 
-export interface ProposalInput { autocut?: unknown; musica?: unknown; volume?: unknown; inicio_musica_s?: unknown }
+export interface ProposalInput { intencao?: unknown; autocut?: unknown; musica?: unknown; volume?: unknown; inicio_musica_s?: unknown }
 
 /** Valida a proposta (todos os erros de uma vez, para o assistente corrigir numa rodada). */
 export function parseEditProposal(input: ProposalInput, ctx: { business: boolean; own: readonly OwnMusic[] }): { ok: true; edit: EditProposal } | { ok: false; errors: string[] } {
@@ -27,6 +28,10 @@ export function parseEditProposal(input: ProposalInput, ctx: { business: boolean
   if (input.autocut !== undefined) {
     if (typeof input.autocut === "string" && (AUTOCUT_THEME_IDS as readonly string[]).includes(input.autocut)) edit.autocut = input.autocut as AutoCutThemeId;
     else errors.push(`autocut: use um destes: ${AUTOCUT_THEME_IDS.join(", ")}.`);
+  }
+  if (input.intencao !== undefined) {
+    if (typeof input.intencao === "string" && (VIDEO_INTENTS as readonly string[]).includes(input.intencao)) edit.intencao = input.intencao as VideoIntent;
+    else errors.push(`intencao: use um destes: ${VIDEO_INTENTS.join(", ")}.`);
   }
   let trackDuration: number | null = null;
   if (input.musica !== undefined) {
@@ -54,13 +59,14 @@ export function parseEditProposal(input: ProposalInput, ctx: { business: boolean
     else if (typeof s !== "number" || s < 0 || s > trackDuration - MIN_TAIL_S) errors.push(`inicio_musica_s: de 0 a ${trackDuration - MIN_TAIL_S} segundos.`);
     else edit.musicStartS = Math.round(s);
   }
-  if (!errors.length && !Object.keys(edit).length) errors.push("Proponha pelo menos um item: autocut, musica, volume ou inicio_musica_s.");
+  if (!errors.length && !Object.keys(edit).length) errors.push("Proponha pelo menos um item: intencao, autocut, musica, volume ou inicio_musica_s.");
   return errors.length ? { ok: false, errors } : { ok: true, edit };
 }
 
 /** Aplica a proposta nas escolhas do vídeo: o tema primeiro (ele traz legenda/volume), depois a música pedida. */
 export function applyEditProposal(value: EditChoices, p: EditProposal): EditChoices {
-  const base = p.autocut ? applyAutoCutTheme(value, p.autocut) : value;
+  const themed = p.autocut ? applyAutoCutTheme(value, p.autocut) : value;
+  const base = p.intencao ? { ...themed, intencao: p.intencao } : themed;
   const music = p.music ?? base.music;
   return {
     ...base,
@@ -74,6 +80,7 @@ export function applyEditProposal(value: EditChoices, p: EditProposal): EditChoi
 /** "AutoCut Acelerada TikTok · música Piano Reflections a partir de 0:12 · volume 30%" */
 export function describeEditProposal(p: EditProposal, own: readonly OwnMusic[] = []): string {
   const bits: string[] = [];
+  if (p.intencao) bits.push(`Objetivo ${INTENT_LABEL[p.intencao]}`);
   if (p.autocut) bits.push(`AutoCut ${autoCutTheme(p.autocut)!.label.replace(/^\S+\s/, "")}`);
   if (p.music) {
     const ownId = ownMusicUuid(p.music);

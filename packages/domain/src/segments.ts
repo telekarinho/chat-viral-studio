@@ -1,5 +1,5 @@
 import type { ContentDraft } from "./ai/contract";
-import { spokenTakes, takeInstructions } from "./ai/direction";
+import { spokenTakes, takeInstructions, type SpeechMode } from "./ai/direction";
 
 export const SEGMENT_ROLES = ["hook", "e", "mas", "por_isso", "cta", "closing", "free"] as const;
 export type SegmentRole = (typeof SEGMENT_ROLES)[number];
@@ -11,6 +11,8 @@ export interface ScriptSegment {
   text: string;
   /** instruções do diretor para este take (enquadramento, luz, olhar…), quando o roteiro trouxe direção */
   direction?: { label: string; value: string }[];
+  /** como o diretor quer a fala (padrão: exata) */
+  speechMode?: SpeechMode;
 }
 
 export const SEGMENT_LABEL: Record<SegmentRole, string> = {
@@ -36,7 +38,7 @@ const MIN_WORDS = 3;
 export function buildSegments(draft: ContentDraft, opts: { selectedHook: number; userEdited: boolean; closingPhrase: string; business?: boolean }): ScriptSegment[] {
   const hook = draft.hook_options[opts.selectedHook] ?? draft.hook_options[0] ?? "";
   const closing = opts.closingPhrase.trim();
-  let parts: { role: SegmentRole; text: string; label?: string; direction?: { label: string; value: string }[] }[];
+  let parts: { role: SegmentRole; text: string; label?: string; direction?: { label: string; value: string }[]; speechMode?: SpeechMode }[];
 
   const takes = opts.userEdited ? [] : spokenTakes(draft.direcao);
   if (takes.length) {
@@ -47,6 +49,7 @@ export function buildSegments(draft: ContentDraft, opts: { selectedHook: number;
       text: t.fala_exata,
       label: `Take ${t.ordem} — ${t.nome}`,
       direction: takeInstructions(t),
+      ...(t.modo_fala !== "exata" ? { speechMode: t.modo_fala } : {}),
     }));
     if (closing && !hasClosing) parts.push({ role: "closing", text: closing });
   } else if (draft.format === "thought") {
@@ -78,6 +81,7 @@ export function buildSegments(draft: ContentDraft, opts: { selectedHook: number;
   return merged.map((p, index) => ({
     index, role: p.role, label: p.label ?? ((opts.business && BUSINESS_SEGMENT_LABEL[p.role]) || SEGMENT_LABEL[p.role]), text: p.text,
     ...(p.direction?.length ? { direction: p.direction } : {}),
+    ...(p.speechMode ? { speechMode: p.speechMode } : {}),
   }));
 }
 

@@ -15,7 +15,9 @@ appId: me.rodrigoserra.postai
 - assertVisible:
     text: "Offline.*"
 - tapOn:
-    id: tab-Projetos
+    id: tab-Biblioteca
+- tapOn:
+    id: library-tab-takes
 - extendedWaitUntil:
     visible:
       id: take-row
