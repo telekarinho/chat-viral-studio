@@ -7,8 +7,9 @@ import { colors, Loading, Screen } from "../../src/ui";
 
 const TABS: { name: string; title: string; glyph: string; href?: null }[] = [
   { name: "index", title: "Hoje", glyph: "●" },
-  { name: "gravar", title: "Gravar", glyph: "+" },
   { name: "projetos", title: "Biblioteca", glyph: "▤" },
+  // central e destacado: a ação principal do app
+  { name: "gravar", title: "Gravar", glyph: "+" },
   { name: "resultados", title: "Resultados", glyph: "▲" },
   // Plano continua disponível via Hoje/Configurações, mas sai da navegação diária.
   { name: "plano", title: "Plano", glyph: "▦", href: null },
