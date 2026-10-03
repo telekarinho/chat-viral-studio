@@ -1,8 +1,8 @@
-import { MOOD_LABEL, MUSIC_LIBRARY, moodForPillar, pickTrack, trackById, type Direction, type EditChoices, type MusicMood, type MusicTrack } from "@postai/domain";
+import { MOOD_LABEL, MUSIC_LIBRARY, moodForPillar, ownMusicUuid, pickTrack, trackById, type Direction, type EditChoices, type MusicMood, type MusicTrack } from "@postai/domain";
 
 /** A música que vai entrar (o servidor escolhe igual: mesmo clima e mesma semente = mesma faixa). */
 export function chosenTrack(edit: EditChoices, contentId: string, pillarSlug: string, business: boolean, direction?: Direction | null): MusicTrack | null {
-  if (edit.music === "none") return null;
+  if (edit.music === "none" || ownMusicUuid(edit.music)) return null; // música própria: mostrada à parte
   const exact = trackById(edit.music);
   if (exact) return exact;
   // automático + direção do assistente: a faixa que o diretor escolheu (igual ao servidor)

@@ -2,13 +2,14 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { Text, View } from "react-native";
 import { router, useFocusEffect, useLocalSearchParams } from "expo-router";
 import { useKeepAwake } from "expo-keep-awake";
-import { DEFAULT_EDIT_CHOICES, type EditChoices, type Retouch } from "@postai/domain";
+import { DEFAULT_EDIT_CHOICES, ownMusicUuid, type EditChoices, type Retouch } from "@postai/domain";
 import { chosenTrack, nextTrack } from "../../src/musicChoice";
 import { getContent, getTake, setEditChoices, type ContentItem, type Take } from "../../src/db/repo";
 import { contentPlan, type ContentPlan } from "../../src/finalPlan";
 import { downloadFinal, kickRenderWorker, latestRenderJob, requestFinalRender, type RenderJob } from "../../src/finalRender";
 import { MusicPreview } from "../../src/components/MusicPreview";
 import { FinishOptions } from "../../src/components/FinishOptions";
+import { useApp } from "../../src/app-state";
 import { setContentOnScreen } from "../../src/renderWatch";
 import { syncNow } from "../../src/sync/engine";
 import { reportError } from "../../src/telemetry";
@@ -30,6 +31,7 @@ export default function FinalizarScreen() {
   const { id, refazer } = useLocalSearchParams<{ id: string; refazer?: string }>();
   const [c, setC] = useState<ContentItem | null>(null);
   const [cp, setCp] = useState<ContentPlan | null>(null);
+  const { workspace } = useApp();
   const [takes, setTakes] = useState<Take[]>([]);
   const [job, setJob] = useState<RenderJob | null>(null);
   const [confirmed, setConfirmed] = useState(refazer === "1");
@@ -142,7 +144,7 @@ export default function FinalizarScreen() {
             <Row label={`✓ ${cp.plan.clips.length} parte(s) juntas, ~${Math.round(cp.plan.totalMs / 1000)}s`} />
             <Row label={`✓ Cortar erros, pausas e repetições${edit.autoCut === false ? " (desligado)" : ""}`} />
             <Row label={`✓ Legenda: ${CAPTION_NAME[edit.captionStyle] ?? edit.captionStyle}`} />
-            <Row label={track ? `✓ Música: ${track.title} — ${track.artist}` : "✓ Sem música"}
+            <Row label={ownMusicUuid(edit.music) ? "✓ Música: a sua (enviada por você)" : track ? `✓ Música: ${track.title} — ${track.artist}` : "✓ Sem música"}
               action={track ? { label: "TROCAR", onPress: () => save({ ...edit, music: nextTrack(track).id }), testID: "swap-music" } : undefined} />
             {track ? (
               <MusicPreview track={track} volume={edit.musicVolume ?? c.draft?.direcao?.musica?.volume ?? DEFAULT_EDIT_CHOICES.musicVolume ?? 0.22}
@@ -154,7 +156,7 @@ export default function FinalizarScreen() {
           </Card>
           <Button label="CONFIRMAR E MONTAR" onPress={() => { forceRequest.current = true; setConfirmed(true); }} testID="confirm-render" />
           <Button variant="ghost" compact label={showOptions ? "Fechar opções" : "Mudar alguma coisa"} onPress={() => setShowOptions(!showOptions)} testID="change-options" />
-          {showOptions ? <FinishOptions value={edit} onChange={save} pillarSlug={c.pillarSlug} business={cp.business} /> : null}
+          {showOptions ? <FinishOptions value={edit} onChange={save} pillarSlug={c.pillarSlug} business={cp.business} workspaceId={workspace?.cloud ? c.workspaceId : undefined} /> : null}
         </>
       ) : (
         <Card style={{ gap: 12 }} testID="render-progress">

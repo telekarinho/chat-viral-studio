@@ -11,6 +11,7 @@ import { generateForContent, saveUserEdit } from "../../src/generate";
 import { reportError } from "../../src/telemetry";
 import { setContentOnScreen } from "../../src/renderWatch";
 import { MetricsCard } from "../../src/components/MetricsCard";
+import { useApp } from "../../src/app-state";
 import { DirectionCard, ScenesCard } from "../../src/components/DirectionCard";
 import { pullAssistantDraft } from "../../src/assistant";
 import { contentPlan } from "../../src/finalPlan";
@@ -19,6 +20,7 @@ import { Button, Card, Chip, ErrorBox, Eyebrow, H1, Loading, Screen, Section, co
 
 export default function ContentScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
+  const { workspace } = useApp();
   const [c, setC] = useState<ContentItem | null>(null);
   const [takes, setTakes] = useState<Take[]>([]);
   const [taskId, setTaskId] = useState<string | null>(null);
@@ -365,7 +367,7 @@ ${owner?.ws.profile.signature ?? ""}`.trim())} />
                   {describeResult(result ?? job?.result) ? <Text style={{ color: colors.good, fontWeight: "700" }}>{describeResult(result ?? job?.result)}</Text> : null}
                   {(result ?? job?.result)?.warnings?.map((w) => <Text key={w} style={{ color: colors.warn, fontWeight: "700" }}>{`⚠ ${w}`}</Text>)}
                   <Text style={s.label}>Quer mudar algo? Escolha e toque em REFAZER.</Text>
-                  <FinishOptions value={c.edit} pillarSlug={c.pillarSlug} business={business} onChange={(v) => void setEditChoices(c.id, v).then(setC)} />
+                  <FinishOptions value={c.edit} pillarSlug={c.pillarSlug} business={business} workspaceId={workspace?.cloud ? c.workspaceId : undefined} onChange={(v) => void setEditChoices(c.id, v).then(setC)} />
                 </Card>
               ) : null}
             </>

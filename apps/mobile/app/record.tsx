@@ -7,7 +7,7 @@ import { useVideoPlayer, VideoView } from "expo-video";
 import * as Brightness from "expo-brightness";
 import { Camera, useCameraDevice, useCameraPermission, useMicrophonePermission, type VideoFile } from "react-native-vision-camera";
 import {
-  DEFAULT_EDIT_CHOICES, PRESET_LABEL, PRODUCTION_MODES, RECORDING_CHECKLIST, RECORDING_TIPS, SHOT_LIBRARY, availablePresets, buildSegments, initialTeleprompter, isBusiness, type ProjectInfo, type ShotKey, pickFormat, segmentProgress, supportedFps, teleprompterReducer,
+  DEFAULT_EDIT_CHOICES, PRESET_LABEL, ownMusicId, ownMusicUuid, PRODUCTION_MODES, RECORDING_CHECKLIST, RECORDING_TIPS, SHOT_LIBRARY, availablePresets, buildSegments, initialTeleprompter, isBusiness, type ProjectInfo, type ShotKey, pickFormat, segmentProgress, supportedFps, teleprompterReducer,
   type ResolutionPreset, type Retouch, type ScriptSegment,
 } from "@postai/domain";
 import { getContent, getTask, latestTakesBySegment, registerTake, requireWorkspace, queuePatrimonio, runTaskAction, setEditChoices, workspaceById, updateSettings, updateTakeMeta, type ContentItem, type Take } from "../src/db/repo";
@@ -18,6 +18,7 @@ import { reportError } from "../src/telemetry";
 import { Teleprompter } from "../src/components/Teleprompter";
 import { chosenTrack } from "../src/musicChoice";
 import { useNarrationMusic } from "../src/narration";
+import { listOwnMusic, ownMusicUrl } from "../src/ownMusic";
 import { Button, Loading, Screen, colors, s } from "../src/ui";
 
 type Phase = "ready" | "recording" | "saving" | "saved" | "error";
@@ -61,9 +62,21 @@ export default function RecordScreen() {
   // narrar com música no fone (vídeo inteiro de uma vez): a música toca no fone; a câmera grava só a voz
   const [business, setBusiness] = useState(false);
   const [narrate, setNarrate] = useState(false);
-  const narrationTrack = content && params.partes !== "1" && !patrimonio
+  // música própria escolhida para o vídeo: link temporário para tocar no fone
+  const [ownTrack, setOwnTrack] = useState<{ id: string; title: string; url: string } | null>(null);
+  const libraryTrack = content && params.partes !== "1" && !patrimonio
     ? chosenTrack({ ...DEFAULT_EDIT_CHOICES, ...content.edit }, content.id, content.pillarSlug, business, content.draft?.direcao) : null;
+  const narrationTrack = params.partes !== "1" && !patrimonio ? (ownTrack ?? (libraryTrack ? { id: libraryTrack.id, title: libraryTrack.title, url: libraryTrack.url } : null)) : null;
   const narration = useNarrationMusic(narrate && narrationTrack ? narrationTrack.url : null, NARRATION_EAR_VOLUME);
+  useEffect(() => {
+    const uuid = content?.edit?.music ? ownMusicUuid(content.edit.music) : null;
+    if (!content || !uuid) return;
+    void listOwnMusic(content.workspaceId).then(async (list) => {
+      const m = list.find((x) => x.id === uuid);
+      const url = m ? await ownMusicUrl(m.storageKey) : null;
+      if (m && url) setOwnTrack({ id: ownMusicId(m.id), title: m.titulo, url });
+    }).catch(() => undefined);
+  }, [content]);
   const [phase, setPhase] = useState<Phase>("ready");
   const [message, setMessage] = useState<string | null>(null);
   const [saved, setSaved] = useState<Take | null>(null);

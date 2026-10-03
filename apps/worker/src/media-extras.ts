@@ -4,6 +4,7 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
+import type { SupabaseClient } from "@supabase/supabase-js";
 import type { MusicTrack, SpokenWord } from "@postai/domain";
 
 const run = promisify(execFile);
@@ -43,6 +44,21 @@ export async function fetchTrack(track: MusicTrack, cacheDir: string): Promise<s
     return file;
   } catch (e) {
     process.stdout.write(JSON.stringify({ level: "warn", msg: "music.unavailable", track: track.id, error: e instanceof Error ? e.message : String(e) }) + "\n");
+    return null;
+  }
+}
+
+/** Música própria do criador: baixa do armazenamento do perfil (só arquivos dentro da pasta do próprio workspace). */
+export async function downloadOwnMusic(db: SupabaseClient, workspaceId: string, key: string, dir: string): Promise<string | null> {
+  if (!key.startsWith(`${workspaceId}/music/`)) return null;
+  try {
+    const { data, error } = await db.storage.from("takes").download(key);
+    if (error || !data) throw new Error(error?.message ?? "sem arquivo");
+    const file = join(dir, `musica-propria${key.slice(key.lastIndexOf("."))}`);
+    writeFileSync(file, Buffer.from(await data.arrayBuffer()));
+    return file;
+  } catch (e) {
+    process.stdout.write(JSON.stringify({ level: "warn", msg: "own_music.unavailable", key, error: e instanceof Error ? e.message : String(e) }) + "\n");
     return null;
   }
 }

@@ -67,6 +67,9 @@ export interface PlanMusic {
   /** direção: segundo do vídeo em que a música entra / sai (sem = o vídeo todo) */
   startMs?: number;
   endMs?: number | null;
+  /** música própria: arquivo no armazenamento do perfil e o nome dado pelo criador */
+  storageKey?: string;
+  title?: string;
   /** narração com a música no fone: a faixa começou junto com a gravação — pula o mesmo trecho cortado do início do take */
   narration?: boolean;
 }

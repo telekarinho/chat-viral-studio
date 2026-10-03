@@ -89,6 +89,9 @@ describe("renderizador (comando)", () => {
     expect(graph).toContain(String.raw`aselect='between(t\,0.300\,1.200)+between(t\,1.900\,2.800)',asetpts=N/SR/TB`);
     expect(graph).toContain("highpass=f=90,afftdn=nr=10:nf=-28,equalizer=f=3200");
     expect(graph).toContain("acompressor=");
+    expect(graph).not.toContain("arnndn"); // sem modelo: só a limpeza leve
+    const neural = ffmpegArgs({ plan: p, inputs: ["a.mp4", "b.mp4", "c.mp4"], hasAudio: [true, true, true], fontFile: "f.ttf", output: "o.mp4", denoiseModel: String.raw`C:\m\lq.rnnn` });
+    expect(neural[neural.indexOf("-filter_complex") + 1]).toContain(String.raw`[0:a]aresample=48000,aformat=channel_layouts=mono,arnndn=m='C\:/m/lq.rnnn':mix=0.85,aformat=sample_fmts=fltp:channel_layouts=stereo,aselect=`);
     expect(graph).toContain("[3:v]trim=start=0.15:duration=1.200,setpts=PTS-STARTPTS+0.900/TB");
     expect(graph).toContain(String.raw`[z1][br1]overlay=enable='between(t\,0.900\,2.100)'`);
     expect(graph).toContain("[4:a]aresample=48000"); // música vem depois da cena de apoio
@@ -156,6 +159,16 @@ describe("renderizador (comando)", () => {
     const args = ffmpegArgs({ plan: p, inputs: ["a.mp4", "b.mp4", "c.mp4"], fontFile: "f.ttf", output: "o.mp4", hasAudio: [true, true, true], musicFile: "m.mp3" }).join(" ");
     expect(args).toContain(`atrim=start=${(plan.clips[0]!.trimStartMs / 1000).toFixed(3)}:duration=`);
   });
+  it("música própria: escolhida no app ou pela direção; empresa só com licença comercial declarada", () => {
+    const own = { id: "11111111-1111-4111-8111-111111111111", titulo: "Minha trilha", comercial: false, storageKey: "ws/music/x.mp3" };
+    const id = `own:${own.id}`;
+    expect(editChoices({ edit: { music: id } }, "academia", false, "c", null, own).music).toMatchObject({ trackId: id, storageKey: "ws/music/x.mp3", title: "Minha trilha" });
+    const dir = { musica: { id, clima: "", bpm: null, volume: 0.3, entrada: 1, saida: null } } as unknown as Parameters<typeof editChoices>[4];
+    expect(editChoices(null, "academia", false, "c", dir, own).music).toMatchObject({ trackId: id, volume: 0.3, startMs: 1000, endMs: null });
+    // empresa sem licença comercial: volta para a biblioteca
+    expect(editChoices({ edit: { music: id } }, "educacao", true, "c", null, own).music?.trackId).toMatch(/^mixkit-/);
+    expect(editChoices({ edit: { music: id } }, "educacao", true, "c", null, { ...own, comercial: true }).music?.trackId).toBe(id);
+  });
   it("música com janela: entra atrasada e completa até o fim do vídeo", () => {
     const p = { ...plan, music: { trackId: "mixkit-839", mood: "familia" as const, volume: 0.3, startMs: 2000, endMs: 5000 } };
     const args = ffmpegArgs({ plan: p, inputs: ["a.mp4", "b.mp4", "c.mp4"], fontFile: "f.ttf", output: "o.mp4", hasAudio: [true, true, true], musicFile: "m.mp3" }).join(" ");
@@ -191,7 +204,7 @@ describe.skipIf(!hasFfmpeg || !FONT)("renderizador (FFmpeg real)", () => {
     const assFile = join(dir, "legendas.ass");
     writeFileSync(assFile, buildAss(plan), "utf8");
     const out = join(dir, "final.mp4");
-    const res = await render({ plan, inputs, fontFile: FONT, output: out, assFile, musicFile: music, brollFiles: { b: broll } });
+    const res = await render({ plan, inputs, fontFile: FONT, output: out, assFile, musicFile: music, brollFiles: { b: broll }, denoiseModel: process.env.RNNOISE_MODEL ?? null });
     expect(res.width).toBe(1080);
     expect(res.height).toBe(1920);
     expect(res.hasAudio).toBe(true);
